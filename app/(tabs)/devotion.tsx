@@ -180,38 +180,29 @@ export default function DevotionScreen() {
             </View>
           )}
 
-          {/* 권별 상세 토글 */}
-          <TouchableOpacity style={styles.detailToggle} onPress={() => setShowBooks(!showBooks)}>
-            <Text style={styles.detailToggleText}>{showBooks ? '접기' : '권별 상세 보기'}</Text>
-            <Ionicons name={showBooks ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          {showBooks && readBooks.length > 0 && (
-            <View style={styles.bookList}>
-              {readBooks.map((b) => {
-                const pct = Math.round((b.readChapters / b.totalChapters) * 100);
-                return (
-                  <TouchableOpacity
-                    key={b.bookId}
-                    style={styles.bookItem}
-                    onPress={() => { setCurrentPosition(b.bookId, 1); router.push('/(tabs)/bible'); }}
-                  >
-                    <Text style={styles.bookName}>{b.name}</Text>
-                    <View style={styles.bookBarContainer}>
-                      <View style={styles.bookBar}>
-                        <View style={[styles.bookBarFill, { width: `${pct}%` }]} />
-                      </View>
-                    </View>
-                    <Text style={styles.bookPct}>{b.readChapters}/{b.totalChapters}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {showBooks && readBooks.length === 0 && (
-            <Text style={styles.emptyText}>아직 읽은 책이 없습니다</Text>
-          )}
+          {/* 66권 미니 그리드 */}
+          <View style={styles.miniGrid}>
+            {bookProgress.map((b) => {
+              const pct = b.totalChapters > 0 ? b.readChapters / b.totalChapters : 0;
+              const isDone = pct >= 1;
+              const isStarted = pct > 0 && !isDone;
+              return (
+                <View
+                  key={b.bookId}
+                  style={[
+                    styles.miniCell,
+                    isDone && styles.miniCellDone,
+                    isStarted && styles.miniCellPartial,
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <View style={styles.miniLegend}>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(0,0,0,0.06)' }]} /><Text style={styles.legendText}>안 읽음</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(193,95,60,0.35)' }]} /><Text style={styles.legendText}>읽는 중 ({readBooks.length}권)</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: colors.accent }]} /><Text style={styles.legendText}>완독</Text></View>
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -375,15 +366,14 @@ const styles = StyleSheet.create({
   completionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   completionName: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.accent },
   completionCount: { fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.accent },
-  detailToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)' },
-  detailToggleText: { fontFamily: fonts.sansRegular, fontSize: 12, color: colors.textSecondary },
-  bookList: { marginTop: 12 },
-  bookItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  bookName: { fontFamily: fonts.sansRegular, fontSize: 12, color: colors.textPrimary, width: 70 },
-  bookBarContainer: { flex: 1 },
-  bookBar: { height: 4, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 2 },
-  bookBarFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
-  bookPct: { fontFamily: fonts.sansRegular, fontSize: 10, color: colors.textSecondary, width: 36, textAlign: 'right' },
+  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 14 },
+  miniCell: { width: 14, height: 14, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.06)' },
+  miniCellDone: { backgroundColor: colors.accent },
+  miniCellPartial: { backgroundColor: 'rgba(193,95,60,0.35)' },
+  miniLegend: { flexDirection: 'row', gap: 14, marginTop: 10 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 2 },
+  legendText: { fontFamily: fonts.sansRegular, fontSize: 10, color: colors.textSecondary },
 
   // 주간 요약
   summaryRow: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: spacing.cardRadius, padding: 20 },
