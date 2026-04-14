@@ -1,0 +1,16 @@
+[
+  { "book_id": 1, "chapter": 1, "start_verse": 1, "end_verse": 5, "title": "천지 창조" },
+  { "book_id": 1, "chapter": 1, "start_verse": 6, "end_verse": 8, "title": "둘째 날" },
+  { "book_id": 1, "chapter": 1, "start_verse": 9, "end_verse": 13, "title": "셋째 날" },
+  { "book_id": 1, "chapter": 1, "start_verse": 14, "end_verse": 19, "title": "넷째 날" },
+  { "book_id": 1, "chapter": 1, "start_verse": 20, "end_verse": 23, "title": "다섯째 날" },
+  { "book_id": 1, "chapter": 1, "start_verse": 24, "end_verse": 31, "title": "여섯째 날" },
+  { "book_id": 43, "chapter": 1, "start_verse": 1, "end_verse": 5, "title": "말씀이 육신이 되시다" },
+  { "book_id": 43, "chapter": 1, "start_verse": 6, "end_verse": 8, "title": "세례 요한의 증언" },
+  { "book_id": 43, "chapter": 1, "start_verse": 9, "end_verse": 13, "title": "참 빛이 세상에 오시다" },
+  { "book_id": 43, "chapter": 1, "start_verse": 14, "end_verse": 18, "title": "말씀이 육신이 되어" },
+  { "book_id": 43, "chapter": 1, "start_verse": 19, "end_verse": 28, "title": "요한의 증언" },
+  { "book_id": 43, "chapter": 1, "start_verse": 29, "end_verse": 34, "title": "하나님의 어린 양" },
+  { "book_id": 43, "chapter": 1, "start_verse": 35, "end_verse": 42, "title": "첫 제자들" },
+  { "book_id": 43, "chapter": 1, "start_verse": 43, "end_verse": 51, "title": "빌립과 나다나엘을 부르시다" }
+]

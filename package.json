@@ -30,7 +30,10 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "~19.1.0",
+    "better-sqlite3": "^12.9.0",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.2"
   },
   "private": true
