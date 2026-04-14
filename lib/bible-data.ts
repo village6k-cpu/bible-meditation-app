@@ -67,6 +67,16 @@ export async function getVerses(bookId: number, chapter: number): Promise<Verse[
   );
 }
 
+export async function getVerseCount(bookId: number, chapter: number): Promise<number> {
+  const db = getBibleDb();
+  if (!db) return 0;
+  const row = await db.getFirstAsync<{ cnt: number }>(
+    'SELECT COUNT(*) as cnt FROM verses WHERE book_id = ? AND chapter = ?',
+    [bookId, chapter]
+  );
+  return row?.cnt ?? 0;
+}
+
 export async function getSections(bookId: number, chapter: number): Promise<Section[]> {
   const db = getBibleDb();
   if (!db) return [];

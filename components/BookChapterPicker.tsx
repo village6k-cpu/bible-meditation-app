@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fonts, spacing } from '../lib/theme';
-import { Book, getAllBooks } from '../lib/bible-data';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { Book, getAllBooks, getVerseCount } from '../lib/bible-data';
 
 // 성경 분류
 const BOOK_CATEGORIES: { label: string; range: [number, number] }[] = [
@@ -24,14 +22,18 @@ const BOOK_CATEGORIES: { label: string; range: [number, number] }[] = [
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSelect: (bookId: number, chapter: number) => void;
+  onSelect: (bookId: number, chapter: number, verse?: number) => void;
 }
 
 export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
   const [books, setBooks] = useState<Book[]>([]);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
+  const [verseCount, setVerseCount] = useState(0);
+  const [numpadTarget, setNumpadTarget] = useState<'chapter' | 'verse'>('chapter');
   const [numpadInput, setNumpadInput] = useState('');
   const chapterRef = useRef<ScrollView>(null);
+  const verseRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (visible) {
@@ -39,19 +41,44 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
         setBooks(b);
         if (!selectedBook && b.length > 0) setSelectedBook(b[0]);
       });
+      setSelectedChapter(null);
+      setVerseCount(0);
       setNumpadInput('');
+      setNumpadTarget('chapter');
     }
   }, [visible]);
 
   function handleBookSelect(book: Book) {
     setSelectedBook(book);
+    setSelectedChapter(null);
+    setVerseCount(0);
     setNumpadInput('');
+    setNumpadTarget('chapter');
     chapterRef.current?.scrollTo({ y: 0, animated: false });
+    verseRef.current?.scrollTo({ y: 0, animated: false });
   }
 
-  function handleChapterSelect(ch: number) {
-    if (!selectedBook) return;
-    onSelect(selectedBook.id, ch);
+  async function handleChapterSelect(ch: number) {
+    setSelectedChapter(ch);
+    setNumpadInput('');
+    setNumpadTarget('verse');
+    if (selectedBook) {
+      const count = await getVerseCount(selectedBook.id, ch);
+      setVerseCount(count);
+      verseRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }
+
+  function handleVerseSelect(verse: number) {
+    if (!selectedBook || !selectedChapter) return;
+    onSelect(selectedBook.id, selectedChapter, verse);
+    onClose();
+  }
+
+  // 장만 선택하고 바로 이동 (절 선택 안 함)
+  function handleGoChapterOnly() {
+    if (!selectedBook || !selectedChapter) return;
+    onSelect(selectedBook.id, selectedChapter);
     onClose();
   }
 
@@ -62,8 +89,14 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
     }
     if (key === 'go') {
       const num = parseInt(numpadInput);
-      if (num > 0 && selectedBook && num <= selectedBook.chapter_count) {
-        handleChapterSelect(num);
+      if (numpadTarget === 'chapter') {
+        if (num > 0 && selectedBook && num <= selectedBook.chapter_count) {
+          handleChapterSelect(num);
+        }
+      } else {
+        if (num > 0 && num <= verseCount) {
+          handleVerseSelect(num);
+        }
       }
       return;
     }
@@ -71,12 +104,23 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
     if (next.length <= 3) setNumpadInput(next);
   }
 
+  function switchTarget(target: 'chapter' | 'verse') {
+    setNumpadTarget(target);
+    setNumpadInput('');
+  }
+
   const chapters = selectedBook
     ? Array.from({ length: selectedBook.chapter_count }, (_, i) => i + 1)
     : [];
+  const verses = selectedChapter
+    ? Array.from({ length: verseCount }, (_, i) => i + 1)
+    : [];
 
   const numpadNum = numpadInput ? parseInt(numpadInput) : 0;
-  const numpadValid = numpadNum > 0 && selectedBook != null && numpadNum <= selectedBook.chapter_count;
+  const maxNum = numpadTarget === 'chapter'
+    ? (selectedBook?.chapter_count ?? 0)
+    : verseCount;
+  const numpadValid = numpadNum > 0 && numpadNum <= maxNum;
 
   const groupedBooks = BOOK_CATEGORIES.map((cat) => ({
     ...cat,
@@ -94,9 +138,9 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* 2단 컬럼: 책 | 장 */}
+        {/* 3단 컬럼: 책 | 장 | 절 */}
         <View style={styles.columns}>
-          {/* 책 목록 */}
+          {/* 책 */}
           <ScrollView style={styles.bookCol} showsVerticalScrollIndicator={false}>
             {groupedBooks.map((group) => (
               <View key={group.label}>
@@ -123,20 +167,20 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
             <View style={{ height: 40 }} />
           </ScrollView>
 
-          {/* 구분선 */}
           <View style={styles.colDivider} />
 
-          {/* 장 목록 */}
+          {/* 장 */}
           <ScrollView ref={chapterRef} style={styles.chapterCol} showsVerticalScrollIndicator={false}>
             {chapters.map((ch) => {
-              const isNumpadMatch = numpadNum === ch;
+              const isSelected = selectedChapter === ch;
+              const isNumpad = numpadTarget === 'chapter' && numpadNum === ch;
               return (
                 <TouchableOpacity
                   key={ch}
-                  style={[styles.chapterRow, isNumpadMatch && styles.chapterRowHighlight]}
+                  style={[styles.cellRow, isSelected && styles.cellRowSelected, isNumpad && !isSelected && styles.cellRowHighlight]}
                   onPress={() => handleChapterSelect(ch)}
                 >
-                  <Text style={[styles.chapterText, isNumpadMatch && styles.chapterTextHighlight]}>
+                  <Text style={[styles.cellText, isSelected && styles.cellTextSelected, isNumpad && !isSelected && styles.cellTextHighlight]}>
                     {ch}장
                   </Text>
                 </TouchableOpacity>
@@ -144,15 +188,57 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
             })}
             <View style={{ height: 40 }} />
           </ScrollView>
+
+          <View style={styles.colDivider} />
+
+          {/* 절 */}
+          <ScrollView ref={verseRef} style={styles.verseCol} showsVerticalScrollIndicator={false}>
+            {selectedChapter ? (
+              <>
+                {verses.map((v) => {
+                  const isNumpad = numpadTarget === 'verse' && numpadNum === v;
+                  return (
+                    <TouchableOpacity
+                      key={v}
+                      style={[styles.cellRow, isNumpad && styles.cellRowHighlight]}
+                      onPress={() => handleVerseSelect(v)}
+                    >
+                      <Text style={[styles.cellText, isNumpad && styles.cellTextHighlight]}>
+                        {v}절
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <View style={{ height: 40 }} />
+              </>
+            ) : (
+              <View style={styles.versePlaceholder}>
+                <Text style={styles.versePlaceholderText}>장을 먼저{'\n'}선택하세요</Text>
+              </View>
+            )}
+          </ScrollView>
         </View>
 
-        {/* 하단: 선택 표시 + 넘패드 */}
+        {/* 하단 */}
         <View style={styles.bottom}>
-          {/* 선택된 레퍼런스 */}
+          {/* 선택 표시 */}
           <View style={styles.refBar}>
             <Text style={styles.refText}>
               {selectedBook?.name_ko ?? ''}{' '}
-              <Text style={styles.refBold}>{numpadInput || '―'}</Text>장
+              {numpadTarget === 'chapter' ? (
+                <Text style={styles.refBold}>{numpadInput || (selectedChapter ? `${selectedChapter}` : '―')}</Text>
+              ) : (
+                <Text>{selectedChapter}</Text>
+              )}
+              장{' '}
+              {selectedChapter && (
+                <>
+                  {numpadTarget === 'verse' ? (
+                    <Text style={styles.refBold}>{numpadInput || '―'}</Text>
+                  ) : null}
+                  {numpadTarget === 'verse' ? <Text>절</Text> : null}
+                </>
+              )}
             </Text>
             {numpadInput ? (
               <TouchableOpacity onPress={() => setNumpadInput('')} style={styles.refClear}>
@@ -173,13 +259,32 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
                     </TouchableOpacity>
                   );
                 })}
-                {/* 4번째 열: 정보 / 백스페이스 / 이동 */}
+                {/* 오른쪽 열: 장 / 절 전환 + 백스페이스 + 이동 */}
                 {ri === 0 && (
-                  <View style={styles.numKey}>
-                    <Text style={styles.numInfoText}>{selectedBook?.chapter_count ?? 0}장</Text>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.numKey, numpadTarget === 'chapter' && styles.numTargetActive]}
+                    onPress={() => switchTarget('chapter')}
+                  >
+                    <Text style={[styles.numTargetText, numpadTarget === 'chapter' && styles.numTargetTextActive]}>
+                      {selectedBook?.chapter_count ?? 0}장
+                    </Text>
+                  </TouchableOpacity>
                 )}
-                {ri === 1 && <View style={styles.numKey} />}
+                {ri === 1 && (
+                  <TouchableOpacity
+                    style={[styles.numKey, numpadTarget === 'verse' && styles.numTargetActive]}
+                    onPress={() => selectedChapter ? switchTarget('verse') : undefined}
+                    disabled={!selectedChapter}
+                  >
+                    <Text style={[
+                      styles.numTargetText,
+                      numpadTarget === 'verse' && styles.numTargetTextActive,
+                      !selectedChapter && { color: colors.textTertiary },
+                    ]}>
+                      {verseCount > 0 ? `${verseCount}절` : '절'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 {ri === 2 && (
                   <TouchableOpacity style={styles.numKey} onPress={() => handleNumpad('back')}>
                     <Ionicons name="backspace-outline" size={22} color={colors.textPrimary} />
@@ -187,7 +292,7 @@ export function BookChapterPicker({ visible, onClose, onSelect }: Props) {
                 )}
                 {ri === 3 && (
                   <TouchableOpacity
-                    style={[styles.numKey]}
+                    style={styles.numKey}
                     onPress={() => handleNumpad('go')}
                     disabled={!numpadValid}
                   >
@@ -212,7 +317,6 @@ const NUMPAD_HEIGHT = 220;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  // 헤더
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -222,11 +326,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
-  headerTitle: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
+  headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.textPrimary },
 
   // 컬럼
   columns: { flex: 1, flexDirection: 'row' },
@@ -235,114 +335,45 @@ const styles = StyleSheet.create({
   // 책 컬럼
   bookCol: { flex: 5, paddingLeft: 16 },
   catLabel: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 10,
-    color: colors.textSecondary,
-    letterSpacing: 0.5,
-    marginTop: 16,
-    marginBottom: 6,
-    paddingLeft: 4,
+    fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.textSecondary,
+    letterSpacing: 0.5, marginTop: 16, marginBottom: 6, paddingLeft: 4,
   },
   bookRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 4,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 11, paddingHorizontal: 4, gap: 8,
   },
-  bookRowActive: {
-    backgroundColor: colors.accentLight,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  bookAbbr: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 11,
-    color: colors.textSecondary,
-    width: 20,
-    textAlign: 'center',
-  },
+  bookRowActive: { backgroundColor: colors.accentLight, borderRadius: 8, marginRight: 8 },
+  bookAbbr: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.textSecondary, width: 20, textAlign: 'center' },
   bookAbbrActive: { color: colors.accent },
-  bookName: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  bookNameActive: {
-    fontFamily: fonts.sansSemiBold,
-    color: colors.accent,
-  },
+  bookName: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
+  bookNameActive: { fontFamily: fonts.sansSemiBold, color: colors.accent },
 
-  // 장 컬럼
-  chapterCol: { flex: 3, paddingTop: 8 },
-  chapterRow: {
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-  },
-  chapterRowHighlight: {
-    backgroundColor: colors.accent,
-    marginHorizontal: 8,
-    borderRadius: 8,
-  },
-  chapterText: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 14,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  chapterTextHighlight: {
-    color: '#FFFFFF',
-    fontFamily: fonts.sansSemiBold,
-  },
+  // 장/절 공용 셀
+  chapterCol: { flex: 2, paddingTop: 8 },
+  verseCol: { flex: 2, paddingTop: 8 },
+  cellRow: { paddingVertical: 11, paddingHorizontal: 12 },
+  cellRowSelected: { backgroundColor: colors.accent, marginHorizontal: 6, borderRadius: 8 },
+  cellRowHighlight: { backgroundColor: colors.accentLight, marginHorizontal: 6, borderRadius: 8 },
+  cellText: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary, textAlign: 'center' },
+  cellTextSelected: { color: '#FFFFFF', fontFamily: fonts.sansSemiBold },
+  cellTextHighlight: { color: colors.accent, fontFamily: fonts.sansSemiBold },
+
+  versePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
+  versePlaceholderText: { fontFamily: fonts.sansRegular, fontSize: 12, color: colors.textTertiary, textAlign: 'center', lineHeight: 20 },
 
   // 하단
-  bottom: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    backgroundColor: colors.surface,
-  },
-  refBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    gap: 8,
-  },
-  refText: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  refBold: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 17,
-    color: colors.accent,
-  },
+  bottom: { borderTopWidth: 1, borderTopColor: colors.divider, backgroundColor: colors.surface },
+  refBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 8 },
+  refText: { fontFamily: fonts.sansRegular, fontSize: 15, color: colors.textPrimary },
+  refBold: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: colors.accent },
   refClear: { padding: 2 },
 
   // 넘패드
-  numpad: {
-    paddingBottom: 8,
-    paddingHorizontal: 20,
-  },
-  numRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  numKey: {
-    flex: 1,
-    height: NUMPAD_HEIGHT / 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numKeyText: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 22,
-    color: colors.textPrimary,
-  },
-  numInfoText: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
+  numpad: { paddingBottom: 8, paddingHorizontal: 20 },
+  numRow: { flexDirection: 'row', justifyContent: 'center' },
+  numKey: { flex: 1, height: NUMPAD_HEIGHT / 4, alignItems: 'center', justifyContent: 'center' },
+  numKeyText: { fontFamily: fonts.sansRegular, fontSize: 22, color: colors.textPrimary },
+  numTargetActive: { backgroundColor: colors.accentLight, borderRadius: 8, marginHorizontal: 4 },
+  numTargetText: { fontFamily: fonts.sansRegular, fontSize: 13, color: colors.textSecondary },
+  numTargetTextActive: { color: colors.accent, fontFamily: fonts.sansSemiBold },
 });

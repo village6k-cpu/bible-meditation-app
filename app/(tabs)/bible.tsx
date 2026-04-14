@@ -14,7 +14,7 @@ import { FontSettings } from '../../components/FontSettings';
 
 export default function BibleScreen() {
   const router = useRouter();
-  const { currentBookId, currentChapter, setCurrentPosition, setLastRead } = useAppStore();
+  const { currentBookId, currentChapter, scrollToVerse, setCurrentPosition, setLastRead } = useAppStore();
   const [markedRead, setMarkedRead] = useState(false);
   const [book, setBook] = useState<Book | null>(null);
   const [verses, setVerses] = useState<Verse[]>([]);
@@ -43,7 +43,19 @@ export default function BibleScreen() {
     setHighlights(h);
     setHighlightedVerse(null);
     setMarkedRead(false);
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
+
+    // 절 스크롤: 대략 절 번호 * 줄 높이로 추정
+    const targetVerse = scrollToVerse;
+    if (targetVerse > 1) {
+      const estimatedLineHeight = 16.5 * 2.05; // fontSize * lineHeight
+      const estimatedY = (targetVerse - 1) * estimatedLineHeight + 80; // +80 for chapter number
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: estimatedY, animated: true });
+        setHighlightedVerse(targetVerse);
+      }, 100);
+    } else {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
   }
 
   async function handleMarkRead() {
@@ -154,7 +166,7 @@ export default function BibleScreen() {
         </Text>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/highlights' as any)}>
-            <Ionicons name="color-fill-outline" size={20} color={colors.textPrimary} />
+            <Ionicons name="pen-outline" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
             <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
@@ -237,7 +249,7 @@ export default function BibleScreen() {
       <BookChapterPicker
         visible={showPicker}
         onClose={() => setShowPicker(false)}
-        onSelect={(bookId, chapter) => setCurrentPosition(bookId, chapter)}
+        onSelect={(bookId, chapter, verse) => setCurrentPosition(bookId, chapter, verse)}
       />
 
       <FontSettings

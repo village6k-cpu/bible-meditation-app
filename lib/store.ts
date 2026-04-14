@@ -8,7 +8,8 @@ interface AppState {
   // Bible viewer
   currentBookId: number;
   currentChapter: number;
-  setCurrentPosition: (bookId: number, chapter: number) => void;
+  scrollToVerse: number;
+  setCurrentPosition: (bookId: number, chapter: number, verse?: number) => void;
 
   // Bible font settings
   fontScale: number;
@@ -51,7 +52,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   currentBookId: 43, // 요한복음
   currentChapter: 1,
-  setCurrentPosition: (bookId, chapter) => set({ currentBookId: bookId, currentChapter: chapter }),
+  scrollToVerse: 0,
+  setCurrentPosition: (bookId, chapter, verse) => set({ currentBookId: bookId, currentChapter: chapter, scrollToVerse: verse ?? 0 }),
 
   fontScale: 1.0,
   lineHeightScale: 1.0,
