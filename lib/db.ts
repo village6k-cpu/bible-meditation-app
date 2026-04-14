@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
+import { File, Paths } from 'expo-file-system/next';
 
 let bibleDb: SQLite.SQLiteDatabase | null = null;
 let userDb: SQLite.SQLiteDatabase | null = null;
@@ -10,57 +11,64 @@ export async function initDatabases(): Promise<void> {
     return;
   }
 
-  const FileSystem = require('expo-file-system');
   const { Asset } = require('expo-asset');
 
-  // 1. 먼저 빈 DB를 열어서 expo-sqlite가 사용하는 실제 경로를 확인
+  // 1. 빈 DB 열어서 expo-sqlite 실제 경로 확인
   const tempDb = await SQLite.openDatabaseAsync('bible.db');
-  const nativePath = (tempDb as any).databasePath as string;
-  console.log('expo-sqlite DB path:', nativePath);
+  const dbPath = (tempDb as any).databasePath as string;
+  console.log('expo-sqlite DB path:', dbPath);
 
-  // 2. books 테이블이 있는지 확인 (이미 복사됐는지 체크)
+  // 2. books 테이블 존재 확인
   let needsCopy = false;
   try {
     const row = await tempDb.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM books');
-    console.log('Bible books count:', row?.c);
     needsCopy = !row || row.c === 0;
   } catch {
-    // 테이블이 없음 = 빈 DB
     needsCopy = true;
   }
 
   if (needsCopy) {
-    // 3. 닫고, 에셋을 해당 경로에 덮어쓰기
     await tempDb.closeAsync();
 
+    // 3. 에셋 다운로드
     const asset = Asset.fromModule(require('../assets/bible/bible.db'));
     await asset.downloadAsync();
 
     if (asset.localUri) {
-      const targetUri = nativePath.startsWith('file://') ? nativePath : `file://${nativePath}`;
-      // 빈 DB 파일 삭제 후 에셋 복사
-      await FileSystem.deleteAsync(targetUri, { idempotent: true });
-      console.log('Copying bible.db from:', asset.localUri, 'to:', targetUri);
-      await FileSystem.copyAsync({ from: asset.localUri, to: targetUri });
+      console.log('Asset localUri:', asset.localUri);
+      console.log('Target path:', dbPath);
+
+      // 새 File API로 빈 DB 삭제 후 복사
+      try {
+        const targetFile = new File(dbPath);
+        if (targetFile.exists) {
+          targetFile.delete();
+        }
+
+        const sourceUri = asset.localUri.replace('file://', '');
+        const sourceFile = new File(sourceUri);
+        sourceFile.copy(targetFile);
+        console.log('bible.db copied successfully');
+      } catch (e) {
+        console.error('File copy failed:', e);
+      }
     }
 
-    // 4. 다시 열기
     bibleDb = await SQLite.openDatabaseAsync('bible.db');
 
-    // 검증
     try {
       const row = await bibleDb.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM books');
-      console.log('After copy - Bible books count:', row?.c);
+      console.log('Bible books count:', row?.c);
     } catch (e) {
-      console.error('Bible DB still empty after copy:', e);
+      console.error('Bible DB still empty:', e);
     }
   } else {
     bibleDb = tempDb;
+    console.log('Bible DB already loaded');
   }
 
   userDb = await SQLite.openDatabaseAsync('user.db');
 
-  // Create user tables
   await userDb.execAsync(`
     CREATE TABLE IF NOT EXISTS user_profile (
       id INTEGER PRIMARY KEY DEFAULT 1,
