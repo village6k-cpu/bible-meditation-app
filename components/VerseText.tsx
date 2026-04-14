@@ -1,11 +1,11 @@
-import { Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, fonts } from '../lib/theme';
 import { Verse } from '../lib/bible-data';
 
 export const HIGHLIGHT_COLORS = [
-  { name: '노랑', color: 'rgba(245,215,110,0.35)' },
-  { name: '초록', color: 'rgba(140,190,120,0.3)' },
-  { name: '보라', color: 'rgba(180,160,210,0.3)' },
+  { name: '노랑', color: 'rgba(242,210,100,0.28)' },
+  { name: '초록', color: 'rgba(130,180,110,0.24)' },
+  { name: '보라', color: 'rgba(170,150,200,0.24)' },
 ];
 
 interface Props {
@@ -21,12 +21,21 @@ export function VerseText({ verse, highlighted, highlightColor, onLongPress }: P
       activeOpacity={0.8}
       delayLongPress={500}
       onLongPress={() => onLongPress?.(verse)}
-      style={[
-        styles.container,
-        highlighted && styles.highlighted,
-        highlightColor ? { backgroundColor: highlightColor, borderRadius: 4, marginHorizontal: -4, paddingHorizontal: 4 } : null,
-      ]}
+      style={styles.container}
     >
+      {/* 물감 하이라이트 배경 레이어 */}
+      {highlightColor && (
+        <View
+          style={[
+            styles.paintBlob,
+            { backgroundColor: highlightColor },
+          ]}
+        />
+      )}
+      {/* 롱프레스 선택 하이라이트 */}
+      {highlighted && !highlightColor && (
+        <View style={styles.selectBlob} />
+      )}
       <Text style={styles.text}>
         <Text style={styles.verseNumber}>{verse.verse} </Text>
         {verse.text}
@@ -36,12 +45,35 @@ export function VerseText({ verse, highlighted, highlightColor, onLongPress }: P
 }
 
 const styles = StyleSheet.create({
-  container: { paddingVertical: 1 },
-  highlighted: {
-    backgroundColor: 'rgba(193,95,60,0.12)',
-    borderRadius: 4,
-    marginHorizontal: -4,
-    paddingHorizontal: 4,
+  container: {
+    paddingVertical: 2,
+    position: 'relative',
+  },
+  // 물감이 번진 듯한 유기적 블롭
+  paintBlob: {
+    position: 'absolute',
+    top: -2,
+    bottom: -2,
+    left: -10,
+    right: -6,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 18,
+    opacity: 1,
+  },
+  // 롱프레스 시 선택 표시
+  selectBlob: {
+    position: 'absolute',
+    top: -1,
+    bottom: -1,
+    left: -8,
+    right: -5,
+    backgroundColor: 'rgba(193,95,60,0.1)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 16,
   },
   text: {
     fontFamily: fonts.serifLight,

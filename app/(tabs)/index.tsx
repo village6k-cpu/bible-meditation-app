@@ -33,22 +33,35 @@ function getTimeTheme() {
   const hour = new Date().getHours();
 
   if (hour < 6) {
-    // 새벽
+    // 새벽 — 깊은 남색에서 따뜻한 브라운을 거쳐 배경으로
     return {
-      gradient: ['rgba(27,40,56,0.85)', 'rgba(44,37,32,0.4)', 'transparent'] as const,
-      gradientLocations: [0, 0.4, 0.75] as const,
-      textColor: '#F4F3EE',
-      subTextColor: 'rgba(244,243,238,0.55)',
-      labelColor: 'rgba(244,243,238,0.7)',
-      dividerColor: 'rgba(255,255,255,0.08)',
+      gradient: [
+        '#2A3548',
+        'rgba(42,53,72,0.96)',
+        'rgba(56,50,44,0.78)',
+        'rgba(85,75,62,0.45)',
+        'rgba(150,138,118,0.15)',
+        'rgba(250,250,248,0)',
+      ] as const,
+      gradientLocations: [0, 0.1, 0.28, 0.46, 0.64, 0.82] as const,
+      textColor: '#F0EDE6',
+      subTextColor: 'rgba(240,237,230,0.5)',
+      labelColor: 'rgba(240,237,230,0.65)',
+      dividerColor: 'rgba(255,255,255,0.06)',
       isDark: true,
     };
   }
   if (hour < 12) {
-    // 아침
+    // 아침 — 따뜻한 골드 톤이 부드럽게 퍼짐
     return {
-      gradient: ['rgba(232,213,176,0.35)', 'rgba(240,224,196,0.15)', 'transparent'] as const,
-      gradientLocations: [0, 0.4, 0.7] as const,
+      gradient: [
+        'rgba(225,205,168,0.5)',
+        'rgba(232,215,182,0.35)',
+        'rgba(240,225,200,0.18)',
+        'rgba(248,240,225,0.06)',
+        'rgba(250,250,248,0)',
+      ] as const,
+      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
@@ -69,10 +82,16 @@ function getTimeTheme() {
     };
   }
   if (hour < 21) {
-    // 저녁
+    // 저녁 — 노을빛 웜톤
     return {
-      gradient: ['rgba(212,165,116,0.25)', 'rgba(222,187,148,0.1)', 'transparent'] as const,
-      gradientLocations: [0, 0.4, 0.7] as const,
+      gradient: [
+        'rgba(180,140,95,0.45)',
+        'rgba(200,165,120,0.3)',
+        'rgba(220,190,150,0.15)',
+        'rgba(240,225,200,0.05)',
+        'rgba(250,250,248,0)',
+      ] as const,
+      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
@@ -80,14 +99,21 @@ function getTimeTheme() {
       isDark: false,
     };
   }
-  // 밤
+  // 밤 — 깊은 다크 브라운에서 배경으로
   return {
-    gradient: ['rgba(30,27,24,0.8)', 'rgba(44,37,32,0.35)', 'transparent'] as const,
-    gradientLocations: [0, 0.4, 0.72] as const,
-    textColor: '#F4F3EE',
-    subTextColor: 'rgba(244,243,238,0.5)',
-    labelColor: '#E8A87C',
-    dividerColor: 'rgba(255,255,255,0.08)',
+    gradient: [
+      '#1E1B18',
+      'rgba(30,27,24,0.95)',
+      'rgba(52,44,36,0.7)',
+      'rgba(80,68,54,0.38)',
+      'rgba(140,125,105,0.12)',
+      'rgba(250,250,248,0)',
+    ] as const,
+    gradientLocations: [0, 0.1, 0.28, 0.46, 0.64, 0.82] as const,
+    textColor: '#F0EDE6',
+    subTextColor: 'rgba(240,237,230,0.45)',
+    labelColor: '#D4A574',
+    dividerColor: 'rgba(255,255,255,0.06)',
     isDark: true,
   };
 }
@@ -338,10 +364,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   gradientOverlay: {
     position: 'absolute',
-    top: -50,
+    top: -60,
     left: -spacing.screenPadding,
     right: -spacing.screenPadding,
-    height: SCREEN_HEIGHT * 0.5,
+    height: SCREEN_HEIGHT * 0.55,
   },
   scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12 },
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
