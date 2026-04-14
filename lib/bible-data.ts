@@ -394,3 +394,43 @@ export async function getTotalBibleProgress(): Promise<{ read: number; total: nu
   const total = progress.reduce((sum, b) => sum + b.totalChapters, 0);
   return { read, total };
 }
+
+// 권별 회독 횟수 (모든 장을 N번 이상 읽으면 N회독)
+export interface BookReadCount {
+  bookId: number;
+  name: string;
+  completions: number; // 회독 횟수
+}
+
+export async function getBookCompletions(): Promise<BookReadCount[]> {
+  const bibleDb = getBibleDb();
+  const userDb = getUserDb();
+  if (!bibleDb || !userDb) return [];
+
+  const books = await bibleDb.getAllAsync<{ id: number; name_ko: string; chapter_count: number }>(
+    'SELECT id, name_ko, chapter_count FROM books ORDER BY id'
+  );
+
+  // 각 장별 읽은 횟수
+  const readCounts = await userDb.getAllAsync<{ book_id: number; chapter: number; cnt: number }>(
+    'SELECT book_id, chapter, COUNT(*) as cnt FROM reading_log GROUP BY book_id, chapter'
+  );
+
+  const countMap = new Map<string, number>();
+  for (const r of readCounts) {
+    countMap.set(`${r.book_id}:${r.chapter}`, r.cnt);
+  }
+
+  return books.map((b) => {
+    if (b.chapter_count === 0) return { bookId: b.id, name: b.name_ko, completions: 0 };
+
+    // 모든 장의 읽은 횟수 중 최솟값 = 회독 횟수
+    let minReads = Infinity;
+    for (let ch = 1; ch <= b.chapter_count; ch++) {
+      const cnt = countMap.get(`${b.id}:${ch}`) ?? 0;
+      minReads = Math.min(minReads, cnt);
+    }
+
+    return { bookId: b.id, name: b.name_ko, completions: minReads === Infinity ? 0 : minReads };
+  }).filter((b) => b.completions > 0);
+}
