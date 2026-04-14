@@ -514,3 +514,85 @@ export async function getBookCompletions(): Promise<BookReadCount[]> {
     return { bookId: b.id, name: b.name_ko, completions: minReads === Infinity ? 0 : minReads };
   }).filter((b) => b.completions > 0);
 }
+
+// === 가족 게시판 ===
+
+export interface BoardPost {
+  id: number;
+  author: string;
+  title: string;
+  content: string;
+  category: string;
+  created_at: string;
+  views: number;
+  likes: number;
+  comment_count?: number;
+}
+
+export interface BoardComment {
+  id: number;
+  post_id: number;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
+export async function getAllPosts(category?: string): Promise<BoardPost[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  const query = category && category !== 'all'
+    ? 'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p WHERE p.category = ? ORDER BY p.created_at DESC'
+    : 'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p ORDER BY p.created_at DESC';
+  const params = category && category !== 'all' ? [category] : [];
+  return db.getAllAsync<BoardPost>(query, params);
+}
+
+export async function getPost(id: number): Promise<BoardPost | null> {
+  const db = getUserDb();
+  if (!db) return null;
+  await db.runAsync('UPDATE board_posts SET views = views + 1 WHERE id = ?', [id]);
+  return db.getFirstAsync<BoardPost>(
+    'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p WHERE p.id = ?',
+    [id]
+  );
+}
+
+export async function createPost(author: string, title: string, content: string, category: string): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync(
+    'INSERT INTO board_posts (author, title, content, category) VALUES (?, ?, ?, ?)',
+    [author, title, content, category]
+  );
+}
+
+export async function likePost(id: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync('UPDATE board_posts SET likes = likes + 1 WHERE id = ?', [id]);
+}
+
+export async function deletePost(id: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync('DELETE FROM board_comments WHERE post_id = ?', [id]);
+  await db.runAsync('DELETE FROM board_posts WHERE id = ?', [id]);
+}
+
+export async function getComments(postId: number): Promise<BoardComment[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  return db.getAllAsync<BoardComment>(
+    'SELECT * FROM board_comments WHERE post_id = ? ORDER BY created_at ASC',
+    [postId]
+  );
+}
+
+export async function addComment(postId: number, author: string, content: string): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync(
+    'INSERT INTO board_comments (post_id, author, content) VALUES (?, ?, ?)',
+    [postId, author, content]
+  );
+}

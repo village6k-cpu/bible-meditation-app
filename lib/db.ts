@@ -136,6 +136,25 @@ export async function initDatabases(): Promise<void> {
       answered INTEGER DEFAULT 0,
       answered_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS board_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      author TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      views INTEGER DEFAULT 0,
+      likes INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS board_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      author TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
