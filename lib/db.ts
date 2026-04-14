@@ -38,6 +38,8 @@ export async function initDatabases(): Promise<void> {
 
     if (asset.localUri) {
       const targetUri = nativePath.startsWith('file://') ? nativePath : `file://${nativePath}`;
+      // 빈 DB 파일 삭제 후 에셋 복사
+      await FileSystem.deleteAsync(targetUri, { idempotent: true });
       console.log('Copying bible.db from:', asset.localUri, 'to:', targetUri);
       await FileSystem.copyAsync({ from: asset.localUri, to: targetUri });
     }
