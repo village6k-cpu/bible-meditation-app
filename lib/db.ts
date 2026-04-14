@@ -1,17 +1,33 @@
+import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
-import * as FileSystem from 'expo-file-system';
-import { Asset } from 'expo-asset';
 
 let bibleDb: SQLite.SQLiteDatabase | null = null;
 let userDb: SQLite.SQLiteDatabase | null = null;
 
 export async function initDatabases(): Promise<void> {
-  // Copy bible.db from assets to document directory
-  const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
-  const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
+  if (Platform.OS === 'web') {
+    console.warn('SQLite is not supported on web');
+    return;
+  }
 
-  if (!fileInfo.exists) {
-    const asset = Asset.fromModule(require('../assets/bible/bible.db'));
+  // Copy bible.db from assets to document directory
+  const FileSystem = require('expo-file-system');
+  const { Asset } = require('expo-asset');
+
+  const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
+
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
+    if (!fileInfo.exists) {
+      const asset = Asset.fromModule(require('../assets/bible/bible.db'));
+      await asset.downloadAsync();
+      if (asset.localUri) {
+        await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
+      }
+    }
+  } catch {
+    // Fallback: try File API if available
+    const asset = require('expo-asset').Asset.fromModule(require('../assets/bible/bible.db'));
     await asset.downloadAsync();
     if (asset.localUri) {
       await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
@@ -62,12 +78,10 @@ export async function initDatabases(): Promise<void> {
   `);
 }
 
-export function getBibleDb(): SQLite.SQLiteDatabase {
-  if (!bibleDb) throw new Error('Bible DB not initialized');
+export function getBibleDb(): SQLite.SQLiteDatabase | null {
   return bibleDb;
 }
 
-export function getUserDb(): SQLite.SQLiteDatabase {
-  if (!userDb) throw new Error('User DB not initialized');
+export function getUserDb(): SQLite.SQLiteDatabase | null {
   return userDb;
 }

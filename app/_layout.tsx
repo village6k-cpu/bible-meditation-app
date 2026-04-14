@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -10,7 +10,7 @@ import { useAppStore } from '../lib/store';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     'NotoSerifKR-Light': require('../assets/fonts/NotoSerifKR-Light.otf'),
     'NotoSerifKR-SemiBold': require('../assets/fonts/NotoSerifKR-SemiBold.otf'),
     'Pretendard-Regular': require('../assets/fonts/Pretendard-Regular.otf'),
@@ -18,6 +18,8 @@ export default function RootLayout() {
     'Pretendard-SemiBold': require('../assets/fonts/Pretendard-SemiBold.otf'),
     'Pretendard-Bold': require('../assets/fonts/Pretendard-Bold.otf'),
   });
+
+  const fontsReady = fontsLoaded || !!fontError;
 
   const setDbReady = useAppStore((s) => s.setDbReady);
   const setUserName = useAppStore((s) => s.setUserName);
@@ -28,22 +30,26 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function init() {
-      await initDatabases();
-      const name = await getUserName();
-      if (name) setUserName(name);
+      try {
+        await initDatabases();
+        const name = await getUserName();
+        if (name) setUserName(name);
+      } catch (e) {
+        console.warn('DB init failed (expected on web):', e);
+      }
       setDbReady(true);
     }
     init();
   }, []);
 
   useEffect(() => {
-    if (fontsLoaded && dbReady) {
+    if (fontsReady && dbReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, dbReady]);
+  }, [fontsReady, dbReady]);
 
   useEffect(() => {
-    if (!dbReady || !fontsLoaded) return;
+    if (!dbReady || !fontsReady) return;
 
     const inOnboarding = segments[0] === 'onboarding';
     if (!userName && !inOnboarding) {
@@ -51,9 +57,9 @@ export default function RootLayout() {
     } else if (userName && inOnboarding) {
       router.replace('/');
     }
-  }, [dbReady, fontsLoaded, userName, segments]);
+  }, [dbReady, fontsReady, userName, segments]);
 
-  if (!fontsLoaded || !dbReady) return null;
+  if (!fontsReady || !dbReady) return null;
 
   return (
     <>
