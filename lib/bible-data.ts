@@ -312,3 +312,85 @@ export async function getWeeklyDailyDetail(weekDates: string[]): Promise<{ date:
   }
   return result;
 }
+
+// === 기도제목 ===
+
+export interface PrayerRequest {
+  id: number;
+  content: string;
+  created_at: string;
+  answered: number;
+  answered_at: string | null;
+}
+
+export async function getAllPrayerRequests(): Promise<PrayerRequest[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  return db.getAllAsync<PrayerRequest>('SELECT * FROM prayer_requests ORDER BY answered ASC, created_at DESC');
+}
+
+export async function addPrayerRequest(content: string): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync('INSERT INTO prayer_requests (content) VALUES (?)', [content]);
+}
+
+export async function togglePrayerAnswered(id: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync(
+    "UPDATE prayer_requests SET answered = CASE WHEN answered = 0 THEN 1 ELSE 0 END, answered_at = CASE WHEN answered = 0 THEN datetime('now') ELSE NULL END WHERE id = ?",
+    [id]
+  );
+}
+
+export async function deletePrayerRequest(id: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync('DELETE FROM prayer_requests WHERE id = ?', [id]);
+}
+
+// === 성경통독 체크표 ===
+
+export interface BookProgress {
+  bookId: number;
+  name: string;
+  testament: string;
+  totalChapters: number;
+  readChapters: number;
+}
+
+export async function getBibleCompletionProgress(): Promise<BookProgress[]> {
+  const bibleDb = getBibleDb();
+  const userDb = getUserDb();
+  if (!bibleDb || !userDb) return [];
+
+  const books = await bibleDb.getAllAsync<{ id: number; name_ko: string; testament: string; chapter_count: number }>(
+    'SELECT id, name_ko, testament, chapter_count FROM books ORDER BY id'
+  );
+
+  const readRows = await userDb.getAllAsync<{ book_id: number; chapter: number }>(
+    'SELECT DISTINCT book_id, chapter FROM reading_log'
+  );
+
+  const readMap = new Map<number, Set<number>>();
+  for (const r of readRows) {
+    if (!readMap.has(r.book_id)) readMap.set(r.book_id, new Set());
+    readMap.get(r.book_id)!.add(r.chapter);
+  }
+
+  return books.map((b) => ({
+    bookId: b.id,
+    name: b.name_ko,
+    testament: b.testament,
+    totalChapters: b.chapter_count,
+    readChapters: readMap.get(b.id)?.size ?? 0,
+  }));
+}
+
+export async function getTotalBibleProgress(): Promise<{ read: number; total: number }> {
+  const progress = await getBibleCompletionProgress();
+  const read = progress.reduce((sum, b) => sum + b.readChapters, 0);
+  const total = progress.reduce((sum, b) => sum + b.totalChapters, 0);
+  return { read, total };
+}

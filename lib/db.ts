@@ -128,6 +128,14 @@ export async function initDatabases(): Promise<void> {
     );
 
     INSERT OR IGNORE INTO weekly_goals (id, reading_chapters, prayer_count) VALUES (1, 10, 4);
+
+    CREATE TABLE IF NOT EXISTS prayer_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      answered INTEGER DEFAULT 0,
+      answered_at TEXT
+    );
   `);
 }
 
