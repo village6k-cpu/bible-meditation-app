@@ -65,7 +65,7 @@ export async function initDatabases(): Promise<void> {
       book_id INTEGER NOT NULL,
       chapter INTEGER NOT NULL,
       verse INTEGER NOT NULL,
-      color TEXT DEFAULT '#7D8B75'
+      color TEXT DEFAULT '#C15F3C'
     );
 
     CREATE TABLE IF NOT EXISTS reading_history (

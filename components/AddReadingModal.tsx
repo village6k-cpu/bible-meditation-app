@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   headerButton: {
     fontFamily: fonts.sansMedium,
     fontSize: 15,
-    color: colors.accentGreen,
+    color: colors.accent,
   },
   headerTitle: {
     fontFamily: fonts.sansSemiBold,
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   testamentActive: {
-    backgroundColor: colors.accentGreen,
+    backgroundColor: colors.accent,
   },
   testamentText: {
     fontFamily: fonts.sansSemiBold,

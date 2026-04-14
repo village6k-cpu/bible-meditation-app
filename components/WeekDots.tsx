@@ -70,17 +70,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dotCompleted: {
-    backgroundColor: colors.accentGreen,
-    borderColor: colors.accentGreen,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   dotToday: {
-    borderColor: colors.accentGreen,
+    borderColor: colors.accent,
   },
   todayInner: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.accentGreen,
+    backgroundColor: colors.accent,
   },
   dotFuture: {
     borderColor: 'rgba(0,0,0,0.1)',

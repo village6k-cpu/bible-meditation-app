@@ -11,6 +11,7 @@
       "expo-router",
       "expo-font",
       "expo-sqlite",
+      "expo-av",
       ["expo-asset", { "assets": ["./assets/bible/bible.db"] }]
     ],
     "ios": {
@@ -18,7 +19,7 @@
       "bundleIdentifier": "com.village6k.biblemeditation"
     },
     "android": {
-      "adaptiveIcon": { "backgroundColor": "#FAFAF8" },
+      "adaptiveIcon": { "backgroundColor": "#F4F3EE" },
       "package": "com.village6k.biblemeditation"
     },
     "web": { "bundler": "metro" }

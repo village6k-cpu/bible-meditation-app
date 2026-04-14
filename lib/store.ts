@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { DailyReading } from './bible-data';
 
 interface AppState {
   // User
@@ -11,14 +10,29 @@ interface AppState {
   currentChapter: number;
   setCurrentPosition: (bookId: number, chapter: number) => void;
 
-  // Today's readings
-  todayReadings: DailyReading[];
-  setTodayReadings: (readings: DailyReading[]) => void;
+  // Bible font settings
+  fontScale: number;
+  lineHeightScale: number;
+  setFontScale: (scale: number) => void;
+  setLineHeightScale: (scale: number) => void;
 
-  // Music player (UI state only for MVP)
+  // Music player
   isPlaying: boolean;
-  currentTrack: string;
-  togglePlaying: () => void;
+  currentTrackIndex: number;
+  playbackPosition: number;
+  playbackDuration: number;
+  volume: number;
+  showMiniPlayer: boolean;
+  setIsPlaying: (playing: boolean) => void;
+  setCurrentTrackIndex: (index: number) => void;
+  setPlaybackPosition: (position: number) => void;
+  setPlaybackDuration: (duration: number) => void;
+  setVolume: (volume: number) => void;
+  setShowMiniPlayer: (show: boolean) => void;
+
+  // Reading plan
+  readingPlanStartDate: string;
+  setReadingPlanStartDate: (date: string) => void;
 
   // DB initialized flag
   dbReady: boolean;
@@ -33,12 +47,26 @@ export const useAppStore = create<AppState>((set) => ({
   currentChapter: 1,
   setCurrentPosition: (bookId, chapter) => set({ currentBookId: bookId, currentChapter: chapter }),
 
-  todayReadings: [],
-  setTodayReadings: (readings) => set({ todayReadings: readings }),
+  fontScale: 1.0,
+  lineHeightScale: 1.0,
+  setFontScale: (scale) => set({ fontScale: scale }),
+  setLineHeightScale: (scale) => set({ lineHeightScale: scale }),
 
   isPlaying: false,
-  currentTrack: 'Peaceful Dwelling',
-  togglePlaying: () => set((s) => ({ isPlaying: !s.isPlaying })),
+  currentTrackIndex: -1,
+  playbackPosition: 0,
+  playbackDuration: 0,
+  volume: 0.7,
+  showMiniPlayer: true,
+  setIsPlaying: (playing) => set({ isPlaying: playing }),
+  setCurrentTrackIndex: (index) => set({ currentTrackIndex: index }),
+  setPlaybackPosition: (position) => set({ playbackPosition: position }),
+  setPlaybackDuration: (duration) => set({ playbackDuration: duration }),
+  setVolume: (volume) => set({ volume }),
+  setShowMiniPlayer: (show) => set({ showMiniPlayer: show }),
+
+  readingPlanStartDate: '',
+  setReadingPlanStartDate: (date) => set({ readingPlanStartDate: date }),
 
   dbReady: false,
   setDbReady: (ready) => set({ dbReady: ready }),

@@ -9,6 +9,7 @@ import { getVerses, getSections, getBook, Verse, Section, Book } from '../../lib
 import { VerseText } from '../../components/VerseText';
 import { VerseBottomSheet } from '../../components/BottomSheet';
 import { BookChapterPicker } from '../../components/BookChapterPicker';
+import { FontSettings } from '../../components/FontSettings';
 
 export default function BibleScreen() {
   const { currentBookId, currentChapter, setCurrentPosition } = useAppStore();
@@ -20,6 +21,9 @@ export default function BibleScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [selectedVerse, setSelectedVerse] = useState<Verse | null>(null);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [showFontSettings, setShowFontSettings] = useState(false);
+  const fontScale = useAppStore((s) => s.fontScale);
+  const lineHeightScale = useAppStore((s) => s.lineHeightScale);
   const scrollRef = useRef<ScrollView>(null);
 
   async function loadChapter() {
@@ -125,7 +129,7 @@ export default function BibleScreen() {
         <Text style={styles.headerTitle}>
           {book?.name_ko} {currentChapter}장
         </Text>
-        <TouchableOpacity style={styles.headerButton}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
           <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -185,6 +189,11 @@ export default function BibleScreen() {
         visible={showPicker}
         onClose={() => setShowPicker(false)}
         onSelect={(bookId, chapter) => setCurrentPosition(bookId, chapter)}
+      />
+
+      <FontSettings
+        visible={showFontSettings}
+        onClose={() => setShowFontSettings(false)}
       />
     </SafeAreaView>
   );

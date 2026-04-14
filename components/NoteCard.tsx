@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
   ref: {
     fontFamily: fonts.sansMedium,
     fontSize: 12,
-    color: colors.accentGreen,
+    color: colors.accent,
     marginBottom: 6,
   },
   preview: {

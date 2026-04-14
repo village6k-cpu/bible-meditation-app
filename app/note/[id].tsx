@@ -36,7 +36,21 @@ export default function NoteDetailScreen() {
     }
   }
 
-  if (!note) return null;
+  if (!note) return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.headerButton}>닫기</Text>
+        </TouchableOpacity>
+        <View />
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textTertiary }}>
+          불러오는 중...
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
 
   const date = new Date(note.created_at);
   const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`;
@@ -84,7 +98,7 @@ const styles = StyleSheet.create({
   headerButton: {
     fontFamily: fonts.sansMedium,
     fontSize: 15,
-    color: colors.accentGreen,
+    color: colors.accent,
   },
   meta: {
     paddingHorizontal: spacing.screenPadding,
@@ -114,7 +128,7 @@ const styles = StyleSheet.create({
   deleteText: {
     fontFamily: fonts.sansRegular,
     fontSize: 13,
-    color: colors.accentRed,
+    color: colors.accent,
     textAlign: 'center',
   },
 });

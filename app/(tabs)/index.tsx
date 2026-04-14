@@ -16,6 +16,8 @@ import {
   DailyReading,
   Verse,
 } from '../../lib/bible-data';
+import { getTodaysPlan, getBookName, getDayNumber, getTotalDays } from '../../lib/reading-plan';
+import { getAnnotation } from '../../lib/cross-references';
 import { SectionLabel } from '../../components/SectionLabel';
 import { CircleProgress } from '../../components/CircleProgress';
 import { WeekDots } from '../../components/WeekDots';
@@ -25,6 +27,8 @@ import { MiniPlayer } from '../../components/MiniPlayer';
 
 export default function HomeScreen() {
   const userName = useAppStore((s) => s.userName);
+  const readingPlanStartDate = useAppStore((s) => s.readingPlanStartDate);
+  const setReadingPlanStartDate = useAppStore((s) => s.setReadingPlanStartDate);
   const [dailyVerse, setDailyVerse] = useState<(Verse & { book_name: string }) | null>(null);
   const [showVerseDetails, setShowVerseDetails] = useState(false);
   const [readings, setReadings] = useState<DailyReading[]>([]);
@@ -38,8 +42,26 @@ export default function HomeScreen() {
     const verse = await getRandomVerse();
     setDailyVerse(verse);
 
+    // 읽기표 시작일이 없으면 오늘로 설정
+    if (!readingPlanStartDate) {
+      setReadingPlanStartDate(today);
+    }
+
+    await seedTodaysReadings();
     await loadReadings();
     await loadWeekHistory();
+  }
+
+  // 오늘 읽기표가 비어있으면 연간 읽기표에서 자동 생성
+  async function seedTodaysReadings() {
+    const existing = await getDailyReadings(today);
+    if (existing.length > 0) return;
+
+    const startDate = readingPlanStartDate || today;
+    const plan = getTodaysPlan(startDate);
+    for (const r of plan.readings) {
+      await addDailyReading(today, r.bookId, r.startChapter, r.endChapter);
+    }
   }
 
   async function loadReadings() {
@@ -63,7 +85,6 @@ export default function HomeScreen() {
     await toggleDailyReading(id);
     await loadReadings();
 
-    // Check if all done → mark day completed
     const updated = await getDailyReadings(today);
     if (updated.length > 0 && updated.every((r) => r.completed)) {
       await markDayCompleted(today);
@@ -78,6 +99,13 @@ export default function HomeScreen() {
 
   const completedCount = readings.filter((r) => r.completed).length;
   const progressPercent = readings.length > 0 ? (completedCount / readings.length) * 100 : 0;
+  const dayNumber = readingPlanStartDate ? getDayNumber(readingPlanStartDate) : 1;
+  const totalDays = getTotalDays();
+
+  // 오늘의 말씀 관련 자료
+  const verseAnnotation = dailyVerse
+    ? getAnnotation(dailyVerse.book_id, dailyVerse.chapter, dailyVerse.verse)
+    : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -93,12 +121,11 @@ export default function HomeScreen() {
           {getGreeting()}
         </Text>
 
-        {/* Divider */}
         <View style={styles.divider} />
 
         {/* 오늘의 말씀 */}
         <SectionLabel label="오늘의 말씀" />
-        {dailyVerse && (
+        {dailyVerse ? (
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setShowVerseDetails(!showVerseDetails)}
@@ -107,23 +134,31 @@ export default function HomeScreen() {
             <Text style={styles.verseSource}>
               — {dailyVerse.book_name} {dailyVerse.chapter}:{dailyVerse.verse}
             </Text>
-            {showVerseDetails && (
+            {showVerseDetails && verseAnnotation && (
               <View style={styles.verseDetails}>
-                <Text style={styles.verseDetailText}>
-                  관련 자료가 곧 추가됩니다.
-                </Text>
+                <Text style={styles.verseDetailText}>{verseAnnotation.commentary}</Text>
+                {verseAnnotation.crossRefs.length > 0 && (
+                  <View style={styles.crossRefRow}>
+                    {verseAnnotation.crossRefs.map((ref, i) => (
+                      <View key={i} style={styles.crossRefChip}>
+                        <Text style={styles.crossRefChipText}>{ref.ref}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
             <Text style={styles.tapHint}>탭하여 관련 자료 보기</Text>
           </TouchableOpacity>
+        ) : (
+          <Text style={styles.loadingText}>말씀을 불러오는 중...</Text>
         )}
 
-        {/* Divider */}
         <View style={styles.divider} />
 
         {/* 묵상 읽기표 */}
         <SectionLabel label="묵상 읽기표" />
-        <CircleProgress percent={progressPercent} />
+        <CircleProgress percent={progressPercent} dayNumber={dayNumber} totalDays={totalDays} />
         <WeekDots completedDates={weekHistory} />
         <ReadingChecklist
           readings={readings}
@@ -131,7 +166,6 @@ export default function HomeScreen() {
           onAdd={() => setShowAddModal(true)}
         />
 
-        {/* Divider */}
         <View style={styles.divider} />
 
         {/* 묵상 노트 */}
@@ -154,7 +188,6 @@ export default function HomeScreen() {
           }}
         />
 
-        {/* Divider */}
         <View style={styles.divider} />
 
         {/* 미니 플레이어 */}
@@ -202,7 +235,7 @@ const styles = StyleSheet.create({
   verseSource: {
     fontFamily: fonts.sansRegular,
     fontSize: 11.5,
-    color: '#AAAAAA',
+    color: colors.textSecondary,
     marginTop: 10,
   },
   verseDetails: {
@@ -214,8 +247,25 @@ const styles = StyleSheet.create({
   verseDetailText: {
     fontFamily: fonts.sansRegular,
     fontSize: 13,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
+    lineHeight: 22,
+    color: '#444444',
+  },
+  crossRefRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 12,
+  },
+  crossRefChip: {
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  crossRefChipText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 11,
+    color: colors.textPrimary,
   },
   tapHint: {
     fontFamily: fonts.sansRegular,
@@ -223,6 +273,13 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
     marginTop: 10,
+  },
+  loadingText: {
+    fontFamily: fonts.sansRegular,
+    fontSize: 13,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   noteInput: {
     fontFamily: fonts.sansRegular,

@@ -1,15 +1,26 @@
 import { TextStyle } from 'react-native';
 
 export const colors = {
-  background: '#FAFAF8',
+  // Background
+  background: '#F4F3EE',
+  surface: '#EDE8E0',
+  surfaceDim: '#E6E1D8',
+
+  // Text
   textPrimary: '#1A1A1A',
-  textSecondary: '#999999',
-  textTertiary: '#CCCCCC',
-  accentGreen: '#7D8B75',
-  accentRed: '#B8564F',
-  surface: '#F0EDE7',
+  textSecondary: '#B1ADA1',
+  textTertiary: '#CDC8BE',
+
+  // Accent (Claude terra cotta)
+  accent: '#C15F3C',
+  accentLight: 'rgba(193, 95, 60, 0.10)',
+  accentHover: '#A8512F',
+
+  // Structure
   divider: 'rgba(0,0,0,0.05)',
-  tabBarBg: 'rgba(250,250,248,0.88)',
+  tabBarBg: 'rgba(244,243,238,0.88)',
+  tabActive: '#1A1A1A',
+  tabInactive: '#CDC8BE',
 } as const;
 
 export const fonts = {
@@ -37,13 +48,13 @@ export const typography: Record<string, TextStyle> = {
   verseNumber: {
     fontFamily: fonts.sansBold,
     fontSize: 12,
-    color: colors.accentRed,
+    color: colors.accent,
   },
   sectionLabel: {
     fontFamily: fonts.sansSemiBold,
     fontSize: 10.5,
     letterSpacing: 10.5 * 0.1,
-    color: colors.accentGreen,
+    color: colors.accent,
     textTransform: 'uppercase',
   },
   greeting: {
@@ -59,7 +70,7 @@ export const typography: Record<string, TextStyle> = {
   dateText: {
     fontFamily: fonts.sansRegular,
     fontSize: 11.5,
-    color: '#AAAAAA',
+    color: colors.textSecondary,
   },
   bodyUI: {
     fontFamily: fonts.sansRegular,

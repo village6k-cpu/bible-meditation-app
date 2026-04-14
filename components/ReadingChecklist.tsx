@@ -48,7 +48,7 @@ export function ReadingChecklist({ readings, onToggle, onAdd }: Props) {
       )}
 
       <TouchableOpacity style={styles.addButton} onPress={onAdd}>
-        <Ionicons name="add" size={18} color={colors.accentGreen} />
+        <Ionicons name="add" size={18} color={colors.accent} />
         <Text style={styles.addText}>읽을 말씀 추가</Text>
       </TouchableOpacity>
     </View>
@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   checkboxDone: {
-    backgroundColor: colors.accentGreen,
-    borderColor: colors.accentGreen,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   readingText: {
     flex: 1,
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   doneText: {
     fontFamily: fonts.sansRegular,
     fontSize: 12,
-    color: colors.accentGreen,
+    color: colors.accent,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -110,6 +110,6 @@ const styles = StyleSheet.create({
   addText: {
     fontFamily: fonts.sansMedium,
     fontSize: 13,
-    color: colors.accentGreen,
+    color: colors.accent,
   },
 });

@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   highlighted: {
-    backgroundColor: 'rgba(125,139,117,0.12)',
+    backgroundColor: 'rgba(193,95,60,0.12)',
     borderRadius: 4,
     marginHorizontal: -4,
     paddingHorizontal: 4,
@@ -43,6 +43,6 @@ const styles = StyleSheet.create({
   verseNumber: {
     fontFamily: fonts.sansBold,
     fontSize: 12,
-    color: colors.accentRed,
+    color: colors.accent,
   },
 });

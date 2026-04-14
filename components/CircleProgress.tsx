@@ -6,9 +6,11 @@ interface Props {
   percent: number; // 0-100
   size?: number;
   strokeWidth?: number;
+  dayNumber?: number;
+  totalDays?: number;
 }
 
-export function CircleProgress({ percent, size = 140, strokeWidth = 4 }: Props) {
+export function CircleProgress({ percent, size = 140, strokeWidth = 4, dayNumber, totalDays }: Props) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference * (1 - Math.min(percent, 100) / 100);
@@ -28,7 +30,7 @@ export function CircleProgress({ percent, size = 140, strokeWidth = 4 }: Props) 
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={colors.accentGreen}
+          stroke={colors.accent}
           strokeWidth={strokeWidth}
           fill="none"
           strokeDasharray={circumference}
@@ -40,7 +42,9 @@ export function CircleProgress({ percent, size = 140, strokeWidth = 4 }: Props) 
       </Svg>
       <View style={styles.labelContainer}>
         <Text style={styles.percentText}>{Math.round(percent)}</Text>
-        <Text style={styles.subText}>오늘의 읽기</Text>
+        <Text style={styles.subText}>
+          {dayNumber && totalDays ? `DAY ${dayNumber} OF ${totalDays}` : '오늘의 읽기'}
+        </Text>
       </View>
     </View>
   );
@@ -65,7 +69,7 @@ const styles = StyleSheet.create({
   subText: {
     fontFamily: fonts.sansRegular,
     fontSize: 10,
-    color: '#AAAAAA',
+    color: colors.textSecondary,
     marginTop: 2,
   },
 });

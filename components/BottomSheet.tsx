@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet, Dimensions } from 'react-native';
 import { colors, fonts, spacing } from '../lib/theme';
 import { Verse } from '../lib/bible-data';
+import { getAnnotation } from '../lib/cross-references';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -14,15 +15,16 @@ interface Props {
 export function VerseBottomSheet({ visible, verse, bookName, onClose }: Props) {
   if (!verse) return null;
 
+  const annotation = getAnnotation(verse.book_id, verse.chapter, verse.verse);
+
   return (
     <Modal visible={visible} transparent animationType="slide">
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-          {/* Handle bar */}
           <View style={styles.handleBar} />
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Selected verse */}
+            {/* 선택된 구절 */}
             <View style={styles.verseCard}>
               <Text style={styles.verseRef}>
                 {bookName} {verse.chapter}:{verse.verse}
@@ -33,30 +35,39 @@ export function VerseBottomSheet({ visible, verse, bookName, onClose }: Props) {
             {/* 주석 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>주석</Text>
-              <Text style={styles.sectionContent}>
-                주석 데이터가 곧 추가됩니다. Phase 2에서 RAG 시스템과 연결하여 해설을 제공합니다.
-              </Text>
+              <Text style={styles.commentary}>{annotation.commentary}</Text>
             </View>
 
             {/* 관련 구절 */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>관련 구절</Text>
-              <View style={styles.chipRow}>
-                {['창 1:1', '골 1:17', '히 1:2'].map((ref) => (
-                  <View key={ref} style={styles.chip}>
-                    <Text style={styles.chipText}>{ref}</Text>
+            {annotation.crossRefs.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>관련 구절</Text>
+                {annotation.crossRefs.map((ref, i) => (
+                  <View key={i} style={styles.crossRefItem}>
+                    <View style={styles.chip}>
+                      <Text style={styles.chipText}>{ref.ref}</Text>
+                    </View>
+                    <Text style={styles.crossRefText} numberOfLines={2}>{ref.text}</Text>
                   </View>
                 ))}
               </View>
-            </View>
+            )}
 
             {/* 원어 */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>원어</Text>
-              <Text style={styles.sectionContent}>
-                원어 데이터가 곧 추가됩니다.
-              </Text>
-            </View>
+            {annotation.originalWords.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>원어</Text>
+                {annotation.originalWords.map((word, i) => (
+                  <View key={i} style={styles.wordItem}>
+                    <Text style={styles.wordOriginal}>{word.original}</Text>
+                    <Text style={styles.wordTranslit}>{word.transliteration}</Text>
+                    <Text style={styles.wordMeaning}>{word.meaning}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={{ height: 40 }} />
           </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -77,31 +88,36 @@ const styles = StyleSheet.create({
     borderTopRightRadius: spacing.bottomSheetRadius,
     paddingHorizontal: spacing.screenPadding,
     paddingTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 40,
   },
   handleBar: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.1)',
     alignSelf: 'center',
     marginBottom: 20,
   },
   verseCard: {
-    backgroundColor: 'rgba(125,139,117,0.12)',
-    borderRadius: spacing.cardRadius,
-    padding: 16,
+    backgroundColor: 'rgba(193,95,60,0.08)',
+    borderRadius: 10,
+    padding: 14,
+    paddingHorizontal: 16,
     marginBottom: 24,
   },
   verseRef: {
     fontFamily: fonts.sansSemiBold,
     fontSize: 11,
-    color: colors.accentGreen,
+    color: colors.accent,
     marginBottom: 8,
   },
   verseText: {
     fontFamily: fonts.serifLight,
     fontSize: 15,
-    lineHeight: 30,
+    lineHeight: 28,
     color: colors.textPrimary,
   },
   section: {
@@ -109,32 +125,63 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: fonts.sansSemiBold,
-    fontSize: 12,
-    color: colors.accentGreen,
-    letterSpacing: 1,
+    fontSize: 10.5,
+    letterSpacing: 10.5 * 0.1,
+    color: colors.accent,
+    marginBottom: 12,
+  },
+  commentary: {
+    fontFamily: fonts.sansRegular,
+    fontSize: 13.5,
+    lineHeight: 23,
+    color: '#444444',
+  },
+  crossRefItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
     marginBottom: 10,
   },
-  sectionContent: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 13,
-    lineHeight: 22,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   chip: {
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(0,0,0,0.04)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 8,
   },
   chipText: {
     fontFamily: fonts.sansMedium,
     fontSize: 12,
     color: colors.textPrimary,
+  },
+  crossRefText: {
+    flex: 1,
+    fontFamily: fonts.sansRegular,
+    fontSize: 12.5,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    paddingTop: 3,
+  },
+  wordItem: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  wordOriginal: {
+    fontFamily: fonts.serifLight,
+    fontSize: 22,
+    color: colors.textPrimary,
+  },
+  wordTranslit: {
+    fontFamily: fonts.sansRegular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  wordMeaning: {
+    fontFamily: fonts.sansRegular,
+    fontSize: 12,
+    color: '#666666',
   },
 });

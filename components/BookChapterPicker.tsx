@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
-  headerButton: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.accentGreen },
+  headerButton: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.accent },
   headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.textPrimary },
   toggleRow: {
     flexDirection: 'row',
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: 'center',
   },
-  toggleActive: { backgroundColor: colors.accentGreen },
+  toggleActive: { backgroundColor: colors.accent },
   toggleText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.textPrimary },
   toggleTextActive: { color: '#FFFFFF' },
   bookItem: {
