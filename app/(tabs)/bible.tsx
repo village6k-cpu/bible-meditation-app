@@ -81,7 +81,6 @@ export default function BibleScreen() {
           highlighted={highlightedVerse === v.verse}
           highlightColor={highlights[v.verse] || null}
           onLongPress={handleLongPress}
-          onHighlight={handleHighlight}
         />
       ));
     }
@@ -123,7 +122,6 @@ export default function BibleScreen() {
           highlighted={highlightedVerse === v.verse}
           highlightColor={highlights[v.verse] || null}
           onLongPress={handleLongPress}
-          onHighlight={handleHighlight}
         />
       );
       verseIdx++;
@@ -192,6 +190,8 @@ export default function BibleScreen() {
         visible={showBottomSheet}
         verse={selectedVerse}
         bookName={book?.name_ko ?? ''}
+        currentHighlight={selectedVerse ? highlights[selectedVerse.verse] || null : null}
+        onHighlight={handleHighlight}
         onClose={() => {
           setShowBottomSheet(false);
           setHighlightedVerse(null);

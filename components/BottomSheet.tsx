@@ -1,7 +1,9 @@
 import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../lib/theme';
 import { Verse } from '../lib/bible-data';
 import { getAnnotation } from '../lib/cross-references';
+import { HIGHLIGHT_COLORS } from './VerseText';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -9,10 +11,12 @@ interface Props {
   visible: boolean;
   verse: Verse | null;
   bookName: string;
+  currentHighlight?: string | null;
   onClose: () => void;
+  onHighlight?: (verse: Verse, color: string | null) => void;
 }
 
-export function VerseBottomSheet({ visible, verse, bookName, onClose }: Props) {
+export function VerseBottomSheet({ visible, verse, bookName, onClose, onHighlight, currentHighlight }: Props) {
   if (!verse) return null;
 
   const annotation = getAnnotation(verse.book_id, verse.chapter, verse.verse);
@@ -31,6 +35,27 @@ export function VerseBottomSheet({ visible, verse, bookName, onClose }: Props) {
               </Text>
               <Text style={styles.verseText}>{verse.text}</Text>
             </View>
+
+            {/* 하이라이트 색상 선택 */}
+            {onHighlight && (
+              <View style={styles.highlightRow}>
+                {HIGHLIGHT_COLORS.map((c) => (
+                  <TouchableOpacity
+                    key={c.name}
+                    style={[styles.highlightBtn, { backgroundColor: c.color }, currentHighlight === c.color && styles.highlightBtnActive]}
+                    onPress={() => { onHighlight(verse, c.color); onClose(); }}
+                  />
+                ))}
+                {currentHighlight ? (
+                  <TouchableOpacity
+                    style={styles.highlightClearBtn}
+                    onPress={() => { onHighlight(verse, null); onClose(); }}
+                  >
+                    <Ionicons name="close" size={14} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
 
             {/* 주석 */}
             <View style={styles.section}>
@@ -76,112 +101,36 @@ export function VerseBottomSheet({ visible, verse, bookName, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'flex-end' },
   sheet: {
-    height: SCREEN_HEIGHT * 0.6,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: spacing.bottomSheetRadius,
-    borderTopRightRadius: spacing.bottomSheetRadius,
-    paddingHorizontal: spacing.screenPadding,
-    paddingTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 40,
+    height: SCREEN_HEIGHT * 0.6, backgroundColor: colors.background,
+    borderTopLeftRadius: spacing.bottomSheetRadius, borderTopRightRadius: spacing.bottomSheetRadius,
+    paddingHorizontal: spacing.screenPadding, paddingTop: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 40,
   },
-  handleBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    alignSelf: 'center',
-    marginBottom: 20,
+  handleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center', marginBottom: 20 },
+  verseCard: { backgroundColor: 'rgba(193,95,60,0.08)', borderRadius: 10, padding: 14, paddingHorizontal: 16, marginBottom: 16 },
+  verseRef: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.accent, marginBottom: 8 },
+  verseText: { fontFamily: fonts.serifLight, fontSize: 15, lineHeight: 28, color: colors.textPrimary },
+
+  // 하이라이트
+  highlightRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 },
+  highlightBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent' },
+  highlightBtnActive: { borderColor: colors.accent },
+  highlightClearBtn: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center',
   },
-  verseCard: {
-    backgroundColor: 'rgba(193,95,60,0.08)',
-    borderRadius: 10,
-    padding: 14,
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  verseRef: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 11,
-    color: colors.accent,
-    marginBottom: 8,
-  },
-  verseText: {
-    fontFamily: fonts.serifLight,
-    fontSize: 15,
-    lineHeight: 28,
-    color: colors.textPrimary,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontFamily: fonts.sansSemiBold,
-    fontSize: 10.5,
-    letterSpacing: 10.5 * 0.1,
-    color: colors.accent,
-    marginBottom: 12,
-  },
-  commentary: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 13.5,
-    lineHeight: 23,
-    color: '#444444',
-  },
-  crossRefItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginBottom: 10,
-  },
-  chip: {
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: colors.textPrimary,
-  },
-  crossRefText: {
-    flex: 1,
-    fontFamily: fonts.sansRegular,
-    fontSize: 12.5,
-    lineHeight: 20,
-    color: colors.textSecondary,
-    paddingTop: 3,
-  },
-  wordItem: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    marginBottom: 10,
-    flexWrap: 'wrap',
-  },
-  wordOriginal: {
-    fontFamily: fonts.serifLight,
-    fontSize: 22,
-    color: colors.textPrimary,
-  },
-  wordTranslit: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  wordMeaning: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 12,
-    color: '#666666',
-  },
+
+  section: { marginBottom: 24 },
+  sectionTitle: { fontFamily: fonts.sansSemiBold, fontSize: 10.5, letterSpacing: 10.5 * 0.1, color: colors.accent, marginBottom: 12 },
+  commentary: { fontFamily: fonts.sansRegular, fontSize: 13.5, lineHeight: 23, color: '#444444' },
+  crossRefItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+  chip: { backgroundColor: 'rgba(0,0,0,0.04)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  chipText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.textPrimary },
+  crossRefText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 12.5, lineHeight: 20, color: colors.textSecondary, paddingTop: 3 },
+  wordItem: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 10, flexWrap: 'wrap' },
+  wordOriginal: { fontFamily: fonts.serifLight, fontSize: 22, color: colors.textPrimary },
+  wordTranslit: { fontFamily: fonts.sansRegular, fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' },
+  wordMeaning: { fontFamily: fonts.sansRegular, fontSize: 12, color: '#666666' },
 });

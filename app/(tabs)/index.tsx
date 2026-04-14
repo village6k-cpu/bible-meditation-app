@@ -14,12 +14,9 @@ import {
   getWeeklyPrayerCount,
   getWeeklyDailyDetail,
   getAllPrayerRequests,
-  getTotalBibleProgress,
-  getBookCompletions,
   Verse,
   Note,
   PrayerRequest,
-  BookReadCount,
 } from '../../lib/bible-data';
 import { getAnnotation } from '../../lib/cross-references';
 import { WEEKLY_GOALS } from '../../lib/reading-plan';
@@ -105,22 +102,18 @@ export default function HomeScreen() {
   const [dailyDetail, setDailyDetail] = useState<{ date: string; chapters: number; prayed: boolean }[]>([]);
   const [recentNotes, setRecentNotes] = useState<Note[]>([]);
   const [prayerRequests, setPrayerRequests] = useState<PrayerRequest[]>([]);
-  const [bibleTotal, setBibleTotal] = useState({ read: 0, total: 1189 });
-  const [bookCompletions, setBookCompletions] = useState<BookReadCount[]>([]);
 
   const today = getISODate();
   const weekDates = getWeekDates().map(getISODate);
 
   async function loadData() {
-    const [verse, ch, pr, detail, notes, prayers, total, completions] = await Promise.all([
+    const [verse, ch, pr, detail, notes, prayers] = await Promise.all([
       getRandomVerse(),
       getWeeklyChaptersRead(weekDates),
       getWeeklyPrayerCount(weekDates),
       getWeeklyDailyDetail(weekDates),
       getAllNotes(),
       getAllPrayerRequests(),
-      getTotalBibleProgress(),
-      getBookCompletions(),
     ]);
     setDailyVerse(verse);
     setWeekChapters(ch);
@@ -128,8 +121,6 @@ export default function HomeScreen() {
     setDailyDetail(detail);
     setRecentNotes(notes.slice(0, 2));
     setPrayerRequests(prayers.filter((p) => !p.answered).slice(0, 3));
-    setBibleTotal(total);
-    setBookCompletions(completions);
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
@@ -140,7 +131,6 @@ export default function HomeScreen() {
 
   const chapterPercent = Math.min((weekChapters / WEEKLY_GOALS.readingChapters) * 100, 100);
   const prayerPercent = Math.min((weekPrayers / WEEKLY_GOALS.prayerCount) * 100, 100);
-  const biblePercent = bibleTotal.total > 0 ? (bibleTotal.read / bibleTotal.total) * 100 : 0;
   const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
   // 읽기표 진행률 (주간 기준)
@@ -250,36 +240,6 @@ export default function HomeScreen() {
                 </View>
               );
             })}
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* 성경통독 */}
-          <TouchableOpacity activeOpacity={0.6} onPress={() => router.push('/(tabs)/devotion')}>
-            <SectionLabel label="성경통독" right={
-              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-            } />
-          </TouchableOpacity>
-          <View style={styles.bibleCard}>
-            <View style={styles.bibleStats}>
-              <Text style={styles.bibleChapters}>
-                <Text style={styles.bibleChaptersBold}>{bibleTotal.read}</Text> / {bibleTotal.total}장
-              </Text>
-              <Text style={styles.biblePercent}>{Math.round(biblePercent)}%</Text>
-            </View>
-            <View style={styles.bibleProgressBar}>
-              <View style={[styles.bibleProgressFill, { width: `${biblePercent}%` }]} />
-            </View>
-            {bookCompletions.length > 0 && (
-              <View style={styles.completionsRow}>
-                {bookCompletions.slice(0, 5).map((b) => (
-                  <View key={b.bookId} style={styles.completionChip}>
-                    <Text style={styles.completionName}>{b.name}</Text>
-                    <Text style={styles.completionCount}>{b.completions}회독</Text>
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
 
           <View style={styles.divider} />

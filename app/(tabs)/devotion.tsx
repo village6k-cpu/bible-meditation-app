@@ -286,8 +286,7 @@ export default function DevotionScreen() {
           activeOpacity={0.6}
         >
           <Ionicons name={prayedToday ? 'heart' : 'heart-outline'} size={18} color={colors.accent} />
-          <Text style={styles.prayerCheckText}>기도했어요</Text>
-          {prayedToday && <Ionicons name="checkmark" size={16} color={colors.accent} />}
+          <Text style={styles.prayerCheckText}>오늘 기도했어요</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
