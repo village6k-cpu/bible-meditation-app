@@ -13,32 +13,45 @@ export async function initDatabases(): Promise<void> {
   const FileSystem = require('expo-file-system');
   const { Asset } = require('expo-asset');
 
-  // expo-sqlite의 실제 DB 디렉토리 사용
-  const dbDir = (SQLite as any).defaultDatabaseDirectory;
-  const bibleDbPath = `${dbDir}/bible.db`;
+  // expo-sqlite가 실제로 사용하는 디렉토리
+  const nativeDir: string = (SQLite as any).defaultDatabaseDirectory ?? '';
+  // FileSystem은 file:// URI를 사용하므로 변환
+  const dirUri = nativeDir.startsWith('file://') ? nativeDir : `file://${nativeDir}`;
+  const bibleDbUri = `${dirUri}/bible.db`;
 
-  // 디렉토리 생성
+  // bible.db를 expo-sqlite 디렉토리에 복사
   try {
-    const dirInfo = await FileSystem.getInfoAsync(dbDir);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
-    }
-  } catch {
-    // 디렉토리가 이미 존재할 수 있음
-  }
+    const fileInfo = await FileSystem.getInfoAsync(bibleDbUri);
+    if (!fileInfo.exists) {
+      // 디렉토리 확인/생성
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(dirUri);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(dirUri, { intermediates: true });
+        }
+      } catch {}
 
-  // bible.db 복사
-  const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
-  if (!fileInfo.exists) {
-    const asset = Asset.fromModule(require('../assets/bible/bible.db'));
-    await asset.downloadAsync();
-    if (asset.localUri) {
-      await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
+      const asset = Asset.fromModule(require('../assets/bible/bible.db'));
+      await asset.downloadAsync();
+      if (asset.localUri) {
+        await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbUri });
+        console.log('bible.db copied to:', bibleDbUri);
+      }
     }
+  } catch (e) {
+    console.warn('Failed to copy bible.db:', e);
   }
 
   bibleDb = await SQLite.openDatabaseAsync('bible.db');
   userDb = await SQLite.openDatabaseAsync('user.db');
+
+  // Verify bible DB has data
+  try {
+    const row = await bibleDb.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM books');
+    console.log('Bible DB books count:', row?.c);
+  } catch (e) {
+    console.warn('Bible DB verification failed:', e);
+  }
 
   // Create user tables
   await userDb.execAsync(`
