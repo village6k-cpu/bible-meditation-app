@@ -230,15 +230,15 @@ export default function DevotionScreen() {
 
         <View style={styles.divider} />
 
-        {/* 기도 — 기도제목 + 오늘의 기도 합침 */}
+        {/* 기도 제목 */}
         <View style={styles.sectionHeader}>
-          <SectionLabel label="기도" />
+          <SectionLabel label="기도 제목" />
           <TouchableOpacity onPress={() => setShowPrayerInput(!showPrayerInput)}>
             <Ionicons name={showPrayerInput ? 'close-circle-outline' : 'add-circle-outline'} size={22} color={colors.accent} />
           </TouchableOpacity>
         </View>
 
-        {/* 기도제목 입력 — + 누르면 나타남 */}
+        {/* 기도제목 입력 */}
         {showPrayerInput && (
           <View style={styles.inputRow}>
             <TextInput
@@ -257,32 +257,33 @@ export default function DevotionScreen() {
           </View>
         )}
 
-        {/* 기도제목 목록 */}
-        {prayerRequests.map((pr) => (
-          <View key={pr.id} style={styles.prayerItem}>
-            <TouchableOpacity onPress={() => handleTogglePrayer(pr.id)} style={styles.prayerItemLeft}>
-              <Ionicons
-                name={pr.answered ? 'checkmark-circle' : 'ellipse-outline'}
-                size={20}
-                color={pr.answered ? colors.accent : colors.textTertiary}
-              />
-              <Text style={[styles.prayerItemText, !!pr.answered && styles.prayerItemDone]}>{pr.content}</Text>
-              {pr.answered ? <Text style={styles.answeredLabel}>응답</Text> : null}
-            </TouchableOpacity>
+        {/* 기도제목 목록 — 장기 항목 스타일 */}
+        {prayerRequests.map((pr, i) => (
+          <View key={pr.id} style={[styles.prayerItem, i > 0 && styles.prayerItemBorder]}>
+            <View style={styles.prayerItemLeft}>
+              <Text style={styles.prayerBullet}>•</Text>
+              <Text style={styles.prayerItemText}>{pr.content}</Text>
+            </View>
             <TouchableOpacity onPress={() => handleDeletePrayer(pr.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={16} color={colors.textTertiary} />
             </TouchableOpacity>
           </View>
         ))}
 
-        {/* 오늘의 기도 체크 */}
+        {/* 오늘 기도했어요 — 우측 하단 */}
         <TouchableOpacity
-          style={styles.prayerCheckRow}
+          style={[styles.prayerCheckRow, prayedToday && styles.prayerCheckRowDone]}
           onPress={handlePrayer}
           activeOpacity={0.6}
         >
-          <Ionicons name={prayedToday ? 'heart' : 'heart-outline'} size={18} color={colors.accent} />
-          <Text style={styles.prayerCheckText}>오늘 기도했어요</Text>
+          <Ionicons
+            name={prayedToday ? 'heart' : 'heart-outline'}
+            size={16}
+            color={prayedToday ? colors.accent : colors.textTertiary}
+          />
+          <Text style={[styles.prayerCheckText, prayedToday && styles.prayerCheckTextDone]}>
+            오늘 기도했어요
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -396,13 +397,18 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   prayerInput: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
   addBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  prayerItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  prayerItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  prayerItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  prayerItemBorder: { borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)' },
+  prayerItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  prayerBullet: { fontFamily: fonts.sansRegular, fontSize: 16, color: colors.textSecondary, width: 14, textAlign: 'center' },
   prayerItemText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
-  prayerItemDone: { textDecorationLine: 'line-through', opacity: 0.4 },
-  answeredLabel: { fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.accent, backgroundColor: colors.accentLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  prayerCheckRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, marginTop: 4 },
-  prayerCheckText: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
+  prayerCheckRow: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end',
+    gap: 6, marginTop: 14, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
+  },
+  prayerCheckRowDone: { backgroundColor: 'rgba(193,95,60,0.06)' },
+  prayerCheckText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.textTertiary },
+  prayerCheckTextDone: { color: colors.accent },
 
   // 읽기
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -307,16 +307,16 @@ export default function HomeScreen() {
 
           <View style={styles.divider} />
 
-          {/* 기도제목 */}
+          {/* 기도 제목 */}
           <TouchableOpacity activeOpacity={0.6} onPress={() => router.push('/(tabs)/devotion')}>
-            <SectionLabel label="기도제목" right={
+            <SectionLabel label="기도 제목" right={
               <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
             } />
           </TouchableOpacity>
           {prayerRequests.length > 0 ? (
-            prayerRequests.map((pr) => (
-              <View key={pr.id} style={styles.prayerPreview}>
-                <Ionicons name="ellipse-outline" size={14} color={colors.textTertiary} />
+            prayerRequests.map((pr, i) => (
+              <View key={pr.id} style={[styles.prayerPreview, i > 0 && styles.prayerPreviewBorder]}>
+                <Text style={styles.prayerBullet}>•</Text>
                 <Text style={styles.prayerPreviewText} numberOfLines={1}>{pr.content}</Text>
               </View>
             ))
@@ -429,8 +429,10 @@ const styles = StyleSheet.create({
   completionName: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.accent },
   completionCount: { fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.accent },
 
-  prayerPreview: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  prayerPreviewText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 13.5, color: colors.textPrimary },
+  prayerPreview: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+  prayerPreviewBorder: { borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)' },
+  prayerBullet: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textSecondary, width: 14, textAlign: 'center' },
+  prayerPreviewText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
 
   notePreview: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.divider },
   noteDate: { fontFamily: fonts.sansRegular, fontSize: 11, color: colors.textSecondary, marginBottom: 3 },
