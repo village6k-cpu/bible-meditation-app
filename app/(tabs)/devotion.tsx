@@ -263,8 +263,8 @@ export default function DevotionScreen() {
                 size={20}
                 color={pr.answered ? colors.accent : colors.textTertiary}
               />
-              <Text style={[styles.prayerItemText, pr.answered && styles.prayerItemDone]}>{pr.content}</Text>
-              {pr.answered && <Text style={styles.answeredLabel}>응답</Text>}
+              <Text style={[styles.prayerItemText, !!pr.answered && styles.prayerItemDone]}>{pr.content}</Text>
+              {pr.answered ? <Text style={styles.answeredLabel}>응답</Text> : null}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => handleDeletePrayer(pr.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={16} color={colors.textTertiary} />
