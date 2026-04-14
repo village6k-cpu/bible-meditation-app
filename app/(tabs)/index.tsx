@@ -167,6 +167,38 @@ export default function HomeScreen() {
             {getGreeting()}
           </Text>
 
+          <View style={[styles.divider, { backgroundColor: theme.dividerColor }]} />
+
+          {/* 오늘의 말씀 — 그라데이션 아래이므로 항상 기본 색상 */}
+          <SectionLabel label="오늘의 말씀" />
+          {dailyVerse ? (
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowVerseDetails(!showVerseDetails)}>
+              <Text style={styles.verseText}>{dailyVerse.text}</Text>
+              <Text style={styles.verseSource}>
+                — {dailyVerse.book_name} {dailyVerse.chapter}:{dailyVerse.verse}
+              </Text>
+              {showVerseDetails && verseAnnotation && (
+                <View style={styles.verseDetails}>
+                  <Text style={styles.verseDetailText}>{verseAnnotation.commentary}</Text>
+                  {verseAnnotation.crossRefs.length > 0 && (
+                    <View style={styles.crossRefRow}>
+                      {verseAnnotation.crossRefs.map((ref, i) => (
+                        <View key={i} style={styles.crossRefChip}>
+                          <Text style={styles.crossRefChipText}>{ref.ref}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+              <Text style={styles.tapHint}>
+                탭하여 관련 자료 보기
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.loadingText}>말씀을 불러오는 중...</Text>
+          )}
+
           {/* 이어 읽기 */}
           {lastReadBook && (
             <TouchableOpacity
@@ -189,38 +221,6 @@ export default function HomeScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
             </TouchableOpacity>
-          )}
-
-          <View style={[styles.divider, { backgroundColor: theme.dividerColor }]} />
-
-          {/* 오늘의 말씀 */}
-          <Text style={[styles.sectionLabelText, { color: theme.labelColor }]}>오늘의 말씀</Text>
-          {dailyVerse ? (
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowVerseDetails(!showVerseDetails)}>
-              <Text style={[styles.verseText, { color: theme.textColor }]}>{dailyVerse.text}</Text>
-              <Text style={[styles.verseSource, { color: theme.subTextColor }]}>
-                — {dailyVerse.book_name} {dailyVerse.chapter}:{dailyVerse.verse}
-              </Text>
-              {showVerseDetails && verseAnnotation && (
-                <View style={styles.verseDetails}>
-                  <Text style={styles.verseDetailText}>{verseAnnotation.commentary}</Text>
-                  {verseAnnotation.crossRefs.length > 0 && (
-                    <View style={styles.crossRefRow}>
-                      {verseAnnotation.crossRefs.map((ref, i) => (
-                        <View key={i} style={styles.crossRefChip}>
-                          <Text style={styles.crossRefChipText}>{ref.ref}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-              <Text style={[styles.tapHint, { color: theme.isDark ? 'rgba(244,243,238,0.35)' : colors.textTertiary }]}>
-                탭하여 관련 자료 보기
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={[styles.loadingText, { color: theme.subTextColor }]}>말씀을 불러오는 중...</Text>
           )}
 
           <View style={styles.divider} />
