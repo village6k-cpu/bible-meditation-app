@@ -42,6 +42,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="devotion"
+        options={{
+          title: '경건생활',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="flame-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="music"
         options={{
           title: '음악',
@@ -50,15 +59,8 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="notes"
-        options={{
-          title: '노트',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* notes.tsx는 숨김 — 경건생활 탭에 통합 */}
+      <Tabs.Screen name="notes" options={{ href: null }} />
     </Tabs>
   );
 }

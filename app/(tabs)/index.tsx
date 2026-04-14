@@ -204,7 +204,7 @@ export default function HomeScreen() {
         <View style={styles.divider} />
 
         {/* 묵상 노트 미리보기 */}
-        <TouchableOpacity activeOpacity={0.6} onPress={() => router.push('/(tabs)/notes')}>
+        <TouchableOpacity activeOpacity={0.6} onPress={() => router.push('/(tabs)/devotion')}>
           <SectionLabel label="묵상 노트" right={
             <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
           } />
