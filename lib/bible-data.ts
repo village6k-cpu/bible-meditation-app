@@ -225,3 +225,90 @@ export async function deleteNote(id: number): Promise<void> {
   if (!db) return;
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
+
+// === 주간 경건생활 트래킹 ===
+
+export async function logChapterRead(date: string, bookId: number, chapter: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  // 같은 날 같은 장 중복 방지
+  const existing = await db.getFirstAsync(
+    'SELECT id FROM reading_log WHERE date = ? AND book_id = ? AND chapter = ?',
+    [date, bookId, chapter]
+  );
+  if (!existing) {
+    await db.runAsync(
+      'INSERT INTO reading_log (date, book_id, chapter) VALUES (?, ?, ?)',
+      [date, bookId, chapter]
+    );
+  }
+}
+
+export async function logPrayer(date: string): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  // 하루 1회만
+  const existing = await db.getFirstAsync(
+    'SELECT id FROM prayer_log WHERE date = ?',
+    [date]
+  );
+  if (!existing) {
+    await db.runAsync('INSERT INTO prayer_log (date) VALUES (?)', [date]);
+  }
+}
+
+export async function hasPrayedToday(date: string): Promise<boolean> {
+  const db = getUserDb();
+  if (!db) return false;
+  const row = await db.getFirstAsync<{ c: number }>(
+    'SELECT COUNT(*) as c FROM prayer_log WHERE date = ?',
+    [date]
+  );
+  return (row?.c ?? 0) > 0;
+}
+
+export async function getWeeklyChaptersRead(weekDates: string[]): Promise<number> {
+  const db = getUserDb();
+  if (!db) return 0;
+  if (weekDates.length === 0) return 0;
+  const placeholders = weekDates.map(() => '?').join(',');
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) as c FROM reading_log WHERE date IN (${placeholders})`,
+    weekDates
+  );
+  return row?.c ?? 0;
+}
+
+export async function getWeeklyPrayerCount(weekDates: string[]): Promise<number> {
+  const db = getUserDb();
+  if (!db) return 0;
+  if (weekDates.length === 0) return 0;
+  const placeholders = weekDates.map(() => '?').join(',');
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) as c FROM prayer_log WHERE date IN (${placeholders})`,
+    weekDates
+  );
+  return row?.c ?? 0;
+}
+
+export async function getDailyChaptersRead(date: string): Promise<number> {
+  const db = getUserDb();
+  if (!db) return 0;
+  const row = await db.getFirstAsync<{ c: number }>(
+    'SELECT COUNT(*) as c FROM reading_log WHERE date = ?',
+    [date]
+  );
+  return row?.c ?? 0;
+}
+
+export async function getWeeklyDailyDetail(weekDates: string[]): Promise<{ date: string; chapters: number; prayed: boolean }[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  const result = [];
+  for (const date of weekDates) {
+    const chapters = await getDailyChaptersRead(date);
+    const prayed = await hasPrayedToday(date);
+    result.push({ date, chapters, prayed });
+  }
+  return result;
+}

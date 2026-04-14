@@ -106,6 +106,28 @@ export async function initDatabases(): Promise<void> {
       date TEXT PRIMARY KEY,
       completed INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS reading_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      book_id INTEGER NOT NULL,
+      chapter INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS prayer_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS weekly_goals (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      reading_chapters INTEGER NOT NULL DEFAULT 10,
+      prayer_count INTEGER NOT NULL DEFAULT 4
+    );
+
+    INSERT OR IGNORE INTO weekly_goals (id, reading_chapters, prayer_count) VALUES (1, 10, 4);
   `);
 }
 
