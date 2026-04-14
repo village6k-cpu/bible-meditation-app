@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { colors, fonts, spacing } from '../../lib/theme';
 import { useAppStore } from '../../lib/store';
-import { getVerses, getSections, getBook, Verse, Section, Book } from '../../lib/bible-data';
+import { getVerses, getSections, getBook, getHighlights, setHighlight, Verse, Section, Book } from '../../lib/bible-data';
 import { VerseText } from '../../components/VerseText';
 import { VerseBottomSheet } from '../../components/BottomSheet';
 import { BookChapterPicker } from '../../components/BookChapterPicker';
@@ -22,21 +22,30 @@ export default function BibleScreen() {
   const [selectedVerse, setSelectedVerse] = useState<Verse | null>(null);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [showFontSettings, setShowFontSettings] = useState(false);
+  const [highlights, setHighlights] = useState<Record<number, string>>({});
   const fontScale = useAppStore((s) => s.fontScale);
   const lineHeightScale = useAppStore((s) => s.lineHeightScale);
   const scrollRef = useRef<ScrollView>(null);
 
   async function loadChapter() {
-    const [b, v, s] = await Promise.all([
+    const [b, v, s, h] = await Promise.all([
       getBook(currentBookId),
       getVerses(currentBookId, currentChapter),
       getSections(currentBookId, currentChapter),
+      getHighlights(currentBookId, currentChapter),
     ]);
     setBook(b);
     setVerses(v);
     setSections(s);
+    setHighlights(h);
     setHighlightedVerse(null);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  async function handleHighlight(verse: Verse, color: string | null) {
+    await setHighlight(verse.book_id, verse.chapter, verse.verse, color);
+    const h = await getHighlights(currentBookId, currentChapter);
+    setHighlights(h);
   }
 
   useFocusEffect(
@@ -70,7 +79,9 @@ export default function BibleScreen() {
           key={v.verse}
           verse={v}
           highlighted={highlightedVerse === v.verse}
+          highlightColor={highlights[v.verse] || null}
           onLongPress={handleLongPress}
+          onHighlight={handleHighlight}
         />
       ));
     }
@@ -110,7 +121,9 @@ export default function BibleScreen() {
           key={v.verse}
           verse={v}
           highlighted={highlightedVerse === v.verse}
+          highlightColor={highlights[v.verse] || null}
           onLongPress={handleLongPress}
+          onHighlight={handleHighlight}
         />
       );
       verseIdx++;

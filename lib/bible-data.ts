@@ -226,6 +226,60 @@ export async function deleteNote(id: number): Promise<void> {
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
+// === 하이라이트 ===
+
+export interface Highlight {
+  book_id: number;
+  chapter: number;
+  verse: number;
+  color: string;
+}
+
+export async function getHighlights(bookId: number, chapter: number): Promise<Record<number, string>> {
+  const db = getUserDb();
+  if (!db) return {};
+  const rows = await db.getAllAsync<Highlight>(
+    'SELECT * FROM highlights WHERE book_id = ? AND chapter = ?',
+    [bookId, chapter]
+  );
+  const map: Record<number, string> = {};
+  for (const r of rows) map[r.verse] = r.color;
+  return map;
+}
+
+export async function setHighlight(bookId: number, chapter: number, verse: number, color: string | null): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  await db.runAsync('DELETE FROM highlights WHERE book_id = ? AND chapter = ? AND verse = ?', [bookId, chapter, verse]);
+  if (color) {
+    await db.runAsync('INSERT INTO highlights (book_id, chapter, verse, color) VALUES (?, ?, ?, ?)', [bookId, chapter, verse, color]);
+  }
+}
+
+export async function getAllHighlights(): Promise<(Highlight & { text: string; book_name: string })[]> {
+  const userDb = getUserDb();
+  const bibleDb = getBibleDb();
+  if (!userDb || !bibleDb) return [];
+
+  const highlights = await userDb.getAllAsync<Highlight>('SELECT * FROM highlights ORDER BY book_id, chapter, verse');
+  const result: (Highlight & { text: string; book_name: string })[] = [];
+
+  for (const h of highlights) {
+    const verse = await bibleDb.getFirstAsync<{ text: string }>(
+      'SELECT text FROM verses WHERE book_id = ? AND chapter = ? AND verse = ?',
+      [h.book_id, h.chapter, h.verse]
+    );
+    const book = await bibleDb.getFirstAsync<{ name_ko: string }>(
+      'SELECT name_ko FROM books WHERE id = ?',
+      [h.book_id]
+    );
+    if (verse && book) {
+      result.push({ ...h, text: verse.text, book_name: book.name_ko });
+    }
+  }
+  return result;
+}
+
 // === 주간 경건생활 트래킹 ===
 
 export async function logChapterRead(date: string, bookId: number, chapter: number): Promise<void> {
