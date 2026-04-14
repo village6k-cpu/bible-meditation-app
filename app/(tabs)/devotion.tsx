@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,15 +14,15 @@ import {
   getDailyReadings,
   toggleDailyReading,
   addDailyReading,
+  deleteDailyReading,
   markDayCompleted,
   getAllNotes,
   saveNote,
   getAllPrayerRequests,
   addPrayerRequest,
   togglePrayerAnswered,
+  deletePrayerRequest,
   getTotalBibleProgress,
-  getBibleCompletionProgress,
-  BookProgress,
   DailyReading,
   Note,
   PrayerRequest,
@@ -45,15 +45,13 @@ export default function DevotionScreen() {
   const [prayerRequests, setPrayerRequests] = useState<PrayerRequest[]>([]);
   const [prayerText, setPrayerText] = useState('');
   const [bibleTotal, setBibleTotal] = useState({ read: 0, total: 1189 });
-  const [bookProgress, setBookProgress] = useState<BookProgress[]>([]);
-  const [showOT, setShowOT] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const today = getISODate();
   const weekDates = getWeekDates().map(getISODate);
 
   async function loadData() {
-    const [ch, pr, prayed, r, n, prayers, total, progress] = await Promise.all([
+    const [ch, pr, prayed, r, n, prayers, total] = await Promise.all([
       getWeeklyChaptersRead(weekDates),
       getWeeklyPrayerCount(weekDates),
       hasPrayedToday(today),
@@ -61,7 +59,6 @@ export default function DevotionScreen() {
       getAllNotes(),
       getAllPrayerRequests(),
       getTotalBibleProgress(),
-      getBibleCompletionProgress(),
     ]);
     setWeekChapters(ch);
     setWeekPrayers(pr);
@@ -70,7 +67,6 @@ export default function DevotionScreen() {
     setNotes(n);
     setPrayerRequests(prayers);
     setBibleTotal(total);
-    setBookProgress(progress);
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
@@ -90,6 +86,16 @@ export default function DevotionScreen() {
     }
     const ch = await getWeeklyChaptersRead(weekDates);
     setWeekChapters(ch);
+  }
+
+  async function handleDeleteReading(id: number) {
+    Alert.alert('삭제', '이 읽을 말씀을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deleteDailyReading(id);
+        await loadData();
+      }},
+    ]);
   }
 
   async function handleAddReading(bookId: number, startChapter: number, endChapter: number) {
@@ -119,19 +125,48 @@ export default function DevotionScreen() {
     setPrayerRequests(p);
   }
 
+  async function handleDeletePrayer(id: number) {
+    Alert.alert('삭제', '이 기도제목을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deletePrayerRequest(id);
+        const p = await getAllPrayerRequests();
+        setPrayerRequests(p);
+      }},
+    ]);
+  }
+
   const chapterPercent = Math.min((weekChapters / WEEKLY_GOALS.readingChapters) * 100, 100);
   const prayerPercent = Math.min((weekPrayers / WEEKLY_GOALS.prayerCount) * 100, 100);
   const biblePercent = bibleTotal.total > 0 ? (bibleTotal.read / bibleTotal.total) * 100 : 0;
-
-  const otBooks = bookProgress.filter((b) => b.testament === 'old');
-  const ntBooks = bookProgress.filter((b) => b.testament === 'new');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>경건생활</Text>
 
+        {/* 성경통독 진행률 — 심플 바 */}
+        <View style={styles.bibleCard}>
+          <View style={styles.bibleCardHeader}>
+            <Ionicons name="book" size={18} color={colors.accent} />
+            <Text style={styles.bibleCardTitle}>성경통독</Text>
+          </View>
+          <View style={styles.bibleStats}>
+            <Text style={styles.bibleChapters}>
+              <Text style={styles.bibleChaptersBold}>{bibleTotal.read}</Text>
+              <Text> / {bibleTotal.total}장</Text>
+            </Text>
+            <Text style={styles.biblePercent}>{Math.round(biblePercent)}%</Text>
+          </View>
+          <View style={styles.bibleProgressBar}>
+            <View style={[styles.bibleProgressFill, { width: `${biblePercent}%` }]} />
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
         {/* 주간 요약 */}
+        <SectionLabel label="이번 주 목표" />
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{weekChapters}<Text style={styles.summaryUnit}>/{WEEKLY_GOALS.readingChapters}장</Text></Text>
@@ -144,57 +179,6 @@ export default function DevotionScreen() {
             <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${prayerPercent}%` }]} /></View>
             <Text style={styles.summaryLabel}>기도</Text>
           </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* 성경통독 체크표 */}
-        <SectionLabel label="성경통독" />
-        <View style={styles.bibleOverview}>
-          <Text style={styles.bibleOverviewText}>
-            <Text style={styles.bibleOverviewBold}>{bibleTotal.read}</Text>/{bibleTotal.total}장 ({Math.round(biblePercent)}%)
-          </Text>
-          <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${biblePercent}%` }]} /></View>
-        </View>
-
-        {/* 구약/신약 토글 */}
-        <View style={styles.testamentToggle}>
-          <TouchableOpacity
-            style={[styles.toggleBtn, showOT && styles.toggleBtnActive]}
-            onPress={() => setShowOT(true)}
-          >
-            <Text style={[styles.toggleText, showOT && styles.toggleTextActive]}>구약 39권</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleBtn, !showOT && styles.toggleBtnActive]}
-            onPress={() => setShowOT(false)}
-          >
-            <Text style={[styles.toggleText, !showOT && styles.toggleTextActive]}>신약 27권</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 통독 그리드 */}
-        <View style={styles.bookGrid}>
-          {(showOT ? otBooks : ntBooks).map((b) => {
-            const pct = b.totalChapters > 0 ? b.readChapters / b.totalChapters : 0;
-            const isDone = pct >= 1;
-            return (
-              <TouchableOpacity
-                key={b.bookId}
-                style={[styles.bookChip, isDone && styles.bookChipDone]}
-                onPress={() => {
-                  setCurrentPosition(b.bookId, 1);
-                  router.push('/(tabs)/bible');
-                }}
-              >
-                <Text style={[styles.bookName, isDone && styles.bookNameDone]}>{b.name}</Text>
-                {b.readChapters > 0 && !isDone && (
-                  <Text style={styles.bookCount}>{b.readChapters}/{b.totalChapters}</Text>
-                )}
-                {isDone && <Ionicons name="checkmark" size={10} color="#FFFFFF" />}
-              </TouchableOpacity>
-            );
-          })}
         </View>
 
         <View style={styles.divider} />
@@ -233,22 +217,22 @@ export default function DevotionScreen() {
           )}
         </View>
         {prayerRequests.map((pr) => (
-          <TouchableOpacity
-            key={pr.id}
-            style={styles.prayerItem}
-            onPress={() => handleTogglePrayer(pr.id)}
-            activeOpacity={0.6}
-          >
-            <Ionicons
-              name={pr.answered ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={pr.answered ? colors.accent : colors.textTertiary}
-            />
-            <Text style={[styles.prayerItemText, pr.answered && styles.prayerItemDone]}>
-              {pr.content}
-            </Text>
-            {pr.answered && <Text style={styles.answeredLabel}>응답</Text>}
-          </TouchableOpacity>
+          <View key={pr.id} style={styles.prayerItem}>
+            <TouchableOpacity onPress={() => handleTogglePrayer(pr.id)} style={styles.prayerItemLeft}>
+              <Ionicons
+                name={pr.answered ? 'checkmark-circle' : 'ellipse-outline'}
+                size={20}
+                color={pr.answered ? colors.accent : colors.textTertiary}
+              />
+              <Text style={[styles.prayerItemText, pr.answered && styles.prayerItemDone]}>
+                {pr.content}
+              </Text>
+              {pr.answered && <Text style={styles.answeredLabel}>응답</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDeletePrayer(pr.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
         ))}
 
         <View style={styles.divider} />
@@ -279,7 +263,9 @@ export default function DevotionScreen() {
                 <Text style={[styles.readingText, r.completed && styles.readingTextDone]}>
                   {r.book_name} {r.start_chapter === r.end_chapter ? `${r.start_chapter}장` : `${r.start_chapter}-${r.end_chapter}장`}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDeleteReading(r.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={16} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
           ))
@@ -324,6 +310,21 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: colors.textPrimary, marginBottom: 20 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sectionGap },
 
+  // 성경통독
+  bibleCard: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.cardRadius,
+    padding: 20,
+  },
+  bibleCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  bibleCardTitle: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.textPrimary },
+  bibleStats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
+  bibleChapters: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textSecondary },
+  bibleChaptersBold: { fontFamily: fonts.sansSemiBold, fontSize: 22, color: colors.textPrimary },
+  biblePercent: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.accent },
+  bibleProgressBar: { height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 3 },
+  bibleProgressFill: { height: 6, backgroundColor: colors.accent, borderRadius: 3 },
+
   // 주간 요약
   summaryRow: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: spacing.cardRadius, padding: 20 },
   summaryItem: { flex: 1, alignItems: 'center', gap: 6 },
@@ -333,25 +334,6 @@ const styles = StyleSheet.create({
   summaryLabel: { fontFamily: fonts.sansRegular, fontSize: 11, color: colors.textSecondary },
   progressBar: { width: '100%', height: 4, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 2 },
   progressFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
-
-  // 성경통독
-  bibleOverview: { marginBottom: 16, gap: 8 },
-  bibleOverviewText: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textSecondary },
-  bibleOverviewBold: { fontFamily: fonts.sansSemiBold, fontSize: 18, color: colors.textPrimary },
-  testamentToggle: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  toggleBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center' },
-  toggleBtnActive: { backgroundColor: colors.accent },
-  toggleText: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.textSecondary },
-  toggleTextActive: { color: '#FFFFFF' },
-  bookGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  bookChip: {
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-    backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 4,
-  },
-  bookChipDone: { backgroundColor: colors.accent },
-  bookName: { fontFamily: fonts.sansRegular, fontSize: 11, color: colors.textPrimary },
-  bookNameDone: { color: '#FFFFFF' },
-  bookCount: { fontFamily: fonts.sansRegular, fontSize: 9, color: colors.textSecondary },
 
   // 기도 체크
   prayerButton: {
@@ -376,6 +358,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider,
   },
+  prayerItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   prayerItemText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
   prayerItemDone: { textDecorationLine: 'line-through', opacity: 0.4 },
   answeredLabel: {
@@ -399,7 +382,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center',
   },
   checkboxDone: { backgroundColor: colors.accent, borderColor: colors.accent },
-  readingContent: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  readingContent: { flex: 1 },
   readingText: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
   readingTextDone: { textDecorationLine: 'line-through', opacity: 0.4 },
 
