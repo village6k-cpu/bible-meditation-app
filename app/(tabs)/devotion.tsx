@@ -55,6 +55,7 @@ export default function DevotionScreen() {
   const [bookCompletions, setBookCompletions] = useState<BookReadCount[]>([]);
   const [showBooks, setShowBooks] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showPrayerInput, setShowPrayerInput] = useState(false);
   const [highlightedVerses, setHighlightedVerses] = useState<(Highlight & { text: string; book_name: string })[]>([]);
 
   const today = getISODate();
@@ -234,25 +235,31 @@ export default function DevotionScreen() {
         <View style={styles.divider} />
 
         {/* 기도 — 기도제목 + 오늘의 기도 합침 */}
-        <SectionLabel label="기도" />
-
-        {/* 기도제목 입력 */}
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.prayerInput}
-            placeholder="기도제목을 적어주세요..."
-            placeholderTextColor={colors.textTertiary}
-            value={prayerText}
-            onChangeText={setPrayerText}
-            onSubmitEditing={handleAddPrayer}
-            returnKeyType="done"
-          />
-          {prayerText.trim().length > 0 && (
-            <TouchableOpacity style={styles.addBtn} onPress={handleAddPrayer}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
+        <View style={styles.sectionHeader}>
+          <SectionLabel label="기도" />
+          <TouchableOpacity onPress={() => setShowPrayerInput(!showPrayerInput)}>
+            <Ionicons name={showPrayerInput ? 'close-circle-outline' : 'add-circle-outline'} size={22} color={colors.accent} />
+          </TouchableOpacity>
         </View>
+
+        {/* 기도제목 입력 — + 누르면 나타남 */}
+        {showPrayerInput && (
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.prayerInput}
+              placeholder="기도제목을 적어주세요..."
+              placeholderTextColor={colors.textTertiary}
+              value={prayerText}
+              onChangeText={setPrayerText}
+              onSubmitEditing={() => { handleAddPrayer(); setShowPrayerInput(false); }}
+              returnKeyType="done"
+              autoFocus
+            />
+            <TouchableOpacity style={styles.addBtn} onPress={() => { handleAddPrayer(); setShowPrayerInput(false); }}>
+              <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* 기도제목 목록 */}
         {prayerRequests.map((pr) => (
