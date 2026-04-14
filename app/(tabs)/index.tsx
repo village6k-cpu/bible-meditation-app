@@ -147,18 +147,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 시간대별 그라데이션 오버레이 */}
-      {theme.gradient && (
-        <LinearGradient
-          colors={[...theme.gradient]}
-          locations={[...theme.gradientLocations]}
-          style={styles.gradientOverlay}
-          pointerEvents="none"
-        />
-      )}
-
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* 시간대별 그라데이션 — ScrollView 안에 absolute */}
+          {theme.gradient && (
+            <LinearGradient
+              colors={[...theme.gradient]}
+              locations={[...theme.gradientLocations]}
+              style={styles.gradientOverlay}
+              pointerEvents="none"
+            />
+          )}
+
           {/* Header */}
           <Text style={[typography.dateText, { color: theme.subTextColor }]}>{formatDateKo()}</Text>
           <Text style={[styles.greeting, { color: theme.textColor }]}>
@@ -338,13 +338,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   gradientOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.45,
-    zIndex: 1,
+    top: -50,
+    left: -spacing.screenPadding,
+    right: -spacing.screenPadding,
+    height: SCREEN_HEIGHT * 0.5,
   },
-  scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12, position: 'relative', zIndex: 2 },
+  scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12 },
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sectionGap },
 

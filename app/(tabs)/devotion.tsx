@@ -180,29 +180,34 @@ export default function DevotionScreen() {
             </View>
           )}
 
-          {/* 66권 미니 그리드 */}
-          <View style={styles.miniGrid}>
-            {bookProgress.map((b) => {
-              const pct = b.totalChapters > 0 ? b.readChapters / b.totalChapters : 0;
-              const isDone = pct >= 1;
-              const isStarted = pct > 0 && !isDone;
-              return (
-                <View
-                  key={b.bookId}
-                  style={[
-                    styles.miniCell,
-                    isDone && styles.miniCellDone,
-                    isStarted && styles.miniCellPartial,
-                  ]}
-                />
-              );
-            })}
-          </View>
-          <View style={styles.miniLegend}>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(0,0,0,0.06)' }]} /><Text style={styles.legendText}>안 읽음</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(193,95,60,0.35)' }]} /><Text style={styles.legendText}>읽는 중 ({readBooks.length}권)</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: colors.accent }]} /><Text style={styles.legendText}>완독</Text></View>
-          </View>
+          {/* 66권 미니 그리드 — 접기/펼치기 */}
+          <TouchableOpacity style={styles.gridToggle} onPress={() => setShowBooks(!showBooks)}>
+            <Text style={styles.gridToggleText}>{readBooks.length}권 읽는 중</Text>
+            <Ionicons name={showBooks ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          {showBooks && (
+            <>
+              <View style={styles.miniGrid}>
+                {bookProgress.map((b) => {
+                  const pct = b.totalChapters > 0 ? b.readChapters / b.totalChapters : 0;
+                  const isDone = pct >= 1;
+                  const isStarted = pct > 0 && !isDone;
+                  return (
+                    <View
+                      key={b.bookId}
+                      style={[styles.miniCell, isDone && styles.miniCellDone, isStarted && styles.miniCellPartial]}
+                    />
+                  );
+                })}
+              </View>
+              <View style={styles.miniLegend}>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(0,0,0,0.06)' }]} /><Text style={styles.legendText}>안 읽음</Text></View>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: 'rgba(193,95,60,0.35)' }]} /><Text style={styles.legendText}>읽는 중</Text></View>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: colors.accent }]} /><Text style={styles.legendText}>완독</Text></View>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -366,7 +371,9 @@ const styles = StyleSheet.create({
   completionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   completionName: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.accent },
   completionCount: { fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.accent },
-  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 14 },
+  gridToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)' },
+  gridToggleText: { fontFamily: fonts.sansRegular, fontSize: 12, color: colors.textSecondary },
+  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 10 },
   miniCell: { width: 14, height: 14, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.06)' },
   miniCellDone: { backgroundColor: colors.accent },
   miniCellPartial: { backgroundColor: 'rgba(193,95,60,0.35)' },

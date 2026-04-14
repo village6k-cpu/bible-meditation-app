@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, spacing } from '../../lib/theme';
 import { useAppStore } from '../../lib/store';
-import { getVerses, getSections, getBook, getHighlights, setHighlight, logChapterRead, Verse, Section, Book } from '../../lib/bible-data';
+import { getVerses, getSections, getBook, getHighlights, setHighlight, logChapterRead, addCompletedReading, Verse, Section, Book } from '../../lib/bible-data';
 import { getISODate } from '../../lib/utils';
 import { VerseText } from '../../components/VerseText';
 import { VerseBottomSheet } from '../../components/BottomSheet';
@@ -47,7 +47,9 @@ export default function BibleScreen() {
   }
 
   async function handleMarkRead() {
-    await logChapterRead(getISODate(), currentBookId, currentChapter);
+    const today = getISODate();
+    await logChapterRead(today, currentBookId, currentChapter);
+    await addCompletedReading(today, currentBookId, currentChapter);
     setLastRead(currentBookId, currentChapter);
     setMarkedRead(true);
   }
@@ -152,7 +154,7 @@ export default function BibleScreen() {
         </Text>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/highlights' as any)}>
-            <Ionicons name="layers-outline" size={20} color={colors.textPrimary} />
+            <Ionicons name="pencil-outline" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
             <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
@@ -220,7 +222,9 @@ export default function BibleScreen() {
         currentHighlight={selectedVerse ? highlights[selectedVerse.verse] || null : null}
         onHighlight={handleHighlight}
         onBookmark={async (v) => {
-          await logChapterRead(getISODate(), v.book_id, v.chapter);
+          const today = getISODate();
+          await logChapterRead(today, v.book_id, v.chapter);
+          await addCompletedReading(today, v.book_id, v.chapter);
           setLastRead(v.book_id, v.chapter, v.verse);
           setMarkedRead(true);
         }}

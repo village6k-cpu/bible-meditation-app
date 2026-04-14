@@ -142,6 +142,22 @@ export async function toggleDailyReading(id: number): Promise<void> {
   );
 }
 
+export async function addCompletedReading(date: string, bookId: number, chapter: number): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  // 이미 같은 날 같은 장이 있으면 건너뜀
+  const existing = await db.getFirstAsync(
+    'SELECT id FROM daily_readings WHERE date = ? AND book_id = ? AND start_chapter = ? AND end_chapter = ?',
+    [date, bookId, chapter, chapter]
+  );
+  if (!existing) {
+    await db.runAsync(
+      'INSERT INTO daily_readings (date, book_id, start_chapter, end_chapter, completed) VALUES (?, ?, ?, ?, 1)',
+      [date, bookId, chapter, chapter]
+    );
+  }
+}
+
 export async function deleteDailyReading(id: number): Promise<void> {
   const db = getUserDb();
   if (!db) return;
