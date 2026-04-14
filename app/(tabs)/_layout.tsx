@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { StyleSheet } from 'react-native';
 import { colors, fonts } from '../../lib/theme';
 
 export default function TabLayout() {
@@ -22,11 +21,6 @@ export default function TabLayout() {
           borderTopColor: colors.divider,
           elevation: 0,
         },
-        ...(Platform.OS === 'ios' && {
-          tabBarBackground: () => (
-            <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-          ),
-        }),
       }}
     >
       <Tabs.Screen
