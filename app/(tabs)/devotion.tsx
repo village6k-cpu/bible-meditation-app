@@ -278,9 +278,9 @@ export default function DevotionScreen() {
           onPress={prayedToday ? undefined : handlePrayer}
           activeOpacity={prayedToday ? 1 : 0.6}
         >
-          <Ionicons name={prayedToday ? 'checkmark-circle' : 'heart-outline'} size={22} color={prayedToday ? '#FFFFFF' : colors.accent} />
+          <Ionicons name={prayedToday ? 'heart' : 'heart-outline'} size={22} color={prayedToday ? '#FFFFFF' : colors.accent} />
           <Text style={[styles.prayerBtnText, prayedToday && styles.prayerBtnTextDone]}>
-            {prayedToday ? '오늘의 기도를 완료했어요' : '기도했어요'}
+            기도했어요
           </Text>
         </TouchableOpacity>
 
