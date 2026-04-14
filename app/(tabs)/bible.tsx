@@ -5,14 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { colors, fonts, spacing } from '../../lib/theme';
 import { useAppStore } from '../../lib/store';
-import { getVerses, getSections, getBook, getHighlights, setHighlight, Verse, Section, Book } from '../../lib/bible-data';
+import { getVerses, getSections, getBook, getHighlights, setHighlight, logChapterRead, Verse, Section, Book } from '../../lib/bible-data';
+import { getISODate } from '../../lib/utils';
 import { VerseText } from '../../components/VerseText';
 import { VerseBottomSheet } from '../../components/BottomSheet';
 import { BookChapterPicker } from '../../components/BookChapterPicker';
 import { FontSettings } from '../../components/FontSettings';
 
 export default function BibleScreen() {
-  const { currentBookId, currentChapter, setCurrentPosition } = useAppStore();
+  const { currentBookId, currentChapter, setCurrentPosition, setLastRead } = useAppStore();
+  const [markedRead, setMarkedRead] = useState(false);
   const [book, setBook] = useState<Book | null>(null);
   const [verses, setVerses] = useState<Verse[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -39,7 +41,14 @@ export default function BibleScreen() {
     setSections(s);
     setHighlights(h);
     setHighlightedVerse(null);
+    setMarkedRead(false);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  async function handleMarkRead() {
+    await logChapterRead(getISODate(), currentBookId, currentChapter);
+    setLastRead(currentBookId, currentChapter);
+    setMarkedRead(true);
   }
 
   async function handleHighlight(verse: Verse, color: string | null) {
@@ -156,6 +165,18 @@ export default function BibleScreen() {
         <Text style={styles.chapterNumber}>{currentChapter}</Text>
         {renderVerses()}
 
+        {/* 여기까지 읽었어요 */}
+        <TouchableOpacity
+          style={[styles.markReadButton, markedRead && styles.markReadButtonDone]}
+          onPress={markedRead ? undefined : handleMarkRead}
+          activeOpacity={markedRead ? 1 : 0.6}
+        >
+          <Ionicons name={markedRead ? 'checkmark-circle' : 'bookmark-outline'} size={18} color={markedRead ? colors.accent : colors.textSecondary} />
+          <Text style={[styles.markReadText, markedRead && styles.markReadTextDone]}>
+            {markedRead ? `${book?.name_ko} ${currentChapter}장 읽기 완료` : '여기까지 읽었어요'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Chapter navigation */}
         <View style={styles.chapterNav}>
           {currentChapter > 1 && (
@@ -252,6 +273,26 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 8,
     marginBottom: 12,
+  },
+  markReadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    marginTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  markReadButtonDone: {},
+  markReadText: {
+    fontFamily: fonts.sansRegular,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  markReadTextDone: {
+    color: colors.accent,
+    fontFamily: fonts.sansMedium,
   },
   chapterNav: {
     flexDirection: 'row',

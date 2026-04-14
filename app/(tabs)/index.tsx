@@ -14,9 +14,11 @@ import {
   getWeeklyPrayerCount,
   getWeeklyDailyDetail,
   getAllPrayerRequests,
+  getBook,
   Verse,
   Note,
   PrayerRequest,
+  Book,
 } from '../../lib/bible-data';
 import { getAnnotation } from '../../lib/cross-references';
 import { WEEKLY_GOALS } from '../../lib/reading-plan';
@@ -92,7 +94,11 @@ function getTimeTheme() {
 
 export default function HomeScreen() {
   const userName = useAppStore((s) => s.userName);
+  const lastReadBookId = useAppStore((s) => s.lastReadBookId);
+  const lastReadChapter = useAppStore((s) => s.lastReadChapter);
+  const setCurrentPosition = useAppStore((s) => s.setCurrentPosition);
   const router = useRouter();
+  const [lastReadBook, setLastReadBook] = useState<Book | null>(null);
   const theme = useMemo(() => getTimeTheme(), []);
 
   const [dailyVerse, setDailyVerse] = useState<(Verse & { book_name: string }) | null>(null);
@@ -121,6 +127,9 @@ export default function HomeScreen() {
     setDailyDetail(detail);
     setRecentNotes(notes.slice(0, 2));
     setPrayerRequests(prayers.filter((p) => !p.answered).slice(0, 3));
+
+    const lb = await getBook(lastReadBookId);
+    setLastReadBook(lb);
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
@@ -157,6 +166,28 @@ export default function HomeScreen() {
             {'님, '}
             {getGreeting()}
           </Text>
+
+          {/* 이어 읽기 */}
+          {lastReadBook && (
+            <TouchableOpacity
+              style={styles.continueCard}
+              activeOpacity={0.6}
+              onPress={() => {
+                const next = lastReadChapter + 1 <= lastReadBook.chapter_count ? lastReadChapter + 1 : lastReadChapter;
+                setCurrentPosition(lastReadBookId, next);
+                router.push('/(tabs)/bible');
+              }}
+            >
+              <View style={styles.continueLeft}>
+                <Ionicons name="book" size={16} color={colors.accent} />
+                <View>
+                  <Text style={styles.continueLabel}>이어 읽기</Text>
+                  <Text style={styles.continueBook}>{lastReadBook.name_ko} {lastReadChapter}장까지 읽었어요</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+          )}
 
           <View style={[styles.divider, { backgroundColor: theme.dividerColor }]} />
 
@@ -310,6 +341,16 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12, position: 'relative', zIndex: 2 },
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sectionGap },
+
+  // 이어 읽기
+  continueCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surface, borderRadius: spacing.cardRadius,
+    padding: 16, marginTop: 20,
+  },
+  continueLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  continueLabel: { fontFamily: fonts.sansSemiBold, fontSize: 10.5, color: colors.accent, letterSpacing: 0.5, marginBottom: 2 },
+  continueBook: { fontFamily: fonts.sansRegular, fontSize: 13, color: colors.textPrimary },
 
   verseText: { fontFamily: fonts.serifLight, fontSize: 15, lineHeight: 30, color: colors.textPrimary },
   verseSource: { fontFamily: fonts.sansRegular, fontSize: 11.5, color: colors.textSecondary, marginTop: 10 },

@@ -34,6 +34,11 @@ interface AppState {
   readingPlanStartDate: string;
   setReadingPlanStartDate: (date: string) => void;
 
+  // 이어 읽기 북마크
+  lastReadBookId: number;
+  lastReadChapter: number;
+  setLastRead: (bookId: number, chapter: number) => void;
+
   // DB initialized flag
   dbReady: boolean;
   setDbReady: (ready: boolean) => void;
@@ -67,6 +72,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   readingPlanStartDate: '',
   setReadingPlanStartDate: (date) => set({ readingPlanStartDate: date }),
+
+  lastReadBookId: 43,
+  lastReadChapter: 1,
+  setLastRead: (bookId, chapter) => set({ lastReadBookId: bookId, lastReadChapter: chapter }),
 
   dbReady: false,
   setDbReady: (ready) => set({ dbReady: ready }),

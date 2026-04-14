@@ -324,24 +324,24 @@ export default function DevotionScreen() {
 
         <View style={styles.divider} />
 
-        {/* 하이라이트 모아보기 */}
+        {/* 하이라이트 — 별도 화면으로 */}
         {highlightedVerses.length > 0 && (
           <>
-            <SectionLabel label="하이라이트" />
-            {highlightedVerses.map((h, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.highlightItem}
-                activeOpacity={0.6}
-                onPress={() => { setCurrentPosition(h.book_id, h.chapter); router.push('/(tabs)/bible'); }}
-              >
-                <View style={[styles.highlightBar, { backgroundColor: h.color }]} />
-                <View style={styles.highlightContent}>
-                  <Text style={styles.highlightRef}>{h.book_name} {h.chapter}:{h.verse}</Text>
-                  <Text style={styles.highlightText} numberOfLines={2}>{h.text}</Text>
+            <TouchableOpacity
+              style={styles.highlightLink}
+              activeOpacity={0.6}
+              onPress={() => router.push('/highlights' as any)}
+            >
+              <View style={styles.highlightLinkLeft}>
+                <View style={styles.highlightDots}>
+                  <View style={[styles.hlDot, { backgroundColor: 'rgba(245,215,110,0.5)' }]} />
+                  <View style={[styles.hlDot, { backgroundColor: 'rgba(140,190,120,0.45)' }]} />
+                  <View style={[styles.hlDot, { backgroundColor: 'rgba(180,160,210,0.45)' }]} />
                 </View>
-              </TouchableOpacity>
-            ))}
+                <Text style={styles.highlightLinkText}>하이라이트 {highlightedVerses.length}개</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
             <View style={styles.divider} />
           </>
         )}
@@ -441,12 +441,12 @@ const styles = StyleSheet.create({
   readingTextDone: { textDecorationLine: 'line-through', opacity: 0.4 },
 
   // 노트
-  // 하이라이트
-  highlightItem: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  highlightBar: { width: 4, borderRadius: 2, minHeight: 40 },
-  highlightContent: { flex: 1 },
-  highlightRef: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.accent, marginBottom: 4 },
-  highlightText: { fontFamily: fonts.serifLight, fontSize: 14, lineHeight: 22, color: colors.textPrimary },
+  // 하이라이트 링크
+  highlightLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
+  highlightLinkLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  highlightDots: { flexDirection: 'row', gap: 3 },
+  hlDot: { width: 10, height: 10, borderRadius: 5 },
+  highlightLinkText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.textPrimary },
 
   noteInput: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary, backgroundColor: 'rgba(0,0,0,0.015)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, minHeight: 80, textAlignVertical: 'top' },
   saveButton: { alignSelf: 'flex-end', backgroundColor: colors.accent, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, marginTop: 10 },
