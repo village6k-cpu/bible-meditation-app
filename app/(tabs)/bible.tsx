@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, spacing } from '../../lib/theme';
 import { useAppStore } from '../../lib/store';
 import { getVerses, getSections, getBook, getHighlights, setHighlight, logChapterRead, Verse, Section, Book } from '../../lib/bible-data';
@@ -13,6 +13,7 @@ import { BookChapterPicker } from '../../components/BookChapterPicker';
 import { FontSettings } from '../../components/FontSettings';
 
 export default function BibleScreen() {
+  const router = useRouter();
   const { currentBookId, currentChapter, setCurrentPosition, setLastRead } = useAppStore();
   const [markedRead, setMarkedRead] = useState(false);
   const [book, setBook] = useState<Book | null>(null);
@@ -149,9 +150,14 @@ export default function BibleScreen() {
         <Text style={styles.headerTitle}>
           {book?.name_ko} {currentChapter}장
         </Text>
-        <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
-          <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/highlights' as any)}>
+            <Ionicons name="color-palette-outline" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
+            <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Body */}
@@ -213,6 +219,11 @@ export default function BibleScreen() {
         bookName={book?.name_ko ?? ''}
         currentHighlight={selectedVerse ? highlights[selectedVerse.verse] || null : null}
         onHighlight={handleHighlight}
+        onBookmark={async (v) => {
+          await logChapterRead(getISODate(), v.book_id, v.chapter);
+          setLastRead(v.book_id, v.chapter, v.verse);
+          setMarkedRead(true);
+        }}
         onClose={() => {
           setShowBottomSheet(false);
           setHighlightedVerse(null);
@@ -249,6 +260,10 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 4,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: 8,
   },
   headerTitle: {
     fontFamily: fonts.sansSemiBold,

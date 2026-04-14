@@ -324,28 +324,6 @@ export default function DevotionScreen() {
 
         <View style={styles.divider} />
 
-        {/* 하이라이트 — 별도 화면으로 */}
-        {highlightedVerses.length > 0 && (
-          <>
-            <TouchableOpacity
-              style={styles.highlightLink}
-              activeOpacity={0.6}
-              onPress={() => router.push('/highlights' as any)}
-            >
-              <View style={styles.highlightLinkLeft}>
-                <View style={styles.highlightDots}>
-                  <View style={[styles.hlDot, { backgroundColor: 'rgba(245,215,110,0.5)' }]} />
-                  <View style={[styles.hlDot, { backgroundColor: 'rgba(140,190,120,0.45)' }]} />
-                  <View style={[styles.hlDot, { backgroundColor: 'rgba(180,160,210,0.45)' }]} />
-                </View>
-                <Text style={styles.highlightLinkText}>하이라이트 {highlightedVerses.length}개</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
-          </>
-        )}
-
         {/* 묵상 노트 */}
         <SectionLabel label="묵상 노트" right={<Text style={typography.dateText}>{formatDateKo()}</Text>} />
         <TextInput

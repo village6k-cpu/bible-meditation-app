@@ -182,7 +182,9 @@ export default function HomeScreen() {
                 <Ionicons name="book" size={16} color={colors.accent} />
                 <View>
                   <Text style={styles.continueLabel}>이어 읽기</Text>
-                  <Text style={styles.continueBook}>{lastReadBook.name_ko} {lastReadChapter}장까지 읽었어요</Text>
+                  <Text style={styles.continueBook}>
+                    {lastReadBook.name_ko} {lastReadChapter}장{useAppStore.getState().lastReadVerse > 0 ? ` ${useAppStore.getState().lastReadVerse}절` : ''}까지 읽었어요
+                  </Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
@@ -192,10 +194,10 @@ export default function HomeScreen() {
           <View style={[styles.divider, { backgroundColor: theme.dividerColor }]} />
 
           {/* 오늘의 말씀 */}
-          <SectionLabel label="오늘의 말씀" />
+          <Text style={[styles.sectionLabelText, { color: theme.labelColor }]}>오늘의 말씀</Text>
           {dailyVerse ? (
             <TouchableOpacity activeOpacity={0.7} onPress={() => setShowVerseDetails(!showVerseDetails)}>
-              <Text style={[styles.verseText, theme.isDark && { color: theme.textColor }]}>{dailyVerse.text}</Text>
+              <Text style={[styles.verseText, { color: theme.textColor }]}>{dailyVerse.text}</Text>
               <Text style={[styles.verseSource, { color: theme.subTextColor }]}>
                 — {dailyVerse.book_name} {dailyVerse.chapter}:{dailyVerse.verse}
               </Text>
@@ -218,7 +220,7 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
           ) : (
-            <Text style={styles.loadingText}>말씀을 불러오는 중...</Text>
+            <Text style={[styles.loadingText, { color: theme.subTextColor }]}>말씀을 불러오는 중...</Text>
           )}
 
           <View style={styles.divider} />
@@ -254,20 +256,24 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* 주간 도트 */}
-          <View style={styles.weekRow}>
+          {/* 주간 도트 — 읽기/기도 각각 */}
+          <View style={styles.weekTable}>
+            <View style={styles.weekLabelCol}>
+              <Text style={styles.weekTableLabel} />
+              <Ionicons name="book-outline" size={12} color={colors.textSecondary} />
+              <Ionicons name="heart-outline" size={12} color={colors.textSecondary} />
+            </View>
             {dayLabels.map((label, i) => {
               const detail = dailyDetail[i];
               const isToday = detail?.date === today;
-              const hasActivity = detail && (detail.chapters > 0 || detail.prayed);
+              const didRead = detail && detail.chapters > 0;
+              const didPray = detail && detail.prayed;
               const isFuture = detail && detail.date > today;
               return (
-                <View key={i} style={styles.dayCol}>
+                <View key={i} style={styles.weekTableCol}>
                   <Text style={[styles.dayLabel, isToday && styles.dayLabelToday]}>{label}</Text>
-                  <View style={[styles.dayDot, hasActivity && styles.dayDotActive, isToday && !hasActivity && styles.dayDotToday, isFuture && styles.dayDotFuture]}>
-                    {hasActivity && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-                    {isToday && !hasActivity && <View style={styles.todayInner} />}
-                  </View>
+                  <View style={[styles.miniDot, didRead && styles.miniDotFilled, isFuture && styles.miniDotFuture, isToday && !didRead && styles.miniDotToday]} />
+                  <View style={[styles.miniDot, didPray && styles.miniDotFilled, isFuture && styles.miniDotFuture, isToday && !didPray && styles.miniDotToday]} />
                 </View>
               );
             })}
@@ -342,6 +348,11 @@ const styles = StyleSheet.create({
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sectionGap },
 
+  sectionLabelText: {
+    fontFamily: fonts.sansSemiBold, fontSize: 10.5, letterSpacing: 10.5 * 0.1,
+    color: colors.accent, textTransform: 'uppercase' as const, marginBottom: 12,
+  },
+
   // 이어 읽기
   continueCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -369,15 +380,17 @@ const styles = StyleSheet.create({
   progressBar: { width: '100%', height: 4, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 2 },
   progressFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
 
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  dayCol: { alignItems: 'center', gap: 6 },
+  // 주간 테이블
+  weekTable: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  weekLabelCol: { alignItems: 'center', gap: 6, width: 20 },
+  weekTableLabel: { height: 15 },
+  weekTableCol: { alignItems: 'center', gap: 6, flex: 1 },
   dayLabel: { fontFamily: fonts.sansRegular, fontSize: 11, color: colors.textSecondary },
   dayLabelToday: { color: colors.accent, fontFamily: fonts.sansSemiBold },
-  dayDot: { width: 32, height: 32, borderRadius: 9, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.1)', alignItems: 'center', justifyContent: 'center' },
-  dayDotActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dayDotToday: { borderColor: colors.accent },
-  dayDotFuture: { borderColor: 'rgba(0,0,0,0.06)' },
-  todayInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent },
+  miniDot: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
+  miniDotFilled: { backgroundColor: colors.accent, borderColor: colors.accent },
+  miniDotToday: { borderColor: colors.accent },
+  miniDotFuture: { borderColor: 'rgba(0,0,0,0.04)' },
 
   bibleCard: { backgroundColor: colors.surface, borderRadius: spacing.cardRadius, padding: 16 },
   bibleStats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },

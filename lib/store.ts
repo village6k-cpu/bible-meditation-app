@@ -37,7 +37,8 @@ interface AppState {
   // 이어 읽기 북마크
   lastReadBookId: number;
   lastReadChapter: number;
-  setLastRead: (bookId: number, chapter: number) => void;
+  lastReadVerse: number;
+  setLastRead: (bookId: number, chapter: number, verse?: number) => void;
 
   // DB initialized flag
   dbReady: boolean;
@@ -75,7 +76,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   lastReadBookId: 43,
   lastReadChapter: 1,
-  setLastRead: (bookId, chapter) => set({ lastReadBookId: bookId, lastReadChapter: chapter }),
+  lastReadVerse: 0,
+  setLastRead: (bookId, chapter, verse) => set({ lastReadBookId: bookId, lastReadChapter: chapter, lastReadVerse: verse ?? 0 }),
 
   dbReady: false,
   setDbReady: (ready) => set({ dbReady: ready }),

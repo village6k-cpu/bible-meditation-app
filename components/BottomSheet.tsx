@@ -14,9 +14,10 @@ interface Props {
   currentHighlight?: string | null;
   onClose: () => void;
   onHighlight?: (verse: Verse, color: string | null) => void;
+  onBookmark?: (verse: Verse) => void;
 }
 
-export function VerseBottomSheet({ visible, verse, bookName, onClose, onHighlight, currentHighlight }: Props) {
+export function VerseBottomSheet({ visible, verse, bookName, onClose, onHighlight, onBookmark, currentHighlight }: Props) {
   if (!verse) return null;
 
   const annotation = getAnnotation(verse.book_id, verse.chapter, verse.verse);
@@ -55,6 +56,18 @@ export function VerseBottomSheet({ visible, verse, bookName, onClose, onHighligh
                   </TouchableOpacity>
                 ) : null}
               </View>
+            )}
+
+            {/* 여기까지 읽었어요 */}
+            {onBookmark && (
+              <TouchableOpacity
+                style={styles.bookmarkBtn}
+                onPress={() => { onBookmark(verse); onClose(); }}
+                activeOpacity={0.6}
+              >
+                <Ionicons name="bookmark-outline" size={16} color={colors.accent} />
+                <Text style={styles.bookmarkText}>여기까지 읽었어요</Text>
+              </TouchableOpacity>
             )}
 
             {/* 주석 */}
@@ -121,6 +134,12 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface,
     alignItems: 'center', justifyContent: 'center',
   },
+
+  bookmarkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderRadius: 10,
+  },
+  bookmarkText: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent },
 
   section: { marginBottom: 24 },
   sectionTitle: { fontFamily: fonts.sansSemiBold, fontSize: 10.5, letterSpacing: 10.5 * 0.1, color: colors.accent, marginBottom: 12 },
