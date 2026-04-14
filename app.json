@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "묵상",
+    "slug": "bible-meditation",
+    "scheme": "bible-meditation",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-sqlite",
+      ["expo-asset", { "assets": ["./assets/bible/bible.db"] }]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.village6k.biblemeditation"
+    },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#FAFAF8" },
+      "package": "com.village6k.biblemeditation"
+    },
+    "web": { "bundler": "metro" }
+  }
+}
