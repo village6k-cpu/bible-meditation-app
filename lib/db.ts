@@ -10,24 +10,21 @@ export async function initDatabases(): Promise<void> {
     return;
   }
 
-  // Copy bible.db from assets to document directory
+  // Copy bible.db from assets to expo-sqlite's default directory
   const FileSystem = require('expo-file-system');
   const { Asset } = require('expo-asset');
 
-  const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
+  const sqliteDir = `${FileSystem.documentDirectory}SQLite`;
+  const bibleDbPath = `${sqliteDir}/bible.db`;
 
-  try {
-    const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
-    if (!fileInfo.exists) {
-      const asset = Asset.fromModule(require('../assets/bible/bible.db'));
-      await asset.downloadAsync();
-      if (asset.localUri) {
-        await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
-      }
-    }
-  } catch {
-    // Fallback: try File API if available
-    const asset = require('expo-asset').Asset.fromModule(require('../assets/bible/bible.db'));
+  const dirInfo = await FileSystem.getInfoAsync(sqliteDir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(sqliteDir, { intermediates: true });
+  }
+
+  const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
+  if (!fileInfo.exists) {
+    const asset = Asset.fromModule(require('../assets/bible/bible.db'));
     await asset.downloadAsync();
     if (asset.localUri) {
       await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
