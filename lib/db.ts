@@ -10,18 +10,24 @@ export async function initDatabases(): Promise<void> {
     return;
   }
 
-  // Copy bible.db from assets to expo-sqlite's default directory
   const FileSystem = require('expo-file-system');
   const { Asset } = require('expo-asset');
 
-  const sqliteDir = `${FileSystem.documentDirectory}SQLite`;
-  const bibleDbPath = `${sqliteDir}/bible.db`;
+  // expo-sqlite의 실제 DB 디렉토리 사용
+  const dbDir = (SQLite as any).defaultDatabaseDirectory;
+  const bibleDbPath = `${dbDir}/bible.db`;
 
-  const dirInfo = await FileSystem.getInfoAsync(sqliteDir);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(sqliteDir, { intermediates: true });
+  // 디렉토리 생성
+  try {
+    const dirInfo = await FileSystem.getInfoAsync(dbDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
+    }
+  } catch {
+    // 디렉토리가 이미 존재할 수 있음
   }
 
+  // bible.db 복사
   const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
   if (!fileInfo.exists) {
     const asset = Asset.fromModule(require('../assets/bible/bible.db'));
