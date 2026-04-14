@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   scrollContent: {
-    paddingHorizontal: spacing.screenPadding,
+    paddingHorizontal: 20,
     paddingTop: 16,
   },
   chapterNumber: {

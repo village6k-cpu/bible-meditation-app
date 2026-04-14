@@ -17,9 +17,9 @@ interface Props {
   lineHeightScale?: number;
 }
 
-const BASE_FONT = 16.5;
-const BASE_LINE_HEIGHT = 2.05;
-const VERSE_NUM_WIDTH = 28;
+const BASE_FONT = 19;
+const BASE_LINE_HEIGHT = 1.95;
+const VERSE_NUM_WIDTH = 30;
 
 export function VerseText({ verse, highlighted, highlightColor, onLongPress, fontScale = 1, lineHeightScale = 1 }: Props) {
   const fontSize = BASE_FONT * fontScale;
@@ -60,12 +60,12 @@ const styles = StyleSheet.create({
   },
   verseNumber: {
     fontFamily: fonts.sansBold,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.accent,
     width: VERSE_NUM_WIDTH,
     textAlign: 'right',
     paddingRight: 8,
-    paddingTop: 2,
+    paddingTop: 3,
   },
   text: {
     flex: 1,
