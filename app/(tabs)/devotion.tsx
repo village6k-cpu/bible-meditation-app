@@ -279,16 +279,15 @@ export default function DevotionScreen() {
           </View>
         ))}
 
-        {/* 오늘의 기도 체크 — 기도제목 아래 */}
+        {/* 오늘의 기도 체크 */}
         <TouchableOpacity
-          style={[styles.prayerButton, prayedToday && styles.prayerButtonDone]}
-          onPress={prayedToday ? undefined : handlePrayer}
-          activeOpacity={prayedToday ? 1 : 0.6}
+          style={styles.prayerCheckRow}
+          onPress={handlePrayer}
+          activeOpacity={0.6}
         >
-          <Ionicons name={prayedToday ? 'heart' : 'heart-outline'} size={22} color={prayedToday ? '#FFFFFF' : colors.accent} />
-          <Text style={[styles.prayerBtnText, prayedToday && styles.prayerBtnTextDone]}>
-            기도했어요
-          </Text>
+          <Ionicons name={prayedToday ? 'heart' : 'heart-outline'} size={18} color={colors.accent} />
+          <Text style={styles.prayerCheckText}>기도했어요</Text>
+          {prayedToday && <Ionicons name="checkmark" size={16} color={colors.accent} />}
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -428,10 +427,8 @@ const styles = StyleSheet.create({
   prayerItemText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
   prayerItemDone: { textDecorationLine: 'line-through', opacity: 0.4 },
   answeredLabel: { fontFamily: fonts.sansSemiBold, fontSize: 10, color: colors.accent, backgroundColor: colors.accentLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  prayerButton: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, borderRadius: spacing.cardRadius, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', marginTop: 12 },
-  prayerButtonDone: { backgroundColor: colors.accent, borderColor: colors.accent },
-  prayerBtnText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.textPrimary },
-  prayerBtnTextDone: { color: '#FFFFFF' },
+  prayerCheckRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, marginTop: 4 },
+  prayerCheckText: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
 
   // 읽기
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
