@@ -154,7 +154,7 @@ export default function BibleScreen() {
         </Text>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/highlights' as any)}>
-            <Ionicons name="color-palette-outline" size={20} color={colors.textPrimary} />
+            <Ionicons name="color-fill-outline" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setShowFontSettings(true)}>
             <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
