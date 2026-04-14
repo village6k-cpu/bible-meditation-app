@@ -13,9 +13,18 @@ interface Props {
   highlighted?: boolean;
   highlightColor?: string | null;
   onLongPress?: (verse: Verse) => void;
+  fontScale?: number;
+  lineHeightScale?: number;
 }
 
-export function VerseText({ verse, highlighted, highlightColor, onLongPress }: Props) {
+const BASE_FONT = 16.5;
+const BASE_LINE_HEIGHT = 2.05;
+const VERSE_NUM_WIDTH = 28;
+
+export function VerseText({ verse, highlighted, highlightColor, onLongPress, fontScale = 1, lineHeightScale = 1 }: Props) {
+  const fontSize = BASE_FONT * fontScale;
+  const lineHeight = fontSize * BASE_LINE_HEIGHT * lineHeightScale;
+
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -23,23 +32,19 @@ export function VerseText({ verse, highlighted, highlightColor, onLongPress }: P
       onLongPress={() => onLongPress?.(verse)}
       style={styles.container}
     >
-      {/* 물감 하이라이트 배경 레이어 */}
+      {/* 하이라이트 배경 */}
       {highlightColor && (
-        <View
-          style={[
-            styles.paintBlob,
-            { backgroundColor: highlightColor },
-          ]}
-        />
+        <View style={[styles.paintBlob, { backgroundColor: highlightColor }]} />
       )}
-      {/* 롱프레스 선택 하이라이트 */}
       {highlighted && !highlightColor && (
         <View style={styles.selectBlob} />
       )}
-      <Text style={styles.text}>
-        <Text style={styles.verseNumber}>{verse.verse} </Text>
-        {verse.text}
-      </Text>
+
+      {/* 절 번호 + 본문: 행잉 인덴트 */}
+      <View style={styles.row}>
+        <Text style={[styles.verseNumber, { lineHeight }]}>{verse.verse}</Text>
+        <Text style={[styles.text, { fontSize, lineHeight }]}>{verse.text}</Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -49,41 +54,48 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     position: 'relative',
   },
-  // 물감이 번진 듯한 유기적 블롭
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  verseNumber: {
+    fontFamily: fonts.sansBold,
+    fontSize: 12,
+    color: colors.accent,
+    width: VERSE_NUM_WIDTH,
+    textAlign: 'right',
+    paddingRight: 8,
+    paddingTop: 2,
+  },
+  text: {
+    flex: 1,
+    fontFamily: fonts.serifLight,
+    fontSize: BASE_FONT,
+    lineHeight: BASE_FONT * BASE_LINE_HEIGHT,
+    color: colors.textPrimary,
+    textAlign: 'justify',
+  },
   paintBlob: {
     position: 'absolute',
     top: -2,
     bottom: -2,
-    left: -10,
+    left: VERSE_NUM_WIDTH - 4,
     right: -6,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 8,
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 18,
-    opacity: 1,
   },
-  // 롱프레스 시 선택 표시
   selectBlob: {
     position: 'absolute',
     top: -1,
     bottom: -1,
-    left: -8,
+    left: VERSE_NUM_WIDTH - 4,
     right: -5,
     backgroundColor: 'rgba(193,95,60,0.1)',
     borderTopLeftRadius: 14,
     borderTopRightRadius: 6,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 16,
-  },
-  text: {
-    fontFamily: fonts.serifLight,
-    fontSize: 16.5,
-    lineHeight: 16.5 * 2.05,
-    color: colors.textPrimary,
-  },
-  verseNumber: {
-    fontFamily: fonts.sansBold,
-    fontSize: 12,
-    color: colors.accent,
   },
 });

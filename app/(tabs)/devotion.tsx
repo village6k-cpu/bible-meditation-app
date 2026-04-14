@@ -257,17 +257,18 @@ export default function DevotionScreen() {
           </View>
         )}
 
-        {/* 기도제목 목록 — 장기 항목 스타일 */}
+        {/* 기도제목 목록 — 장기 항목 스타일, 꾹 눌러서 삭제 */}
         {prayerRequests.map((pr, i) => (
-          <View key={pr.id} style={[styles.prayerItem, i > 0 && styles.prayerItemBorder]}>
-            <View style={styles.prayerItemLeft}>
-              <Text style={styles.prayerBullet}>•</Text>
-              <Text style={styles.prayerItemText}>{pr.content}</Text>
-            </View>
-            <TouchableOpacity onPress={() => handleDeletePrayer(pr.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close" size={16} color={colors.textTertiary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            key={pr.id}
+            style={[styles.prayerItem, i > 0 && styles.prayerItemBorder]}
+            activeOpacity={0.7}
+            delayLongPress={500}
+            onLongPress={() => handleDeletePrayer(pr.id)}
+          >
+            <Text style={styles.prayerBullet}>•</Text>
+            <Text style={styles.prayerItemText}>{pr.content}</Text>
+          </TouchableOpacity>
         ))}
 
         {/* 오늘 기도했어요 — 우측 하단 */}
@@ -301,21 +302,23 @@ export default function DevotionScreen() {
           </TouchableOpacity>
         ) : (
           readings.map((r) => (
-            <View key={r.id} style={styles.readingItem}>
+            <TouchableOpacity
+              key={r.id}
+              style={styles.readingItem}
+              activeOpacity={0.7}
+              delayLongPress={500}
+              onLongPress={() => handleDeleteReading(r.id)}
+              onPress={() => { setCurrentPosition(r.book_id, r.start_chapter); router.push('/(tabs)/bible'); }}
+            >
               <TouchableOpacity onPress={() => handleToggleReading(r.id)}>
                 <View style={[styles.checkbox, r.completed && styles.checkboxDone]}>
                   {r.completed && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
                 </View>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.readingContent} onPress={() => { setCurrentPosition(r.book_id, r.start_chapter); router.push('/(tabs)/bible'); }}>
-                <Text style={[styles.readingText, r.completed && styles.readingTextDone]}>
-                  {r.book_name} {r.start_chapter === r.end_chapter ? `${r.start_chapter}장` : `${r.start_chapter}-${r.end_chapter}장`}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDeleteReading(r.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={16} color={colors.textTertiary} />
-              </TouchableOpacity>
-            </View>
+              <Text style={[styles.readingText, r.completed && styles.readingTextDone, { flex: 1 }]}>
+                {r.book_name} {r.start_chapter === r.end_chapter ? `${r.start_chapter}장` : `${r.start_chapter}-${r.end_chapter}장`}
+              </Text>
+            </TouchableOpacity>
           ))
         )}
 
@@ -397,9 +400,8 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   prayerInput: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
   addBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  prayerItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  prayerItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   prayerItemBorder: { borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)' },
-  prayerItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   prayerBullet: { fontFamily: fonts.sansRegular, fontSize: 16, color: colors.textSecondary, width: 14, textAlign: 'center' },
   prayerItemText: { flex: 1, fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary },
   prayerCheckRow: {
@@ -414,7 +416,7 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   emptyReading: { padding: 20, borderRadius: spacing.cardRadius, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderStyle: 'dashed', alignItems: 'center' },
   emptyText: { fontFamily: fonts.sansRegular, fontSize: 13, color: colors.textTertiary },
-  readingItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  readingItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.divider },
   checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center' },
   checkboxDone: { backgroundColor: colors.accent, borderColor: colors.accent },
   readingContent: { flex: 1 },
