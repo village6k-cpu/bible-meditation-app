@@ -25,6 +25,8 @@ import {
   getTotalBibleProgress,
   getBibleCompletionProgress,
   getBookCompletions,
+  getAllHighlights,
+  Highlight,
   BookProgress,
   BookReadCount,
   DailyReading,
@@ -53,12 +55,13 @@ export default function DevotionScreen() {
   const [bookCompletions, setBookCompletions] = useState<BookReadCount[]>([]);
   const [showBooks, setShowBooks] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [highlightedVerses, setHighlightedVerses] = useState<(Highlight & { text: string; book_name: string })[]>([]);
 
   const today = getISODate();
   const weekDates = getWeekDates().map(getISODate);
 
   async function loadData() {
-    const [ch, pr, prayed, r, n, prayers, total, progress, completions] = await Promise.all([
+    const [ch, pr, prayed, r, n, prayers, total, progress, completions, hl] = await Promise.all([
       getWeeklyChaptersRead(weekDates),
       getWeeklyPrayerCount(weekDates),
       hasPrayedToday(today),
@@ -68,6 +71,7 @@ export default function DevotionScreen() {
       getTotalBibleProgress(),
       getBibleCompletionProgress(),
       getBookCompletions(),
+      getAllHighlights(),
     ]);
     setWeekChapters(ch);
     setWeekPrayers(pr);
@@ -78,6 +82,7 @@ export default function DevotionScreen() {
     setBibleTotal(total);
     setBookProgress(progress);
     setBookCompletions(completions);
+    setHighlightedVerses(hl);
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
@@ -314,6 +319,28 @@ export default function DevotionScreen() {
 
         <View style={styles.divider} />
 
+        {/* 하이라이트 모아보기 */}
+        {highlightedVerses.length > 0 && (
+          <>
+            <SectionLabel label="하이라이트" />
+            {highlightedVerses.map((h, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.highlightItem}
+                activeOpacity={0.6}
+                onPress={() => { setCurrentPosition(h.book_id, h.chapter); router.push('/(tabs)/bible'); }}
+              >
+                <View style={[styles.highlightBar, { backgroundColor: h.color }]} />
+                <View style={styles.highlightContent}>
+                  <Text style={styles.highlightRef}>{h.book_name} {h.chapter}:{h.verse}</Text>
+                  <Text style={styles.highlightText} numberOfLines={2}>{h.text}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.divider} />
+          </>
+        )}
+
         {/* 묵상 노트 */}
         <SectionLabel label="묵상 노트" right={<Text style={typography.dateText}>{formatDateKo()}</Text>} />
         <TextInput
@@ -411,6 +438,13 @@ const styles = StyleSheet.create({
   readingTextDone: { textDecorationLine: 'line-through', opacity: 0.4 },
 
   // 노트
+  // 하이라이트
+  highlightItem: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  highlightBar: { width: 4, borderRadius: 2, minHeight: 40 },
+  highlightContent: { flex: 1 },
+  highlightRef: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.accent, marginBottom: 4 },
+  highlightText: { fontFamily: fonts.serifLight, fontSize: 14, lineHeight: 22, color: colors.textPrimary },
+
   noteInput: { fontFamily: fonts.sansRegular, fontSize: 14, color: colors.textPrimary, backgroundColor: 'rgba(0,0,0,0.015)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, minHeight: 80, textAlignVertical: 'top' },
   saveButton: { alignSelf: 'flex-end', backgroundColor: colors.accent, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, marginTop: 10 },
   saveButtonText: { fontFamily: fonts.sansMedium, fontSize: 13, color: '#FFFFFF' },
