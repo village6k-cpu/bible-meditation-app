@@ -70,10 +70,16 @@ function getTimeTheme() {
     };
   }
   if (hour < 17) {
-    // 오후 — 그라데이션 없음
+    // 오후 — 밝고 따뜻한 크림톤
     return {
-      gradient: null,
-      gradientLocations: null,
+      gradient: [
+        'rgba(215,200,175,0.4)',
+        'rgba(225,212,190,0.28)',
+        'rgba(235,225,208,0.14)',
+        'rgba(245,238,225,0.05)',
+        'rgba(250,250,248,0)',
+      ] as const,
+      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
