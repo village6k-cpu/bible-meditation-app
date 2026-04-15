@@ -139,6 +139,7 @@ export async function initDatabases(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS board_posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL DEFAULT 1,
       author TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -154,6 +155,21 @@ export async function initDatabases(): Promise<void> {
       author TEXT NOT NULL,
       content TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      member_count INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS group_memberships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      user_name TEXT NOT NULL,
+      joined_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
 }

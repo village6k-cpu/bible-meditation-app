@@ -515,10 +515,76 @@ export async function getBookCompletions(): Promise<BookReadCount[]> {
   }).filter((b) => b.completions > 0);
 }
 
+// === 모임(그룹) ===
+
+export interface Group {
+  id: number;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+  last_post_date?: string;
+  post_count?: number;
+}
+
+export async function getMyGroups(userName: string): Promise<Group[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  return db.getAllAsync<Group>(
+    `SELECT g.*,
+       (SELECT COUNT(*) FROM board_posts p WHERE p.group_id = g.id) as post_count,
+       (SELECT MAX(created_at) FROM board_posts p WHERE p.group_id = g.id) as last_post_date
+     FROM groups g
+     INNER JOIN group_memberships m ON m.group_id = g.id
+     WHERE m.user_name = ?
+     ORDER BY last_post_date DESC NULLS LAST`,
+    [userName]
+  );
+}
+
+export async function createGroup(name: string, description: string, userName: string): Promise<number> {
+  const db = getUserDb();
+  if (!db) return 0;
+  const result = await db.runAsync(
+    'INSERT INTO groups (name, description) VALUES (?, ?)',
+    [name, description]
+  );
+  const groupId = result.lastInsertRowId;
+  await db.runAsync(
+    'INSERT INTO group_memberships (group_id, user_name) VALUES (?, ?)',
+    [groupId, userName]
+  );
+  return groupId;
+}
+
+export async function joinGroup(groupId: number, userName: string): Promise<void> {
+  const db = getUserDb();
+  if (!db) return;
+  const existing = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM group_memberships WHERE group_id = ? AND user_name = ?',
+    [groupId, userName]
+  );
+  if (!existing) {
+    await db.runAsync('INSERT INTO group_memberships (group_id, user_name) VALUES (?, ?)', [groupId, userName]);
+    await db.runAsync('UPDATE groups SET member_count = member_count + 1 WHERE id = ?', [groupId]);
+  }
+}
+
+export async function getAllGroups(): Promise<Group[]> {
+  const db = getUserDb();
+  if (!db) return [];
+  return db.getAllAsync<Group>(
+    `SELECT g.*,
+       (SELECT COUNT(*) FROM board_posts p WHERE p.group_id = g.id) as post_count
+     FROM groups g ORDER BY g.created_at DESC`
+  );
+}
+
 // === 가족 게시판 ===
 
 export interface BoardPost {
   id: number;
+  group_id: number;
   author: string;
   title: string;
   content: string;
@@ -537,14 +603,19 @@ export interface BoardComment {
   created_at: string;
 }
 
-export async function getAllPosts(category?: string): Promise<BoardPost[]> {
+export async function getAllPosts(groupId: number, category?: string): Promise<BoardPost[]> {
   const db = getUserDb();
   if (!db) return [];
-  const query = category && category !== 'all'
-    ? 'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p WHERE p.category = ? ORDER BY p.created_at DESC'
-    : 'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p ORDER BY p.created_at DESC';
-  const params = category && category !== 'all' ? [category] : [];
-  return db.getAllAsync<BoardPost>(query, params);
+  if (category && category !== 'all') {
+    return db.getAllAsync<BoardPost>(
+      'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p WHERE p.group_id = ? AND p.category = ? ORDER BY p.created_at DESC',
+      [groupId, category]
+    );
+  }
+  return db.getAllAsync<BoardPost>(
+    'SELECT p.*, (SELECT COUNT(*) FROM board_comments c WHERE c.post_id = p.id) as comment_count FROM board_posts p WHERE p.group_id = ? ORDER BY p.created_at DESC',
+    [groupId]
+  );
 }
 
 export async function getPost(id: number): Promise<BoardPost | null> {
@@ -557,12 +628,12 @@ export async function getPost(id: number): Promise<BoardPost | null> {
   );
 }
 
-export async function createPost(author: string, title: string, content: string, category: string): Promise<void> {
+export async function createPost(groupId: number, author: string, title: string, content: string, category: string): Promise<void> {
   const db = getUserDb();
   if (!db) return;
   await db.runAsync(
-    'INSERT INTO board_posts (author, title, content, category) VALUES (?, ?, ?, ?)',
-    [author, title, content, category]
+    'INSERT INTO board_posts (group_id, author, title, content, category) VALUES (?, ?, ?, ?, ?)',
+    [groupId, author, title, content, category]
   );
 }
 

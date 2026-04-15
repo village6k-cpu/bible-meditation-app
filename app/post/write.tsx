@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts } from '../../lib/theme';
 import { useAppStore } from '../../lib/store';
@@ -15,6 +15,8 @@ const CATEGORIES = [
 
 export default function WritePostScreen() {
   const router = useRouter();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const gid = parseInt(groupId ?? '1');
   const userName = useAppStore((s) => s.userName);
 
   const [category, setCategory] = useState('sharing');
@@ -23,7 +25,7 @@ export default function WritePostScreen() {
 
   async function handleSubmit() {
     if (!title.trim() || !content.trim()) return;
-    await createPost(userName || '익명', title.trim(), content.trim(), category);
+    await createPost(gid, userName || '익명', title.trim(), content.trim(), category);
     router.back();
   }
 
