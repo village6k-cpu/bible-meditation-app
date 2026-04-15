@@ -50,25 +50,69 @@ TAG_SYSTEM_PROMPT = """
 {
   "bible_refs": ["요 1:1", "요 1:2-3"],
   "type": "commentary",
-  "topics": ["로고스", "선재성", "삼위일체"],
-  "tradition": "reformed"
+  "topics": [],
+  "tradition": "reformed",
+  "doctrine_category": ""
 }
 
-규칙:
-- bible_refs: 이 텍스트가 직접 다루거나 인용하는 성경 구절.
-  한글 약어 사용 (창, 출, 레, 민, 신, 수, 삿, 룻, 삼상, 삼하,
-  왕상, 왕하, 대상, 대하, 스, 느, 에, 욥, 시, 잠, 전, 아, 사, 렘,
-  애, 겔, 단, 호, 욜, 암, 옵, 욘, 미, 나, 합, 습, 학, 슥, 말,
-  마, 막, 눅, 요, 행, 롬, 고전, 고후, 갈, 엡, 빌, 골, 살전, 살후,
-  딤전, 딤후, 딛, 몬, 히, 약, 벧전, 벧후, 요일, 요이, 요삼, 유, 계)
-  형식: "요 1:1" 또는 "요 1:1-3" 또는 "요 1:1-2:5"
-- type: commentary(주석) | sermon(설교) | theology(조직/성경신학) |
-        devotional(경건서적) | lexical(원어분석)
-- topics: 핵심 신학 주제 키워드 3-5개. 한글로.
-- tradition: reformed(개혁주의) | evangelical(복음주의) |
-            patristic(초대교회) | other
+── bible_refs ──
+이 텍스트가 직접 다루거나 인용하는 성경 구절.
+한글 약어 사용 (창, 출, 레, 민, 신, 수, 삿, 룻, 삼상, 삼하,
+왕상, 왕하, 대상, 대하, 스, 느, 에, 욥, 시, 잠, 전, 아, 사, 렘,
+애, 겔, 단, 호, 욜, 암, 옵, 욘, 미, 나, 합, 습, 학, 슥, 말,
+마, 막, 눅, 요, 행, 롬, 고전, 고후, 갈, 엡, 빌, 골, 살전, 살후,
+딤전, 딤후, 딛, 몬, 히, 약, 벧전, 벧후, 요일, 요이, 요삼, 유, 계)
+형식: "요 1:1" 또는 "요 1:1-3"
+없으면 빈 배열 [].
 
-성경 구절 레퍼런스가 없으면 bible_refs는 빈 배열 [].
+── type ──
+commentary: 성경 본문을 직접 해설하는 주석
+sermon: 설교/강해
+systematic_theology: 조직신학적 논의
+biblical_theology: 성경신학적 논의 (구속사, 언약, 유형론 등)
+devotional: 경건/묵상 서적
+lexical: 원어 분석
+confessional: 신조/신앙고백 해설
+historical: 교회사/역사적 맥락
+apologetics: 변증
+
+── topics (3-7개) ──
+아래 범주에서 해당하는 것을 선택. 목록에 없는 주제도 가능하되 구체적으로.
+
+조직신학 범주:
+  신론, 삼위일체, 기독론, 성령론, 인간론, 죄론,
+  구원론, 칭의, 성화, 견인, 예정론, 선택, 언약,
+  교회론, 성례, 종말론, 율법과 복음, 성경론, 영감
+
+성경신학 범주:
+  구속사, 하나님 나라, 언약신학, 유형론, 성취,
+  메시아 예언, 신구약 연결
+
+바빙크 특유 개념 (해당 시):
+  유기적 영감, 일반은총, 특별은총, 자연신학,
+  하나님의 소통가능성/소통불가능성 속성,
+  원죄와 실죄, 은혜언약, 행위언약,
+  중보자의 삼중직분, 교회의 표지,
+  종말의 이미/아직, 일반계시, 특별계시,
+  신학의 원리, 외적 부르심/내적 부르심
+
+칼빈 특유 개념 (해당 시):
+  이중지식, 성령의 내적 증거, 그리스도와의 연합,
+  하나님의 적응, 섭리,
+  하나님의 형상, 전적타락, 불가항력적 은혜,
+  그리스도의 삼중직분, 성례의 표지와 인,
+  이중예정, 교회의 참된 표지,
+  기독교적 자유, 시민정부
+
+── doctrine_category ──
+이 텍스트가 가장 밀접하게 관련된 교리 대분류 하나만 선택:
+신론 | 기독론 | 성령론 | 인간론 | 구원론 |
+교회론 | 종말론 | 성경론 | 언약신학 | 해당없음
+
+── tradition ──
+reformed | evangelical | patristic | other
+
+── 규칙 ──
 확실하지 않으면 추측하지 마.
 JSON만 출력. 다른 텍스트 없이.
 """.strip()
@@ -108,7 +152,7 @@ def tag_chunk(text: str) -> Optional[dict]:
         try:
             response = claude.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=300,
+                max_tokens=500,
                 system=TAG_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": text}],
             )
@@ -131,7 +175,7 @@ def tag_chunk(text: str) -> Optional[dict]:
             time.sleep(wait)
 
     print("  ✗ 태깅 실패 — 기본값 사용")
-    return {"bible_refs": [], "type": "other", "topics": [], "tradition": "other"}
+    return {"bible_refs": [], "type": "other", "topics": [], "tradition": "other", "doctrine_category": "해당없음"}
 
 
 # ─── 4. 임베딩 ─────────────────────────────────────────
@@ -245,6 +289,7 @@ def process_file(filepath: str, dry_run: bool = False):
             "chunk_type": meta.get("type", "other"),
             "topics": meta.get("topics", []),
             "tradition": meta.get("tradition", "other"),
+            "doctrine_category": meta.get("doctrine_category", "해당없음"),
             "page_or_section": None,
             "chunk_index": i,
         }
