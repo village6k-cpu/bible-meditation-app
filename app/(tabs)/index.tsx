@@ -52,16 +52,17 @@ function getTimeTheme() {
     };
   }
   if (hour < 12) {
-    // 아침 — 따뜻한 골드 톤이 부드럽게 퍼짐
+    // 아침 — 따뜻한 골드/베이지
     return {
       gradient: [
-        'rgba(225,205,168,0.5)',
-        'rgba(232,215,182,0.35)',
-        'rgba(240,225,200,0.18)',
-        'rgba(248,240,225,0.06)',
-        'rgba(250,250,248,0)',
+        '#C8B08A',
+        'rgba(200,176,138,0.85)',
+        'rgba(190,170,140,0.55)',
+        'rgba(210,195,170,0.25)',
+        'rgba(244,243,238,0.05)',
+        'rgba(244,243,238,0)',
       ] as const,
-      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
+      gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
@@ -73,13 +74,14 @@ function getTimeTheme() {
     // 오후 — 따뜻한 베이지/브라운 톤
     return {
       gradient: [
-        'rgba(180,160,130,0.6)',
-        'rgba(195,178,150,0.45)',
-        'rgba(210,195,170,0.28)',
-        'rgba(230,218,198,0.12)',
+        '#B8A080',
+        'rgba(184,160,128,0.85)',
+        'rgba(180,162,135,0.5)',
+        'rgba(210,195,170,0.22)',
+        'rgba(244,243,238,0.05)',
         'rgba(244,243,238,0)',
       ] as const,
-      gradientLocations: [0, 0.15, 0.35, 0.55, 0.78] as const,
+      gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
@@ -179,17 +181,16 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 시간대별 그라데이션 — ScrollView 밖에 고정 */}
-      {theme.gradient && (
+      {theme.gradient ? (
         <LinearGradient
           colors={[...theme.gradient]}
           locations={[...theme.gradientLocations]}
-          style={styles.gradientOverlay}
+          style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
-      )}
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      ) : null}
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} style={{ backgroundColor: 'transparent' }}>
 
           {/* Header */}
           <Text style={[typography.dateText, { color: theme.subTextColor }]}>{formatDateKo()}</Text>
@@ -368,14 +369,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  gradientOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.55,
-    zIndex: 0,
-  },
   scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12 },
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sectionGap },
