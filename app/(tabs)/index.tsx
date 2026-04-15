@@ -179,17 +179,17 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 시간대별 그라데이션 — ScrollView 밖에 고정 */}
+      {theme.gradient && (
+        <LinearGradient
+          colors={[...theme.gradient]}
+          locations={[...theme.gradientLocations]}
+          style={styles.gradientOverlay}
+          pointerEvents="none"
+        />
+      )}
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* 시간대별 그라데이션 — ScrollView 안에 absolute */}
-          {theme.gradient && (
-            <LinearGradient
-              colors={[...theme.gradient]}
-              locations={[...theme.gradientLocations]}
-              style={styles.gradientOverlay}
-              pointerEvents="none"
-            />
-          )}
 
           {/* Header */}
           <Text style={[typography.dateText, { color: theme.subTextColor }]}>{formatDateKo()}</Text>
@@ -370,10 +370,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   gradientOverlay: {
     position: 'absolute',
-    top: -60,
-    left: -spacing.screenPadding,
-    right: -spacing.screenPadding,
+    top: 0,
+    left: 0,
+    right: 0,
     height: SCREEN_HEIGHT * 0.55,
+    zIndex: 0,
   },
   scrollContent: { paddingHorizontal: spacing.screenPadding, paddingTop: 12 },
   greeting: { fontFamily: fonts.serifLight, fontSize: 21, color: colors.textPrimary, marginTop: 6 },
