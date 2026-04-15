@@ -70,16 +70,16 @@ function getTimeTheme() {
     };
   }
   if (hour < 17) {
-    // 오후 — 밝고 따뜻한 크림톤
+    // 오후 — 따뜻한 베이지/브라운 톤
     return {
       gradient: [
-        'rgba(215,200,175,0.4)',
-        'rgba(225,212,190,0.28)',
-        'rgba(235,225,208,0.14)',
-        'rgba(245,238,225,0.05)',
-        'rgba(250,250,248,0)',
+        'rgba(180,160,130,0.6)',
+        'rgba(195,178,150,0.45)',
+        'rgba(210,195,170,0.28)',
+        'rgba(230,218,198,0.12)',
+        'rgba(244,243,238,0)',
       ] as const,
-      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
+      gradientLocations: [0, 0.15, 0.35, 0.55, 0.78] as const,
       textColor: colors.textPrimary,
       subTextColor: colors.textSecondary,
       labelColor: colors.accent,
