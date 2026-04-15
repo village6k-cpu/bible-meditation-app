@@ -63,11 +63,11 @@ function getTimeTheme() {
         'rgba(244,243,238,0)',
       ] as const,
       gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
-      textColor: colors.textPrimary,
-      subTextColor: colors.textSecondary,
-      labelColor: colors.accent,
-      dividerColor: colors.divider,
-      isDark: false,
+      textColor: '#FFFFFF',
+      subTextColor: 'rgba(255,255,255,0.6)',
+      labelColor: 'rgba(255,255,255,0.75)',
+      dividerColor: 'rgba(255,255,255,0.1)',
+      isDark: true,
     };
   }
   if (hour < 17) {
@@ -82,29 +82,30 @@ function getTimeTheme() {
         'rgba(244,243,238,0)',
       ] as const,
       gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
-      textColor: colors.textPrimary,
-      subTextColor: colors.textSecondary,
-      labelColor: colors.accent,
-      dividerColor: colors.divider,
-      isDark: false,
+      textColor: '#FFFFFF',
+      subTextColor: 'rgba(255,255,255,0.6)',
+      labelColor: 'rgba(255,255,255,0.75)',
+      dividerColor: 'rgba(255,255,255,0.1)',
+      isDark: true,
     };
   }
   if (hour < 21) {
     // 저녁 — 노을빛 웜톤
     return {
       gradient: [
-        'rgba(180,140,95,0.45)',
-        'rgba(200,165,120,0.3)',
-        'rgba(220,190,150,0.15)',
-        'rgba(240,225,200,0.05)',
-        'rgba(250,250,248,0)',
+        '#A07850',
+        'rgba(160,120,80,0.85)',
+        'rgba(175,145,110,0.5)',
+        'rgba(210,190,165,0.2)',
+        'rgba(244,243,238,0.05)',
+        'rgba(244,243,238,0)',
       ] as const,
-      gradientLocations: [0, 0.18, 0.4, 0.6, 0.78] as const,
-      textColor: colors.textPrimary,
-      subTextColor: colors.textSecondary,
-      labelColor: colors.accent,
-      dividerColor: colors.divider,
-      isDark: false,
+      gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
+      textColor: '#FFFFFF',
+      subTextColor: 'rgba(255,255,255,0.55)',
+      labelColor: 'rgba(255,255,255,0.7)',
+      dividerColor: 'rgba(255,255,255,0.08)',
+      isDark: true,
     };
   }
   // 밤 — 깊은 다크 브라운에서 배경으로
