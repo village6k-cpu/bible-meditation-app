@@ -16,6 +16,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import anthropic
 from dotenv import load_dotenv
@@ -212,7 +213,7 @@ def generate_pericope_context(book: dict, chapter: int, section: dict):
 
 # ─── 메인 ───────────────────────────────────────────────
 
-def process_book(book: dict, chapter_filter: int | None = None):
+def process_book(book: dict, chapter_filter: Optional[int] = None):
     book_name = book["name_ko"]
     book_id = book["id"]
 

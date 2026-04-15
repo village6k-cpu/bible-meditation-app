@@ -17,6 +17,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import anthropic
 from dotenv import load_dotenv
@@ -95,7 +96,7 @@ KEYWORDS_SYSTEM = """
 """.strip()
 
 
-def generate_chapter_keywords(book_name: str, chapter: int, verses: list) -> list | None:
+def generate_chapter_keywords(book_name: str, chapter: int, verses: list) -> Optional[list]:
     """한 장의 모든 절에 대한 키워드를 한 번에 생성."""
     verses_text = "\n".join([f"{v['verse']}절: {v['text']}" for v in verses])
 

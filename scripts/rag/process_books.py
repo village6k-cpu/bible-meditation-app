@@ -15,6 +15,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import Optional, Tuple
 
 import anthropic
 from dotenv import load_dotenv
@@ -75,7 +76,7 @@ JSON만 출력. 다른 텍스트 없이.
 
 # ─── 1. 파일명 파싱 ─────────────────────────────────────
 
-def parse_filename(filepath: str) -> tuple[str, str]:
+def parse_filename(filepath: str) -> Tuple[str, str]:
     """파일명에서 저자와 제목 추출. 언더스코어로 구분."""
     stem = Path(filepath).stem
     if "_" in stem:
@@ -101,7 +102,7 @@ def chunk_text(text: str) -> list[str]:
 
 # ─── 3. Claude 메타데이터 태깅 ──────────────────────────
 
-def tag_chunk(text: str) -> dict | None:
+def tag_chunk(text: str) -> Optional[dict]:
     """Claude API로 메타데이터 추출. 실패 시 3회 재시도."""
     for attempt in range(TAG_MAX_RETRIES):
         try:
