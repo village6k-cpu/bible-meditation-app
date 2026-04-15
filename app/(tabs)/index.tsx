@@ -63,11 +63,11 @@ function getTimeTheme() {
         'rgba(244,243,238,0)',
       ] as const,
       gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
-      textColor: '#FFFFFF',
-      subTextColor: 'rgba(255,255,255,0.6)',
-      labelColor: 'rgba(255,255,255,0.75)',
-      dividerColor: 'rgba(255,255,255,0.1)',
-      isDark: true,
+      textColor: '#3A3028',
+      subTextColor: '#6B5D4F',
+      labelColor: '#6B5540',
+      dividerColor: 'rgba(0,0,0,0.08)',
+      isDark: false,
     };
   }
   if (hour < 17) {
@@ -82,11 +82,11 @@ function getTimeTheme() {
         'rgba(244,243,238,0)',
       ] as const,
       gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
-      textColor: '#FFFFFF',
-      subTextColor: 'rgba(255,255,255,0.6)',
-      labelColor: 'rgba(255,255,255,0.75)',
-      dividerColor: 'rgba(255,255,255,0.1)',
-      isDark: true,
+      textColor: '#3A3028',
+      subTextColor: '#6B5D4F',
+      labelColor: '#6B5540',
+      dividerColor: 'rgba(0,0,0,0.08)',
+      isDark: false,
     };
   }
   if (hour < 21) {
@@ -101,11 +101,11 @@ function getTimeTheme() {
         'rgba(244,243,238,0)',
       ] as const,
       gradientLocations: [0, 0.08, 0.22, 0.4, 0.6, 0.8] as const,
-      textColor: '#FFFFFF',
-      subTextColor: 'rgba(255,255,255,0.55)',
-      labelColor: 'rgba(255,255,255,0.7)',
-      dividerColor: 'rgba(255,255,255,0.08)',
-      isDark: true,
+      textColor: '#2E2218',
+      subTextColor: '#5C4A38',
+      labelColor: '#5C4430',
+      dividerColor: 'rgba(0,0,0,0.08)',
+      isDark: false,
     };
   }
   // 밤 — 깊은 다크 브라운에서 배경으로
