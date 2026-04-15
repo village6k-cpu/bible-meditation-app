@@ -172,6 +172,13 @@ export async function initDatabases(): Promise<void> {
       joined_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // 마이그레이션: 기존 board_posts에 group_id 컬럼 없으면 추가
+  try {
+    await userDb.runAsync('ALTER TABLE board_posts ADD COLUMN group_id INTEGER NOT NULL DEFAULT 1');
+  } catch {
+    // 이미 있으면 무시
+  }
 }
 
 export function getBibleDb(): SQLite.SQLiteDatabase | null {
