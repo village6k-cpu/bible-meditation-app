@@ -8,6 +8,15 @@ advisor 툴 최소 테스트. 실제로 동작하는지 확인.
 """
 
 import sys
+from pathlib import Path
+
+# .env 로드 (process_books.py와 동일)
+try:
+    from dotenv import load_dotenv
+    _project_root = Path(__file__).resolve().parent.parent.parent
+    load_dotenv(_project_root / ".env")
+except ImportError:
+    pass
 
 # SDK 버전 확인
 try:
