@@ -551,11 +551,11 @@ def _process_single_model(filepath, chunks, title, author, args):
         print(f"   ↳ 이전 진행분 {start_idx}개 발견, 이어서 처리")
 
     batch = []  # type: List[dict]
+    t_start = time.time()
 
     for i in range(start_idx, len(chunks)):
         chunk = chunks[i]
-        pct = (i + 1) / len(chunks) * 100
-        print(f"   처리 중: {i + 1}/{len(chunks)} ({pct:.0f}%) — {title}", end="\r")
+        t_chunk = time.time()
 
         meta = tag_fn(chunk)
         if meta is None:
@@ -572,6 +572,14 @@ def _process_single_model(filepath, chunks, title, author, args):
                 upload_batch(batch)
                 batch = []
 
+        elapsed = time.time() - t_chunk
+        done = i - start_idx + 1
+        if i - start_idx < 3 or done % 10 == 0:
+            total = time.time() - t_start
+            avg = total / done
+            eta_min = avg * (len(chunks) - i - 1) / 60
+            print(f"   [{i + 1}/{len(chunks)}] {elapsed:.1f}s (평균 {avg:.1f}s, ETA {eta_min:.0f}분)")
+
     if batch and not dry_run:
         upload_batch(batch)
 
@@ -587,9 +595,12 @@ def _process_supervised(filepath, chunks, title, author, args):
     # ── 1단계: Haiku + Opus Advisor ──
     print(f"\n[1단계] Haiku + Opus Advisor 태깅")
     tagged_chunks = []  # type: List[dict]
+    t_start = time.time()
 
     for i, chunk in enumerate(chunks):
+        t_chunk = time.time()
         meta = tag_chunk_advised(chunk)
+        elapsed = time.time() - t_chunk
         if meta is None:
             meta = dict(DEFAULT_TAGGING)
 
@@ -599,8 +610,13 @@ def _process_supervised(filepath, chunks, title, author, args):
             "meta": meta,
         })
 
-        if (i + 1) % 50 == 0:
-            print(f"   처리 중: {i + 1}/{len(chunks)} ({(i + 1) * 100 // len(chunks)}%)")
+        # 처음 3개는 매번, 그 뒤는 10개마다 출력
+        if i < 3 or (i + 1) % 10 == 0:
+            total = time.time() - t_start
+            avg = total / (i + 1)
+            eta_sec = avg * (len(chunks) - i - 1)
+            eta_min = eta_sec / 60
+            print(f"   [{i + 1}/{len(chunks)}] {elapsed:.1f}s (평균 {avg:.1f}s, ETA {eta_min:.0f}분)")
 
     step1_path = os.path.join(output_dir, f"step1_{title}.jsonl")
     save_jsonl(tagged_chunks, step1_path)
