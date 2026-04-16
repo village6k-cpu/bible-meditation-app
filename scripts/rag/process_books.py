@@ -151,7 +151,7 @@ def tag_chunk(text: str) -> Optional[dict]:
     for attempt in range(TAG_MAX_RETRIES):
         try:
             response = claude.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-6",
                 max_tokens=500,
                 system=TAG_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": text}],
