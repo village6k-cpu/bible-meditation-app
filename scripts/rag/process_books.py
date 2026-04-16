@@ -592,15 +592,14 @@ def _process_supervised(filepath, chunks, title, author, args):
     dry_run = args.dry_run
     output_dir = str(PROGRESS_DIR)
 
-    # ── 1단계: Haiku 태깅 ──
-    # (advisor_20260301 툴은 현재 사용 불가 — Haiku 단독. 품질은 2/3단계가 방어)
-    print(f"\n[1단계] Haiku 태깅")
+    # ── 1단계: Haiku + Opus Advisor ──
+    print(f"\n[1단계] Haiku + Opus Advisor 태깅")
     tagged_chunks = []  # type: List[dict]
     t_start = time.time()
 
     for i, chunk in enumerate(chunks):
         t_chunk = time.time()
-        meta = tag_chunk_haiku(chunk)
+        meta = tag_chunk_advised(chunk)
         elapsed = time.time() - t_chunk
         if meta is None:
             meta = dict(DEFAULT_TAGGING)
@@ -722,11 +721,7 @@ def main():
         "--model",
         choices=["sonnet", "haiku", "advised", "supervised"],
         default="supervised",
-        help=(
-            "태깅 모델: sonnet(비쌈) | haiku(저렴) | "
-            "advised(실험: advisor 툴, 현재 비활성) | "
-            "supervised(3단계 감시형, 기본값)"
-        ),
+        help="태깅 모델: sonnet(비쌈) | haiku(저렴) | advised(하이쿠+오퍼스) | supervised(3단계 감시형, 기본값)",
     )
     parser.add_argument(
         "--validation-rate",
