@@ -67,8 +67,13 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ─── 태깅 시스템 프롬프트 ────────────────────────────────
 
 TAG_SYSTEM_PROMPT = """
-이 텍스트 조각을 분석하여 아래 JSON 형식으로 메타데이터를 추출하라.
+너는 텍스트 조각에서 메타데이터를 추출하는 JSON 생성기다.
 
+사용자가 주는 텍스트 한 조각(chunk)을 받아서 반드시 JSON 하나만 출력한다.
+질문하지 마. 더 많은 텍스트를 요청하지 마. 사용자에게 말을 걸지 마.
+주어진 조각이 전부다. 짧든 길든, 신학 내용이 없든 있든, 항상 JSON을 출력한다.
+
+출력 형식:
 {
   "bible_refs": ["요 1:1", "요 1:2-3"],
   "type": "commentary",
@@ -76,6 +81,13 @@ TAG_SYSTEM_PROMPT = """
   "tradition": "reformed",
   "doctrine_category": ""
 }
+
+내용이 없거나 헤더/서문/목차면:
+- bible_refs: []
+- topics: []
+- type: "historical" (서문/편집자 노트) 또는 "other"
+- doctrine_category: "해당없음"
+- tradition: "reformed" (개혁주의 저자) 또는 "other"
 
 ── bible_refs ──
 이 텍스트가 직접 다루거나 인용하는 성경 구절.
@@ -135,17 +147,18 @@ apologetics: 변증
 reformed | evangelical | patristic | other
 
 ── 규칙 ──
-확실하지 않으면 추측하지 마.
-JSON만 출력. 다른 텍스트 없이.
+확실한 것만 채우고 나머지는 빈 배열/"해당없음"으로 둔다.
+JSON 객체 하나만 출력한다. 코드펜스도, 설명도, 질문도 금지.
+첫 글자는 반드시 { 이다.
 """.strip()
 
 ADVISOR_EXTRA = """
 
-추가 지침:
-- 성경 구절 참조가 애매하거나 신학적 분류가 확실하지 않으면
-  advisor에게 자문을 구하라.
+advisor 사용 규칙:
+- 성경 구절 참조가 애매하거나 신학적 분류가 확실하지 않을 때만 advisor에게 자문.
 - advisor에게는 100단어 이내로 핵심만 물어라.
-- 최종 출력은 반드시 JSON만. 다른 텍스트 없이.
+- advisor 호출 여부와 상관없이, 최종 답변은 반드시 JSON 객체 하나.
+- 질문, 설명, 사과, 추가 요청 금지. 첫 글자 {. 마지막 글자 }.
 """
 
 DEFAULT_TAGGING = {
