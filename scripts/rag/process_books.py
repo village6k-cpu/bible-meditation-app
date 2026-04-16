@@ -199,12 +199,36 @@ def extract_json(raw):
         raise
 
 
+DEBUG_JSON_FAIL = os.environ.get("DEBUG_TAGGING", "").lower() in ("1", "true")
+
+
 def extract_json_from_response(response):
     # type: (...) -> dict
-    for block in response.content:
-        if block.type == "text" and block.text.strip():
-            return extract_json(block.text)
-    raise ValueError("No valid JSON found in response")
+    # Advisor tool 사용 시 여러 텍스트 블록이 있을 수 있음.
+    # 마지막부터 역순으로 JSON 찾기 — 최종 답변이 맨 뒤에 있음.
+    text_blocks = [b.text for b in response.content if b.type == "text" and b.text.strip()]
+
+    if not text_blocks:
+        raise ValueError("No text blocks in response")
+
+    # 마지막 블록부터 역순으로 JSON 파싱 시도
+    for text in reversed(text_blocks):
+        try:
+            return extract_json(text)
+        except json.JSONDecodeError:
+            continue
+
+    # 전부 실패 — 디버그 출력
+    if DEBUG_JSON_FAIL:
+        print("\n─── JSON 파싱 실패 RAW 응답 ───")
+        for i, t in enumerate(text_blocks):
+            print(f"[블록 {i}]: {t[:500]}")
+        print("───────────────────────────")
+    else:
+        # 마지막 블록 일부라도 보여주기
+        last = text_blocks[-1][:200]
+        print(f"    raw: {last!r}")
+    raise json.JSONDecodeError("No valid JSON in any text block", text_blocks[-1], 0)
 
 
 # ─── 4. API 호출 + 재시도 ──────────────────────────────
