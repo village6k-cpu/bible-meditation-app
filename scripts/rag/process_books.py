@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-process_books.py — 3단계 감시형 태깅 시스템
+process_books.py — 3단계 감시형 태깅 시스템 (비용 방어 포함)
 
-[1단계] Haiku + Opus Advisor로 전체 태깅
+[1단계] Haiku로 전체 태깅
 [2단계] Sonnet이 랜덤 샘플 검증
 [3단계] 불일치율 높은 카테고리만 Sonnet으로 재태깅
+
+비용 방어:
+  - 프롬프트 캐싱 (cache_control: ephemeral)
+  - 토큰 사용량 JSONL 로깅
+  - 누적 비용 실시간 출력
+  - --max-cost 예산 초과 자동 중단
+  - 첫 10청크 실측 후 전체 비용 추정 → 사용자 확인
 
 사용법:
   python process_books.py --dir raw/                          # 기본값: supervised
@@ -12,6 +19,7 @@ process_books.py — 3단계 감시형 태깅 시스템
   python process_books.py --dir raw/ --validation-rate 0.2    # 검증 20%
   python process_books.py --dir raw/ --dry-run
   python process_books.py --file raw/칼빈_기독교강요.txt
+  python process_books.py --dir raw/ --max-cost 10.0          # $10 초과시 중단
 """
 
 import argparse
@@ -58,6 +66,154 @@ ADVISOR_TOOL = {
     "model": MODEL_OPUS,
     "max_uses": 1,
 }
+
+# ─── 모델별 가격 (USD per 1M tokens) ────────────────────
+
+MODEL_PRICING = {
+    MODEL_HAIKU: {
+        "input": 1.00,
+        "output": 5.00,
+        "cache_read": 0.10,
+        "cache_creation": 1.25,
+    },
+    MODEL_SONNET: {
+        "input": 3.00,
+        "output": 15.00,
+        "cache_read": 0.30,
+        "cache_creation": 3.75,
+    },
+    MODEL_OPUS: {
+        "input": 15.00,
+        "output": 75.00,
+        "cache_read": 1.50,
+        "cache_creation": 18.75,
+    },
+}
+
+
+# ─── 비용 추적 ──────────────────────────────────────────
+
+class BudgetExceededError(Exception):
+    pass
+
+
+class CostTracker(object):
+    """API 호출별 토큰 사용량 + 비용 추적."""
+
+    def __init__(self, max_cost=None, log_path=None):
+        # type: (Optional[float], Optional[str]) -> None
+        self.max_cost = max_cost
+        self.log_path = log_path
+        self.total_cost = 0.0
+        self.call_count = 0
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cache_creation_tokens = 0
+        # 단계별 비용
+        self.step_costs = {}  # type: Dict[str, float]
+        self._current_step = ""
+
+    def set_step(self, step_name):
+        # type: (str) -> None
+        self._current_step = step_name
+        if step_name not in self.step_costs:
+            self.step_costs[step_name] = 0.0
+
+    def track(self, model, usage):
+        # type: (str, ...) -> float
+        """API 응답의 usage를 기록하고 비용을 반환."""
+        pricing = MODEL_PRICING.get(model)
+        if not pricing:
+            return 0.0
+
+        input_tokens = getattr(usage, "input_tokens", 0) or 0
+        output_tokens = getattr(usage, "output_tokens", 0) or 0
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_creation = getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+        # 캐시되지 않은 입력 토큰 = 전체 - cache_read - cache_creation
+        non_cached = max(0, input_tokens - cache_read - cache_creation)
+
+        cost = (
+            non_cached * pricing["input"] / 1_000_000
+            + output_tokens * pricing["output"] / 1_000_000
+            + cache_read * pricing["cache_read"] / 1_000_000
+            + cache_creation * pricing["cache_creation"] / 1_000_000
+        )
+
+        self.total_cost += cost
+        self.call_count += 1
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        self.total_cache_read_tokens += cache_read
+        self.total_cache_creation_tokens += cache_creation
+
+        if self._current_step:
+            self.step_costs[self._current_step] = (
+                self.step_costs.get(self._current_step, 0.0) + cost
+            )
+
+        # JSONL 로깅
+        if self.log_path:
+            entry = {
+                "call": self.call_count,
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_read": cache_read,
+                "cache_creation": cache_creation,
+                "cost": round(cost, 6),
+                "cumulative": round(self.total_cost, 4),
+                "step": self._current_step,
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+
+        return cost
+
+    def check_budget(self):
+        # type: () -> None
+        """예산 초과시 BudgetExceededError."""
+        if self.max_cost is not None and self.total_cost >= self.max_cost:
+            raise BudgetExceededError(
+                "예산 초과! ${:.4f} >= ${:.2f}".format(self.total_cost, self.max_cost)
+            )
+
+    def cost_str(self):
+        # type: () -> str
+        return "${:.4f}".format(self.total_cost)
+
+    def summary(self):
+        # type: () -> str
+        lines = []
+        cache_pct = 0.0
+        total_in = self.total_cache_read_tokens + self.total_cache_creation_tokens + (
+            self.total_input_tokens - self.total_cache_read_tokens - self.total_cache_creation_tokens
+        )
+        if total_in > 0:
+            cache_pct = self.total_cache_read_tokens / total_in * 100
+
+        lines.append("─── 비용 실측 요약 ───")
+        lines.append("  총 API 호출: {:,}회".format(self.call_count))
+        lines.append("  입력 토큰: {:,} (캐시 히트: {:,}, {:.0f}%)".format(
+            self.total_input_tokens, self.total_cache_read_tokens, cache_pct
+        ))
+        lines.append("  출력 토큰: {:,}".format(self.total_output_tokens))
+        for step, cost in self.step_costs.items():
+            lines.append("  {}: ${:.4f}".format(step, cost))
+        lines.append("  합계: ${:.4f}".format(self.total_cost))
+        if self.max_cost is not None:
+            lines.append("  예산: ${:.2f} (잔여: ${:.4f})".format(
+                self.max_cost, self.max_cost - self.total_cost
+            ))
+        return "\n".join(lines)
+
+
+# 모듈 레벨 cost tracker (process_file에서 초기화)
+_cost_tracker = None  # type: Optional[CostTracker]
+
 
 # ─── 클라이언트 초기화 ──────────────────────────────────
 
@@ -171,6 +327,23 @@ DEFAULT_TAGGING = {
 
 VALIDATED_FIELDS = ["bible_refs", "type", "doctrine_category", "topics"]
 
+# 캐싱된 시스템 프롬프트 (cache_control: ephemeral)
+CACHED_TAG_SYSTEM = [
+    {
+        "type": "text",
+        "text": TAG_SYSTEM_PROMPT,
+        "cache_control": {"type": "ephemeral"},
+    }
+]
+
+CACHED_TAG_SYSTEM_ADVISOR = [
+    {
+        "type": "text",
+        "text": TAG_SYSTEM_PROMPT + ADVISOR_EXTRA,
+        "cache_control": {"type": "ephemeral"},
+    }
+]
+
 
 # ─── 1. 파일명 파싱 ─────────────────────────────────────
 
@@ -217,30 +390,25 @@ DEBUG_JSON_FAIL = os.environ.get("DEBUG_TAGGING", "").lower() in ("1", "true")
 
 def extract_json_from_response(response):
     # type: (...) -> dict
-    # Advisor tool 사용 시 여러 텍스트 블록이 있을 수 있음.
-    # 마지막부터 역순으로 JSON 찾기 — 최종 답변이 맨 뒤에 있음.
     text_blocks = [b.text for b in response.content if b.type == "text" and b.text.strip()]
 
     if not text_blocks:
         raise ValueError("No text blocks in response")
 
-    # 마지막 블록부터 역순으로 JSON 파싱 시도
     for text in reversed(text_blocks):
         try:
             return extract_json(text)
         except json.JSONDecodeError:
             continue
 
-    # 전부 실패 — 디버그 출력
     if DEBUG_JSON_FAIL:
-        print("\n─── JSON 파싱 실패 RAW 응답 ───")
+        print("\n--- JSON 파싱 실패 RAW 응답 ---")
         for i, t in enumerate(text_blocks):
-            print(f"[블록 {i}]: {t[:500]}")
-        print("───────────────────────────")
+            print("[블록 {}]: {}".format(i, t[:500]))
+        print("-------------------------------")
     else:
-        # 마지막 블록 일부라도 보여주기
         last = text_blocks[-1][:200]
-        print(f"    raw: {last!r}")
+        print("    raw: {!r}".format(last))
     raise json.JSONDecodeError("No valid JSON in any text block", text_blocks[-1], 0)
 
 
@@ -252,18 +420,18 @@ def api_call_with_retry(fn, max_retries=TAG_MAX_RETRIES):
         try:
             return fn()
         except json.JSONDecodeError:
-            print(f"  ⚠ JSON 파싱 실패 (시도 {attempt + 1}/{max_retries})")
+            print("  ! JSON 파싱 실패 (시도 {}/{})".format(attempt + 1, max_retries))
         except (anthropic.RateLimitError, anthropic.APIConnectionError) as e:
             if attempt == max_retries - 1:
                 raise
-            print(f"  ⚠ API 오류, 재시도: {e}")
+            print("  ! API 오류, 재시도: {}".format(e))
         except anthropic.APIStatusError as e:
             if e.status_code >= 500 and attempt < max_retries - 1:
-                print(f"  ⚠ 서버 오류({e.status_code}), 재시도")
+                print("  ! 서버 오류({}), 재시도".format(e.status_code))
             else:
                 raise
         except Exception as e:
-            print(f"  ⚠ 오류 (시도 {attempt + 1}/{max_retries}): {e}")
+            print("  ! 오류 (시도 {}/{}): {}".format(attempt + 1, max_retries, e))
             if attempt == max_retries - 1:
                 raise
 
@@ -272,7 +440,7 @@ def api_call_with_retry(fn, max_retries=TAG_MAX_RETRIES):
     return None
 
 
-# ─── 5. 태깅 함수 (모델별) ─────────────────────────────
+# ─── 5. 태깅 함수 (모델별, 프롬프트 캐싱 적용) ──────────
 
 def tag_chunk_sonnet(text):
     # type: (str) -> Optional[dict]
@@ -280,9 +448,11 @@ def tag_chunk_sonnet(text):
         resp = claude.messages.create(
             model=MODEL_SONNET,
             max_tokens=500,
-            system=TAG_SYSTEM_PROMPT,
+            system=CACHED_TAG_SYSTEM,
             messages=[{"role": "user", "content": text}],
         )
+        if _cost_tracker:
+            _cost_tracker.track(MODEL_SONNET, resp.usage)
         return extract_json_from_response(resp)
     return api_call_with_retry(_call)
 
@@ -293,9 +463,11 @@ def tag_chunk_haiku(text):
         resp = claude.messages.create(
             model=MODEL_HAIKU,
             max_tokens=500,
-            system=TAG_SYSTEM_PROMPT,
+            system=CACHED_TAG_SYSTEM,
             messages=[{"role": "user", "content": text}],
         )
+        if _cost_tracker:
+            _cost_tracker.track(MODEL_HAIKU, resp.usage)
         return extract_json_from_response(resp)
     return api_call_with_retry(_call)
 
@@ -306,29 +478,39 @@ def tag_chunk_advised(text):
         resp = claude.beta.messages.create(
             model=MODEL_HAIKU,
             max_tokens=500,
-            system=TAG_SYSTEM_PROMPT + ADVISOR_EXTRA,
+            system=CACHED_TAG_SYSTEM_ADVISOR,
             tools=[ADVISOR_TOOL],
             messages=[{"role": "user", "content": text}],
             betas=["advisor-tool-2026-03-01"],
         )
+        if _cost_tracker:
+            _cost_tracker.track(MODEL_HAIKU, resp.usage)
         return extract_json_from_response(resp)
     return api_call_with_retry(_call)
 
 
 def tag_chunk_sonnet_fields(text, fields):
     # type: (str, List[str]) -> Optional[dict]
-    retag_prompt = TAG_SYSTEM_PROMPT + f"""
+    retag_prompt = TAG_SYSTEM_PROMPT + "\n\n위 필드 중 아래 필드만 추출하라. 나머지는 출력하지 마.\n필요한 필드: {}".format(
+        json.dumps(fields, ensure_ascii=False)
+    )
+    cached_retag_system = [
+        {
+            "type": "text",
+            "text": retag_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 
-위 필드 중 아래 필드만 추출하라. 나머지는 출력하지 마.
-필요한 필드: {json.dumps(fields, ensure_ascii=False)}
-"""
     def _call():
         resp = claude.messages.create(
             model=MODEL_SONNET,
             max_tokens=500,
-            system=retag_prompt,
+            system=cached_retag_system,
             messages=[{"role": "user", "content": text}],
         )
+        if _cost_tracker:
+            _cost_tracker.track(MODEL_SONNET, resp.usage)
         return extract_json_from_response(resp)
     return api_call_with_retry(_call)
 
@@ -341,7 +523,7 @@ _embed_model = None
 def _get_embed_model():
     global _embed_model
     if _embed_model is None:
-        print(f"임베딩 모델 로딩: {EMBED_MODEL} ...")
+        print("임베딩 모델 로딩: {} ...".format(EMBED_MODEL))
         _embed_model = SentenceTransformer(EMBED_MODEL)
         print("임베딩 모델 로딩 완료.")
     return _embed_model
@@ -350,7 +532,7 @@ def _get_embed_model():
 def embed_chunk(text):
     # type: (str) -> List[float]
     model = _get_embed_model()
-    embedding = model.encode(f"query: {text}", normalize_embeddings=True)
+    embedding = model.encode("query: {}".format(text), normalize_embeddings=True)
     return embedding.tolist()
 
 
@@ -374,7 +556,7 @@ PROGRESS_DIR.mkdir(exist_ok=True)
 
 def get_progress_path(filepath):
     # type: (str) -> Path
-    return PROGRESS_DIR / f"{Path(filepath).stem}.jsonl"
+    return PROGRESS_DIR / "{}.jsonl".format(Path(filepath).stem)
 
 
 def load_progress(filepath):
@@ -405,7 +587,75 @@ def save_jsonl(results, filepath):
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
-# ─── 9. 2단계: Sonnet 검증 ──────────────────────────────
+# ─── 9. 비용 추정 (첫 N청크 실측 기반) ──────────────────
+
+def estimate_total_cost(tracker, chunks_done, total_chunks, validation_rate):
+    # type: (CostTracker, int, int, float) -> Dict[str, float]
+    """첫 N청크 Haiku 실측으로 전체 3단계 비용 추정."""
+    if chunks_done == 0:
+        return {"step1": 0, "step2": 0, "step3_best": 0, "step3_worst": 0,
+                "total_best": 0, "total_worst": 0}
+
+    avg_cost_haiku = tracker.total_cost / chunks_done
+
+    # 1단계: Haiku 전체
+    step1 = avg_cost_haiku * total_chunks
+
+    # Sonnet은 Haiku 대비 입력 3x, 출력 3x (가격 기준)
+    # 실제 토큰 수는 비슷하므로 가격 비율로 추정
+    avg_input = tracker.total_input_tokens / chunks_done
+    avg_output = tracker.total_output_tokens / chunks_done
+    avg_cache_read = tracker.total_cache_read_tokens / chunks_done
+
+    sonnet_p = MODEL_PRICING[MODEL_SONNET]
+    # 캐싱 적용 시 Sonnet도 cache hit 기대
+    sonnet_per_chunk = (
+        avg_cache_read * sonnet_p["cache_read"] / 1_000_000
+        + max(0, avg_input - avg_cache_read) * sonnet_p["input"] / 1_000_000
+        + avg_output * sonnet_p["output"] / 1_000_000
+    )
+
+    # 2단계: Sonnet 검증
+    val_chunks = int(total_chunks * validation_rate)
+    step2 = sonnet_per_chunk * val_chunks
+
+    # 3단계: best=재태깅 없음, worst=전체 재태깅
+    step3_worst = sonnet_per_chunk * total_chunks
+
+    return {
+        "step1": step1,
+        "step2": step2,
+        "step3_best": 0.0,
+        "step3_worst": step3_worst,
+        "total_best": step1 + step2,
+        "total_worst": step1 + step2 + step3_worst,
+    }
+
+
+def print_estimate_and_confirm(est, total_chunks, pilot_chunks):
+    # type: (Dict[str, float], int, int) -> bool
+    """비용 추정 출력 후 사용자 확인."""
+    print("\n{}".format("=" * 50))
+    print("  첫 {}청크 실측 기반 전체 비용 추정 ({}청크)".format(pilot_chunks, total_chunks))
+    print("{}".format("=" * 50))
+    print("  1단계 Haiku 태깅:       ${:.2f}".format(est["step1"]))
+    print("  2단계 Sonnet 검증:      ${:.2f}".format(est["step2"]))
+    print("  3단계 Sonnet 재태깅:")
+    print("    - 검증 통과 (best):   ${:.2f}".format(est["step3_best"]))
+    print("    - 전체 재태깅 (worst): ${:.2f}".format(est["step3_worst"]))
+    print("  ────────────────────────")
+    print("  예상 총 비용: ${:.2f} ~ ${:.2f}".format(est["total_best"], est["total_worst"]))
+    print("{}".format("=" * 50))
+
+    try:
+        answer = input("\n  계속 진행하시겠습니까? (y/n): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  중단됨.")
+        return False
+    return answer in ("y", "yes", "예")
+
+
+# ─── 10. 2단계: Sonnet 검증 ─────────────────────────────
 
 def validate_with_sonnet(tagged_chunks, validation_rate):
     # type: (List[dict], float) -> Dict
@@ -421,27 +671,26 @@ def validate_with_sonnet(tagged_chunks, validation_rate):
         if sonnet_result is None:
             continue
 
+        if _cost_tracker:
+            _cost_tracker.check_budget()
+
         haiku_result = item["meta"]
         fields_wrong = []  # type: List[str]
 
-        # bible_refs: 집합 비교
         h_refs = set(haiku_result.get("bible_refs", []))
         s_refs = set(sonnet_result.get("bible_refs", []))
         if h_refs != s_refs:
             mismatches["bible_refs"] += 1
             fields_wrong.append("bible_refs")
 
-        # type: 정확 비교
         if haiku_result.get("type") != sonnet_result.get("type"):
             mismatches["type"] += 1
             fields_wrong.append("type")
 
-        # doctrine_category: 정확 비교
         if haiku_result.get("doctrine_category") != sonnet_result.get("doctrine_category"):
             mismatches["doctrine_category"] += 1
             fields_wrong.append("doctrine_category")
 
-        # topics: 50% 이상 겹치면 OK
         h_topics = set(haiku_result.get("topics", []))
         s_topics = set(sonnet_result.get("topics", []))
         if s_topics and len(h_topics & s_topics) / len(s_topics) < 0.5:
@@ -457,7 +706,8 @@ def validate_with_sonnet(tagged_chunks, validation_rate):
             })
 
         if (idx + 1) % 20 == 0:
-            print(f"    검증 중: {idx + 1}/{total_checked}")
+            cost_info = " | {}".format(_cost_tracker.cost_str()) if _cost_tracker else ""
+            print("    검증 중: {}/{}{}".format(idx + 1, total_checked, cost_info))
 
     rates = {}  # type: Dict[str, float]
     for field in VALIDATED_FIELDS:
@@ -470,12 +720,12 @@ def validate_with_sonnet(tagged_chunks, validation_rate):
     }
 
 
-# ─── 10. 3단계: 문제 필드 재태깅 ────────────────────────
+# ─── 11. 3단계: 문제 필드 재태깅 ────────────────────────
 
 def retag_failed_fields(tagged_chunks, failed_fields):
     # type: (List[dict], List[str]) -> List[dict]
-    print(f"  재태깅 대상 필드: {', '.join(failed_fields)}")
-    print(f"  전체 {len(tagged_chunks)}개 청크의 해당 필드만 수정")
+    print("  재태깅 대상 필드: {}".format(", ".join(failed_fields)))
+    print("  전체 {}개 청크의 해당 필드만 수정".format(len(tagged_chunks)))
 
     for idx, item in enumerate(tagged_chunks):
         partial = tag_chunk_sonnet_fields(item["text"], failed_fields)
@@ -484,13 +734,17 @@ def retag_failed_fields(tagged_chunks, failed_fields):
                 if field in partial:
                     item["meta"][field] = partial[field]
 
+        if _cost_tracker:
+            _cost_tracker.check_budget()
+
         if (idx + 1) % 50 == 0:
-            print(f"    재태깅 중: {idx + 1}/{len(tagged_chunks)}")
+            cost_info = " | {}".format(_cost_tracker.cost_str()) if _cost_tracker else ""
+            print("    재태깅 중: {}/{}{}".format(idx + 1, len(tagged_chunks), cost_info))
 
     return tagged_chunks
 
 
-# ─── 11. 메인 파이프라인 ─────────────────────────────────
+# ─── 12. 메인 파이프라인 ─────────────────────────────────
 
 def build_record(chunk, meta, title, author, chunk_index, embedding):
     # type: (str, dict, str, str, int, List[float]) -> dict
@@ -511,27 +765,45 @@ def build_record(chunk, meta, title, author, chunk_index, embedding):
 
 def process_file(filepath, args):
     # type: (str, ...) -> None
+    global _cost_tracker
+
     author, title = parse_filename(filepath)
     model = args.model
     dry_run = args.dry_run
 
-    print(f"\n{'=' * 60}")
-    print(f"  {title} (저자: {author})")
-    print(f"   파일: {filepath}")
-    print(f"   모드: {model}")
-    print(f"{'=' * 60}")
+    # 비용 추적 초기화
+    log_path = str(PROGRESS_DIR / "usage_{}.jsonl".format(title))
+    _cost_tracker = CostTracker(
+        max_cost=args.max_cost,
+        log_path=log_path,
+    )
+
+    print("\n{}".format("=" * 60))
+    print("  {} (저자: {})".format(title, author))
+    print("  파일: {}".format(filepath))
+    print("  모드: {}".format(model))
+    if args.max_cost is not None:
+        print("  예산: ${:.2f}".format(args.max_cost))
+    print("  토큰 로그: {}".format(log_path))
+    print("{}".format("=" * 60))
 
     with open(filepath, "r", encoding="utf-8") as f:
         text = f.read()
-    print(f"   원문 길이: {len(text):,}자")
+    print("  원문 길이: {:,}자".format(len(text)))
 
     chunks = chunk_text(text)
-    print(f"   청크 수: {len(chunks)}개")
+    print("  청크 수: {}개".format(len(chunks)))
 
-    if model == "supervised":
-        _process_supervised(filepath, chunks, title, author, args)
-    else:
-        _process_single_model(filepath, chunks, title, author, args)
+    try:
+        if model == "supervised":
+            _process_supervised(filepath, chunks, title, author, args)
+        else:
+            _process_single_model(filepath, chunks, title, author, args)
+    except BudgetExceededError as e:
+        print("\n  !! {}".format(e))
+        print("  진행 상황은 저장되어 있으므로 --max-cost를 올려서 재시작 가능합니다.")
+    finally:
+        print("\n{}".format(_cost_tracker.summary()))
 
 
 def _process_single_model(filepath, chunks, title, author, args):
@@ -545,13 +817,17 @@ def _process_single_model(filepath, chunks, title, author, args):
         "advised": tag_chunk_advised,
     }[model]
 
+    if _cost_tracker:
+        _cost_tracker.set_step("태깅({})".format(model))
+
     existing = load_progress(filepath)
     start_idx = len(existing)
     if start_idx > 0:
-        print(f"   ↳ 이전 진행분 {start_idx}개 발견, 이어서 처리")
+        print("   -> 이전 진행분 {}개 발견, 이어서 처리".format(start_idx))
 
     batch = []  # type: List[dict]
     t_start = time.time()
+    pilot_chunks = min(10, len(chunks) - start_idx)
 
     for i in range(start_idx, len(chunks)):
         chunk = chunks[i]
@@ -560,6 +836,17 @@ def _process_single_model(filepath, chunks, title, author, args):
         meta = tag_fn(chunk)
         if meta is None:
             meta = dict(DEFAULT_TAGGING)
+
+        if _cost_tracker:
+            _cost_tracker.check_budget()
+
+        # 첫 10청크 후 비용 추정
+        done = i - start_idx + 1
+        if done == pilot_chunks and pilot_chunks > 0 and len(chunks) > pilot_chunks + start_idx:
+            est = estimate_total_cost(_cost_tracker, done, len(chunks), 0)
+            if not print_estimate_and_confirm(est, len(chunks), pilot_chunks):
+                print("  사용자 중단.")
+                return
 
         embedding = dummy_embedding() if dry_run else embed_chunk(chunk)
         record = build_record(chunk, meta, title, author, i, embedding)
@@ -573,31 +860,32 @@ def _process_single_model(filepath, chunks, title, author, args):
                 batch = []
 
         elapsed = time.time() - t_chunk
-        done = i - start_idx + 1
-        if i - start_idx < 3 or done % 10 == 0:
+        if done <= 3 or done % 10 == 0:
             total = time.time() - t_start
             avg = total / done
             eta_min = avg * (len(chunks) - i - 1) / 60
-            print(f"   [{i + 1}/{len(chunks)}] {elapsed:.1f}s (평균 {avg:.1f}s, ETA {eta_min:.0f}분)")
+            cost_info = " | {}".format(_cost_tracker.cost_str()) if _cost_tracker else ""
+            print("   [{}/{}] {:.1f}s (평균 {:.1f}s, ETA {:.0f}분){}".format(
+                i + 1, len(chunks), elapsed, avg, eta_min, cost_info
+            ))
 
     if batch and not dry_run:
         upload_batch(batch)
 
-    print(f"\n   ✓ 완료! ({len(chunks)}개 청크)")
+    print("\n   완료! ({}개 청크)".format(len(chunks)))
 
 
 def _process_supervised(filepath, chunks, title, author, args):
     # type: (str, List[str], str, str, ...) -> None
     """3단계 감시형 태깅 파이프라인.
 
-    1단계: Haiku 단독 (advisor 제거 — 신학 텍스트는 전부 어려워서 advisor가
-           매번 호출돼 비용 폭탄. Sonnet 검증/재태깅이 품질 방어선.)
+    1단계: Haiku 단독 (advisor 제거)
     2단계: Sonnet이 랜덤 샘플 검증.
     3단계: 불일치율 높은 필드만 Sonnet으로 재태깅.
     """
     dry_run = args.dry_run
     output_dir = str(PROGRESS_DIR)
-    step1_path = os.path.join(output_dir, f"step1_{title}.jsonl")
+    step1_path = os.path.join(output_dir, "step1_{}.jsonl".format(title))
 
     # 1단계 재개: 이전 step1 결과 있으면 이어서
     tagged_chunks = []  # type: List[dict]
@@ -608,16 +896,21 @@ def _process_supervised(filepath, chunks, title, author, args):
                     if line.strip():
                         tagged_chunks.append(json.loads(line))
             if tagged_chunks:
-                print(f"   ↳ 이전 1단계 진행분 {len(tagged_chunks)}개 발견, 이어서 처리")
+                print("   -> 이전 1단계 진행분 {}개 발견, 이어서 처리".format(len(tagged_chunks)))
         except Exception as e:
-            print(f"   ⚠ 이전 진행분 로드 실패 ({e}), 처음부터 시작")
+            print("   ! 이전 진행분 로드 실패 ({}), 처음부터 시작".format(e))
             tagged_chunks = []
 
     start_idx = len(tagged_chunks)
 
     # ── 1단계: Haiku 단독 태깅 ──
-    print(f"\n[1단계] Haiku 태깅 (advisor 제거, 비용 최적화)")
+    print("\n[1단계] Haiku 태깅 (프롬프트 캐싱 적용)")
+    if _cost_tracker:
+        _cost_tracker.set_step("1단계-Haiku")
     t_start = time.time()
+
+    pilot_chunks = min(10, len(chunks) - start_idx)
+    pilot_done = False
 
     for i in range(start_idx, len(chunks)):
         chunk = chunks[i]
@@ -627,6 +920,9 @@ def _process_supervised(filepath, chunks, title, author, args):
         if meta is None:
             meta = dict(DEFAULT_TAGGING)
 
+        if _cost_tracker:
+            _cost_tracker.check_budget()
+
         record = {
             "chunk_index": i,
             "text": chunk,
@@ -634,56 +930,78 @@ def _process_supervised(filepath, chunks, title, author, args):
         }
         tagged_chunks.append(record)
 
-        # 청크별로 append 저장 — Ctrl+C 안전
         with open(step1_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
         done = i - start_idx + 1
+
+        # 첫 10청크 실측 후 전체 비용 추정 → 사용자 확인
+        if (not pilot_done and done == pilot_chunks
+                and pilot_chunks > 0 and len(chunks) > pilot_chunks + start_idx):
+            pilot_done = True
+            est = estimate_total_cost(
+                _cost_tracker, done, len(chunks), args.validation_rate
+            )
+            if not print_estimate_and_confirm(est, len(chunks), pilot_chunks):
+                print("  사용자 중단. 1단계 진행분 {}개 저장됨.".format(len(tagged_chunks)))
+                return
+
         if done <= 3 or done % 10 == 0:
             total = time.time() - t_start
             avg = total / done
             eta_sec = avg * (len(chunks) - i - 1)
             eta_min = eta_sec / 60
-            print(f"   [{i + 1}/{len(chunks)}] {elapsed:.1f}s (평균 {avg:.1f}s, ETA {eta_min:.0f}분)")
+            cost_info = " | {}".format(_cost_tracker.cost_str()) if _cost_tracker else ""
+            print("   [{}/{}] {:.1f}s (평균 {:.1f}s, ETA {:.0f}분){}".format(
+                i + 1, len(chunks), elapsed, avg, eta_min, cost_info
+            ))
 
-    print(f"   ✓ 1단계 완료: {len(tagged_chunks)}개 → {step1_path}")
+    print("   1단계 완료: {}개 -> {}".format(len(tagged_chunks), step1_path))
 
     # ── 2단계: Sonnet 검증 ──
-    print(f"\n[2단계] Sonnet 검증 ({args.validation_rate * 100:.0f}% 샘플)")
+    print("\n[2단계] Sonnet 검증 ({:.0f}% 샘플, 프롬프트 캐싱 적용)".format(
+        args.validation_rate * 100
+    ))
+    if _cost_tracker:
+        _cost_tracker.set_step("2단계-Sonnet검증")
     validation = validate_with_sonnet(tagged_chunks, args.validation_rate)
 
     total_checked = validation["total_checked"]
-    print(f"\n{'=' * 44}")
-    print(f"[2단계] Sonnet 검증 결과 ({total_checked}/{len(tagged_chunks)} 샘플)")
+    print("\n{}".format("=" * 44))
+    print("[2단계] Sonnet 검증 결과 ({}/{} 샘플)".format(total_checked, len(tagged_chunks)))
     print()
 
     failed_fields = []  # type: List[str]
     for field, rate in validation["rates"].items():
-        status = "✗ 재태깅 필요!" if rate >= args.mismatch_threshold else "✓ OK"
-        print(f"  {field:>22s}: {rate * 100:5.1f}% 불일치  {status}")
+        status = "! 재태깅 필요!" if rate >= args.mismatch_threshold else "OK"
+        print("  {:>22s}: {:5.1f}% 불일치  {}".format(field, rate * 100, status))
         if rate >= args.mismatch_threshold:
             failed_fields.append(field)
 
     if failed_fields:
-        print(f"\n→ {', '.join(failed_fields)} 필드만 Sonnet으로 재태깅합니다.")
+        print("\n-> {}, {} 필드만 Sonnet으로 재태깅합니다.".format(
+            ", ".join(failed_fields), len(failed_fields)
+        ))
     else:
-        print(f"\n→ 모든 필드 검증 통과!")
-    print(f"{'=' * 44}")
+        print("\n-> 모든 필드 검증 통과!")
+    print("{}".format("=" * 44))
 
-    validation_path = os.path.join(output_dir, f"validation_{title}.json")
+    validation_path = os.path.join(output_dir, "validation_{}.json".format(title))
     with open(validation_path, "w", encoding="utf-8") as f:
         json.dump(validation, f, ensure_ascii=False, indent=2)
 
     # ── 3단계: 문제 필드 재태깅 ──
     if failed_fields:
-        print(f"\n[3단계] Sonnet 재태깅: {', '.join(failed_fields)}")
+        print("\n[3단계] Sonnet 재태깅: {} (프롬프트 캐싱 적용)".format(", ".join(failed_fields)))
+        if _cost_tracker:
+            _cost_tracker.set_step("3단계-Sonnet재태깅")
         tagged_chunks = retag_failed_fields(tagged_chunks, failed_fields)
-        print(f"   ✓ 3단계 완료")
+        print("   3단계 완료")
     else:
-        print(f"\n[3단계] 스킵 — 모든 필드 검증 통과!")
+        print("\n[3단계] 스킵 - 모든 필드 검증 통과!")
 
     # ── 임베딩 + Supabase 업로드 ──
-    print(f"\n[업로드] 임베딩 생성 + Supabase 업로드")
+    print("\n[업로드] 임베딩 생성 + Supabase 업로드")
     batch = []  # type: List[dict]
 
     for item in tagged_chunks:
@@ -703,42 +1021,23 @@ def _process_supervised(filepath, chunks, title, author, args):
                 batch = []
 
         if (i + 1) % 50 == 0:
-            print(f"   업로드 중: {i + 1}/{len(tagged_chunks)}")
+            print("   업로드 중: {}/{}".format(i + 1, len(tagged_chunks)))
 
     if batch and not dry_run:
         upload_batch(batch)
 
     # ── 최종 저장 ──
-    final_path = os.path.join(output_dir, f"final_{title}.jsonl")
+    final_path = os.path.join(output_dir, "final_{}.jsonl".format(title))
     save_jsonl(tagged_chunks, final_path)
 
-    # ── 비용 요약 ──
-    n = len(chunks)
-    haiku_cost = n * 0.0005
-    sonnet_val_cost = total_checked * 0.004
-    sonnet_retag_cost = n * 0.002 if failed_fields else 0
-    total_cost = haiku_cost + sonnet_val_cost + sonnet_retag_cost
-    sonnet_only_cost = n * 0.004
-    saving = (1 - total_cost / sonnet_only_cost) * 100 if sonnet_only_cost > 0 else 0
-
-    print(f"\n{'─' * 40}")
-    print(f"  1단계 (Haiku 단독):    ~${haiku_cost:.2f}")
-    print(f"  2단계 (Sonnet 검증):   ~${sonnet_val_cost:.2f}")
-    if failed_fields:
-        print(f"  3단계 (Sonnet 재태깅): ~${sonnet_retag_cost:.2f}")
-    print(f"  합계:                  ~${total_cost:.2f}")
-    print(f"  Sonnet 단독 대비:      ~${sonnet_only_cost:.2f}")
-    print(f"  절감:                  ~{saving:.0f}%")
-    print(f"{'=' * 60}")
-
-    print(f"\n   ✓ 완료! ({n}개 청크)")
+    print("\n   완료! ({}개 청크)".format(len(chunks)))
 
 
 # ─── CLI ─────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
-        description="3단계 감시형 태깅: TXT → 청킹 → 태깅 → 임베딩 → Supabase",
+        description="3단계 감시형 태깅: TXT -> 청킹 -> 태깅 -> 임베딩 -> Supabase",
     )
     parser.add_argument("--file", help="단일 TXT 파일 경로")
     parser.add_argument("--dir", help="TXT 파일이 있는 디렉토리")
@@ -752,7 +1051,7 @@ def main():
             "sonnet(비쌈, 전체 Sonnet) | "
             "haiku(저렴, 전체 Haiku) | "
             "advised(실험: Haiku+Opus 자문, 신학 텍스트에는 비용 폭탄) | "
-            "supervised(3단계: Haiku 태깅 → Sonnet 검증 → 문제 필드만 Sonnet 재태깅, 기본값)"
+            "supervised(3단계: Haiku 태깅 -> Sonnet 검증 -> 문제 필드만 Sonnet 재태깅, 기본값)"
         ),
     )
     parser.add_argument(
@@ -766,6 +1065,12 @@ def main():
         type=float,
         default=0.3,
         help="이 비율 이상 불일치하면 해당 카테고리 전체 재태깅 (기본 30%%)",
+    )
+    parser.add_argument(
+        "--max-cost",
+        type=float,
+        default=None,
+        help="최대 허용 비용 (USD). 초과시 자동 중단. 예: --max-cost 10.0",
     )
     args = parser.parse_args()
 
@@ -784,19 +1089,23 @@ def main():
         print("처리할 TXT 파일이 없습니다.")
         sys.exit(1)
 
-    print(f"\n총 {len(files)}개 파일")
-    print(f"모드: {args.model}")
+    print("\n총 {}개 파일".format(len(files)))
+    print("모드: {}".format(args.model))
     if args.model == "supervised":
-        print(f"검증 비율: {args.validation_rate * 100:.0f}%  |  불일치 기준: {args.mismatch_threshold * 100:.0f}%")
+        print("검증 비율: {:.0f}%  |  불일치 기준: {:.0f}%".format(
+            args.validation_rate * 100, args.mismatch_threshold * 100
+        ))
+    if args.max_cost is not None:
+        print("예산 한도: ${:.2f}".format(args.max_cost))
     if args.dry_run:
-        print("⚡ DRY-RUN 모드: Supabase 업로드 안 함")
+        print("DRY-RUN 모드: Supabase 업로드 안 함")
 
     for filepath in files:
         process_file(filepath, args)
 
-    print(f"\n{'=' * 60}")
-    print("✅ 전체 완료!")
-    print(f"{'=' * 60}")
+    print("\n{}".format("=" * 60))
+    print("전체 완료!")
+    print("{}".format("=" * 60))
 
 
 if __name__ == "__main__":
