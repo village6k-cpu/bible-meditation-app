@@ -588,38 +588,64 @@ def _process_single_model(filepath, chunks, title, author, args):
 
 def _process_supervised(filepath, chunks, title, author, args):
     # type: (str, List[str], str, str, ...) -> None
-    """3단계 감시형 태깅 파이프라인"""
+    """3단계 감시형 태깅 파이프라인.
+
+    1단계: Haiku 단독 (advisor 제거 — 신학 텍스트는 전부 어려워서 advisor가
+           매번 호출돼 비용 폭탄. Sonnet 검증/재태깅이 품질 방어선.)
+    2단계: Sonnet이 랜덤 샘플 검증.
+    3단계: 불일치율 높은 필드만 Sonnet으로 재태깅.
+    """
     dry_run = args.dry_run
     output_dir = str(PROGRESS_DIR)
+    step1_path = os.path.join(output_dir, f"step1_{title}.jsonl")
 
-    # ── 1단계: Haiku + Opus Advisor ──
-    print(f"\n[1단계] Haiku + Opus Advisor 태깅")
+    # 1단계 재개: 이전 step1 결과 있으면 이어서
     tagged_chunks = []  # type: List[dict]
+    if os.path.exists(step1_path):
+        try:
+            with open(step1_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        tagged_chunks.append(json.loads(line))
+            if tagged_chunks:
+                print(f"   ↳ 이전 1단계 진행분 {len(tagged_chunks)}개 발견, 이어서 처리")
+        except Exception as e:
+            print(f"   ⚠ 이전 진행분 로드 실패 ({e}), 처음부터 시작")
+            tagged_chunks = []
+
+    start_idx = len(tagged_chunks)
+
+    # ── 1단계: Haiku 단독 태깅 ──
+    print(f"\n[1단계] Haiku 태깅 (advisor 제거, 비용 최적화)")
     t_start = time.time()
 
-    for i, chunk in enumerate(chunks):
+    for i in range(start_idx, len(chunks)):
+        chunk = chunks[i]
         t_chunk = time.time()
-        meta = tag_chunk_advised(chunk)
+        meta = tag_chunk_haiku(chunk)
         elapsed = time.time() - t_chunk
         if meta is None:
             meta = dict(DEFAULT_TAGGING)
 
-        tagged_chunks.append({
+        record = {
             "chunk_index": i,
             "text": chunk,
             "meta": meta,
-        })
+        }
+        tagged_chunks.append(record)
 
-        # 처음 3개는 매번, 그 뒤는 10개마다 출력
-        if i < 3 or (i + 1) % 10 == 0:
+        # 청크별로 append 저장 — Ctrl+C 안전
+        with open(step1_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        done = i - start_idx + 1
+        if done <= 3 or done % 10 == 0:
             total = time.time() - t_start
-            avg = total / (i + 1)
+            avg = total / done
             eta_sec = avg * (len(chunks) - i - 1)
             eta_min = eta_sec / 60
             print(f"   [{i + 1}/{len(chunks)}] {elapsed:.1f}s (평균 {avg:.1f}s, ETA {eta_min:.0f}분)")
 
-    step1_path = os.path.join(output_dir, f"step1_{title}.jsonl")
-    save_jsonl(tagged_chunks, step1_path)
     print(f"   ✓ 1단계 완료: {len(tagged_chunks)}개 → {step1_path}")
 
     # ── 2단계: Sonnet 검증 ──
@@ -696,7 +722,7 @@ def _process_supervised(filepath, chunks, title, author, args):
     saving = (1 - total_cost / sonnet_only_cost) * 100 if sonnet_only_cost > 0 else 0
 
     print(f"\n{'─' * 40}")
-    print(f"  1단계 (Haiku+Advisor): ~${haiku_cost:.2f}")
+    print(f"  1단계 (Haiku 단독):    ~${haiku_cost:.2f}")
     print(f"  2단계 (Sonnet 검증):   ~${sonnet_val_cost:.2f}")
     if failed_fields:
         print(f"  3단계 (Sonnet 재태깅): ~${sonnet_retag_cost:.2f}")
@@ -721,7 +747,13 @@ def main():
         "--model",
         choices=["sonnet", "haiku", "advised", "supervised"],
         default="supervised",
-        help="태깅 모델: sonnet(비쌈) | haiku(저렴) | advised(하이쿠+오퍼스) | supervised(3단계 감시형, 기본값)",
+        help=(
+            "태깅 모델: "
+            "sonnet(비쌈, 전체 Sonnet) | "
+            "haiku(저렴, 전체 Haiku) | "
+            "advised(실험: Haiku+Opus 자문, 신학 텍스트에는 비용 폭탄) | "
+            "supervised(3단계: Haiku 태깅 → Sonnet 검증 → 문제 필드만 Sonnet 재태깅, 기본값)"
+        ),
     )
     parser.add_argument(
         "--validation-rate",
