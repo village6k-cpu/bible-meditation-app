@@ -68,6 +68,10 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
         <Stack.Screen name="note/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="entry/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="entry/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="day/[date]" />
+        <Stack.Screen name="export" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

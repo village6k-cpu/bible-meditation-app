@@ -10,34 +10,9 @@ export async function initDatabases(): Promise<void> {
     return;
   }
 
-  // Copy bible.db from assets to document directory
-  const FileSystem = require('expo-file-system');
-  const { Asset } = require('expo-asset');
-
-  const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
-
-  try {
-    const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
-    if (!fileInfo.exists) {
-      const asset = Asset.fromModule(require('../assets/bible/bible.db'));
-      await asset.downloadAsync();
-      if (asset.localUri) {
-        await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
-      }
-    }
-  } catch {
-    // Fallback: try File API if available
-    const asset = require('expo-asset').Asset.fromModule(require('../assets/bible/bible.db'));
-    await asset.downloadAsync();
-    if (asset.localUri) {
-      await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
-    }
-  }
-
-  bibleDb = await SQLite.openDatabaseAsync('bible.db');
+  // user.db first: personal records must not depend on the bible asset copy succeeding
   userDb = await SQLite.openDatabaseAsync('user.db');
 
-  // Create user tables
   await userDb.execAsync(`
     CREATE TABLE IF NOT EXISTS user_profile (
       id INTEGER PRIMARY KEY DEFAULT 1,
@@ -75,7 +50,63 @@ export async function initDatabases(): Promise<void> {
       date TEXT PRIMARY KEY,
       completed INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      type TEXT NOT NULL CHECK(type IN ('moment','media','writing','meal','workout')),
+      media_kind TEXT,
+      title TEXT,
+      quote TEXT,
+      body TEXT,
+      link TEXT,
+      photo_uri TEXT,
+      minutes INTEGER,
+      meal_slot TEXT,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      tags TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date);
+    CREATE INDEX IF NOT EXISTS idx_entries_type ON entries(type, media_kind);
+
+    CREATE TABLE IF NOT EXISTS day_logs (
+      date TEXT PRIMARY KEY,
+      day_title TEXT,
+      workout_done INTEGER NOT NULL DEFAULT 0,
+      diet_kept INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS todos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      content TEXT NOT NULL,
+      done INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_todos_date ON todos(date);
   `);
+
+  // Bible database: copied from bundled assets on first launch.
+  // SDK 54 moved the callback file-system API to 'expo-file-system/legacy'.
+  try {
+    const FileSystem = require('expo-file-system/legacy');
+    const { Asset } = require('expo-asset');
+
+    const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
+    const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
+    if (!fileInfo.exists) {
+      const asset = Asset.fromModule(require('../assets/bible/bible.db'));
+      await asset.downloadAsync();
+      if (asset.localUri) {
+        await FileSystem.copyAsync({ from: asset.localUri, to: bibleDbPath });
+      }
+    }
+    bibleDb = await SQLite.openDatabaseAsync('bible.db');
+  } catch (e) {
+    console.warn('Bible DB init failed:', e);
+  }
 }
 
 export function getBibleDb(): SQLite.SQLiteDatabase | null {

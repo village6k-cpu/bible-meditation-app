@@ -15,8 +15,32 @@ export function formatDateKo(date: Date = new Date()): string {
   return `${month}월 ${day}일 ${dayName}`;
 }
 
+// Local calendar date (never UTC): a diary entry written at 11pm belongs to that day.
 export function getISODate(date: Date = new Date()): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function parseISODate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function formatISODateKo(iso: string): string {
+  return formatDateKo(parseISODate(iso));
+}
+
+export function addDays(iso: string, n: number): string {
+  const d = parseISODate(iso);
+  d.setDate(d.getDate() + n);
+  return getISODate(d);
+}
+
+export function daysBetween(fromIso: string, toIso: string): number {
+  const ms = parseISODate(toIso).getTime() - parseISODate(fromIso).getTime();
+  return Math.round(ms / 86400000);
 }
 
 export function getWeekDates(): Date[] {
