@@ -39,15 +39,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="day"
-        options={{
-          title: '하루',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="today-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="bible"
         options={{
           title: '성경',
@@ -57,20 +48,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="music"
         options={{
-          title: '서재',
+          title: '음악',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library-outline" size={size} color={color} />
+            <Ionicons name="musical-note-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="rhythm"
+        name="notes"
         options={{
-          title: '리듬',
+          title: '노트',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pulse-outline" size={size} color={color} />
+            <Ionicons name="document-text-outline" size={size} color={color} />
           ),
         }}
       />

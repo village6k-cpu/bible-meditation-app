@@ -3,7 +3,6 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, fonts, spacing } from '../../lib/theme';
-import { parseSqliteUtc } from '../../lib/utils';
 import { getNote, updateNote, deleteNote, Note } from '../../lib/bible-data';
 
 export default function NoteDetailScreen() {
@@ -39,7 +38,7 @@ export default function NoteDetailScreen() {
 
   if (!note) return null;
 
-  const date = parseSqliteUtc(note.created_at);
+  const date = new Date(note.created_at);
   const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`;
 
   return (

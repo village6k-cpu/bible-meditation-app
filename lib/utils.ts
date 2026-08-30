@@ -15,38 +15,8 @@ export function formatDateKo(date: Date = new Date()): string {
   return `${month}월 ${day}일 ${dayName}`;
 }
 
-// Local calendar date (never UTC): a diary entry written at 11pm belongs to that day.
 export function getISODate(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-// SQLite datetime('now') stores UTC as 'YYYY-MM-DD HH:MM:SS' with no zone marker;
-// parse it as UTC so local getters show the user's wall-clock time
-export function parseSqliteUtc(dt: string): Date {
-  return new Date(dt.includes('T') ? dt : `${dt.replace(' ', 'T')}Z`);
-}
-
-export function parseISODate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-export function formatISODateKo(iso: string): string {
-  return formatDateKo(parseISODate(iso));
-}
-
-export function addDays(iso: string, n: number): string {
-  const d = parseISODate(iso);
-  d.setDate(d.getDate() + n);
-  return getISODate(d);
-}
-
-export function daysBetween(fromIso: string, toIso: string): number {
-  const ms = parseISODate(toIso).getTime() - parseISODate(fromIso).getTime();
-  return Math.round(ms / 86400000);
+  return date.toISOString().split('T')[0];
 }
 
 export function getWeekDates(): Date[] {

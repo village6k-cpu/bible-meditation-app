@@ -1,22 +1,10 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { colors, fonts, spacing, typography } from '../../lib/theme';
 import { formatDateKo, getGreeting, getISODate, getWeekDates } from '../../lib/utils';
 import { useAppStore } from '../../lib/store';
-import {
-  Entry,
-  HabitDay,
-  getDailyPick,
-  getHabitRange,
-  getOnThisDay,
-  getTodayEntryCount,
-  photoUriToAbsolute,
-  relativeDaysLabel,
-} from '../../lib/journal-db';
-import { MEDIA_KIND_LABELS } from '../../lib/journal-utils';
 import {
   getRandomVerse,
   getDailyReadings,
@@ -36,7 +24,6 @@ import { AddReadingModal } from '../../components/AddReadingModal';
 import { MiniPlayer } from '../../components/MiniPlayer';
 
 export default function HomeScreen() {
-  const router = useRouter();
   const userName = useAppStore((s) => s.userName);
   const [dailyVerse, setDailyVerse] = useState<(Verse & { book_name: string }) | null>(null);
   const [showVerseDetails, setShowVerseDetails] = useState(false);
@@ -44,44 +31,19 @@ export default function HomeScreen() {
   const [weekHistory, setWeekHistory] = useState<Record<string, boolean>>({});
   const [noteText, setNoteText] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [todayCount, setTodayCount] = useState(0);
-  const [todayHabit, setTodayHabit] = useState<HabitDay | null>(null);
-  const [resurfaced, setResurfaced] = useState<Entry | null>(null);
-  const [isOnThisDay, setIsOnThisDay] = useState(false);
 
-  // The date is computed inside each load/handler at call time: tab screens stay
-  // mounted across midnight, so a render-scoped constant would freeze on yesterday
+  const today = getISODate();
+
   async function loadData() {
-    try {
-      const verse = await getRandomVerse();
-      setDailyVerse(verse);
+    const verse = await getRandomVerse();
+    setDailyVerse(verse);
 
-      await loadReadings();
-      await loadWeekHistory();
-      await loadJournal();
-    } catch (e) {
-      console.warn('Home load failed:', e);
-    }
-  }
-
-  async function loadJournal() {
-    const today = getISODate();
-    setTodayCount(await getTodayEntryCount(today));
-    const habits = await getHabitRange(today, today);
-    setTodayHabit(habits[today] ?? null);
-
-    const onThisDay = await getOnThisDay(today);
-    if (onThisDay) {
-      setResurfaced(onThisDay);
-      setIsOnThisDay(true);
-    } else {
-      setResurfaced(await getDailyPick(today));
-      setIsOnThisDay(false);
-    }
+    await loadReadings();
+    await loadWeekHistory();
   }
 
   async function loadReadings() {
-    const r = await getDailyReadings(getISODate());
+    const r = await getDailyReadings(today);
     setReadings(r);
   }
 
@@ -102,7 +64,6 @@ export default function HomeScreen() {
     await loadReadings();
 
     // Check if all done → mark day completed
-    const today = getISODate();
     const updated = await getDailyReadings(today);
     if (updated.length > 0 && updated.every((r) => r.completed)) {
       await markDayCompleted(today);
@@ -111,7 +72,7 @@ export default function HomeScreen() {
   }
 
   async function handleAddReading(bookId: number, startChapter: number, endChapter: number) {
-    await addDailyReading(getISODate(), bookId, startChapter, endChapter);
+    await addDailyReading(today, bookId, startChapter, endChapter);
     await loadReadings();
   }
 
@@ -125,53 +86,12 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={typography.dateText}>{formatDateKo()}</Text>
-            <Text style={styles.greeting}>
-              <Text style={{ fontFamily: fonts.sansMedium }}>{userName}</Text>
-              {'님, '}
-              {getGreeting()}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={() => router.push('/entry/new')}
-            hitSlop={8}
-          >
-            <Ionicons name="add" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* 오늘 요약 */}
-        <TouchableOpacity
-          style={styles.todayStrip}
-          onPress={() => router.push(`/day/${getISODate()}`)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.todayStripText}>오늘의 기록 {todayCount}</Text>
-          <View style={styles.todayStripDots}>
-            {(
-              [
-                ['운동', todayHabit?.workout === true, false],
-                ['식단', todayHabit?.diet === true, todayHabit?.diet === false],
-                ['묵상', todayHabit?.meditation === true, false],
-              ] as [string, boolean, boolean][]
-            ).map(([label, on, missed]) => (
-              <View key={label} style={styles.todayStripItem}>
-                <View
-                  style={[
-                    styles.todayStripDot,
-                    on && styles.todayStripDotOn,
-                    missed && styles.todayStripDotMissed,
-                  ]}
-                />
-                <Text style={styles.todayStripLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-          <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
-        </TouchableOpacity>
+        <Text style={typography.dateText}>{formatDateKo()}</Text>
+        <Text style={styles.greeting}>
+          <Text style={{ fontFamily: fonts.sansMedium }}>{userName}</Text>
+          {'님, '}
+          {getGreeting()}
+        </Text>
 
         {/* Divider */}
         <View style={styles.divider} />
@@ -195,44 +115,6 @@ export default function HomeScreen() {
               </View>
             )}
             <Text style={styles.tapHint}>탭하여 관련 자료 보기</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* 다시 꺼내 읽기 */}
-        <SectionLabel label={isOnThisDay ? '그날의 기록' : '다시 꺼내 읽기'} />
-        {resurfaced ? (
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push(`/entry/${resurfaced.id}`)}
-          >
-            {resurfaced.quote || resurfaced.body || resurfaced.title ? (
-              <Text style={styles.resurfaceText} numberOfLines={4}>
-                {resurfaced.quote ?? resurfaced.body ?? resurfaced.title}
-              </Text>
-            ) : null}
-            {resurfaced.photo_uri && !(resurfaced.quote || resurfaced.body) ? (
-              <Image
-                source={{ uri: photoUriToAbsolute(resurfaced.photo_uri) ?? undefined }}
-                style={styles.resurfacePhoto}
-              />
-            ) : null}
-            <Text style={styles.resurfaceCaption}>
-              {relativeDaysLabel(resurfaced.date, getISODate())}
-              {resurfaced.title && resurfaced.quote
-                ? ` · ${
-                    resurfaced.media_kind ? MEDIA_KIND_LABELS[resurfaced.media_kind] : ''
-                  } 「${resurfaced.title}」`
-                : ''}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/entry/new')}>
-            <Text style={styles.resurfaceEmpty}>
-              기록이 쌓이면 이곳에서 다시 만나요{'\n'}오늘의 첫 기록을 남겨보세요
-            </Text>
           </TouchableOpacity>
         )}
 
@@ -299,87 +181,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.screenPadding,
     paddingTop: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  captureButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  todayStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-  },
-  todayStripText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 12.5,
-    color: colors.textPrimary,
-  },
-  todayStripDots: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  todayStripItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  todayStripDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  todayStripDotOn: {
-    backgroundColor: colors.accentGreen,
-  },
-  todayStripDotMissed: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.accentRed,
-  },
-  todayStripLabel: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 10.5,
-    color: colors.textSecondary,
-  },
-  resurfaceText: {
-    fontFamily: fonts.serifLight,
-    fontSize: 15,
-    lineHeight: 30,
-    color: colors.textPrimary,
-  },
-  resurfaceCaption: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 11.5,
-    color: '#AAAAAA',
-    marginTop: 10,
-  },
-  resurfacePhoto: {
-    width: '100%',
-    height: 150,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-  },
-  resurfaceEmpty: {
-    fontFamily: fonts.sansRegular,
-    fontSize: 13,
-    lineHeight: 22,
-    color: colors.textTertiary,
   },
   greeting: {
     fontFamily: fonts.serifLight,
