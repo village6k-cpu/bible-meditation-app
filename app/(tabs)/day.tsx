@@ -107,7 +107,7 @@ export default function DayScreen() {
         <Text style={styles.title}>하루</Text>
       </View>
 
-      {days.length <= 1 && days.every((d) => d.entries.length === 0 && d.todoCount === 0) ? (
+      {days.length <= 1 && !days.some(dayHasAnything) ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>아직 기록이 없습니다{'\n'}작은 순간부터 남겨보세요</Text>
         </View>
@@ -133,17 +133,30 @@ export default function DayScreen() {
   );
 }
 
+function dayHasAnything(d: DayCardData): boolean {
+  return (
+    d.entries.length > 0 ||
+    d.todoCount > 0 ||
+    !!d.dayLog?.day_title ||
+    d.habit?.workout === true ||
+    d.habit?.meditation === true ||
+    d.habit?.diet !== null && d.habit?.diet !== undefined
+  );
+}
+
 function HabitDots({ habit }: { habit: HabitDay | null }) {
-  const items: { label: string; on: boolean }[] = [
-    { label: '운동', on: habit?.workout === true },
-    { label: '식단', on: habit?.diet === true },
-    { label: '묵상', on: habit?.meditation === true },
+  const items: { label: string; on: boolean; missed: boolean }[] = [
+    { label: '운동', on: habit?.workout === true, missed: false },
+    { label: '식단', on: habit?.diet === true, missed: habit?.diet === false },
+    { label: '묵상', on: habit?.meditation === true, missed: false },
   ];
   return (
     <View style={styles.habitRow}>
       {items.map((i) => (
         <View key={i.label} style={styles.habitItem}>
-          <View style={[styles.habitDot, i.on && styles.habitDotOn]} />
+          <View
+            style={[styles.habitDot, i.on && styles.habitDotOn, i.missed && styles.habitDotMissed]}
+          />
           <Text style={styles.habitLabel}>{i.label}</Text>
         </View>
       ))}
@@ -263,6 +276,11 @@ const styles = StyleSheet.create({
   },
   habitDotOn: {
     backgroundColor: colors.accentGreen,
+  },
+  habitDotMissed: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.accentRed,
   },
   habitLabel: {
     fontFamily: fonts.sansRegular,

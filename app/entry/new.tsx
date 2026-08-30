@@ -9,6 +9,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -124,11 +126,15 @@ export default function EntryFormScreen() {
     const ImagePicker = require('expo-image-picker');
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) return;
-    } else {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
+      if (!perm.granted) {
+        Alert.alert('카메라 권한 필요', '설정에서 카메라 접근을 허용해 주세요.', [
+          { text: '취소', style: 'cancel' },
+          { text: '설정 열기', onPress: () => Linking.openSettings() },
+        ]);
+        return;
+      }
     }
+    // The system photo picker (library path) needs no permission
     const result = fromCamera
       ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
@@ -138,15 +144,41 @@ export default function EntryFormScreen() {
     }
   }
 
+  // Only fields the current type actually persists count toward saving —
+  // a 밑줄 typed under 감상 must not enable 저장 for a 순간
+  const usesTitle = type === 'media' || type === 'writing';
+  const usesQuote = type === 'media';
   const canSave =
     body.trim().length > 0 ||
-    quote.trim().length > 0 ||
-    title.trim().length > 0 ||
+    (usesQuote && quote.trim().length > 0) ||
+    (usesTitle && title.trim().length > 0) ||
     photoUri !== null ||
     (type === 'workout' && minutes !== null);
 
-  async function handleSave() {
+  function handleSave() {
     if (!canSave || saving) return;
+    // Fields typed under another type chip are not persisted — warn instead of
+    // silently discarding them (matters most when editing an existing 감상)
+    const dropped: string[] = [];
+    if (!usesTitle && title.trim()) dropped.push('제목');
+    if (!usesQuote && quote.trim()) dropped.push('밑줄');
+    if (!usesQuote && link.trim()) dropped.push('링크');
+    if (dropped.length > 0) {
+      Alert.alert(
+        '저장되지 않는 내용이 있어요',
+        `${ENTRY_TYPE_LABELS[type]} 기록에는 ${dropped.join(', ')} 항목이 저장되지 않습니다. 계속할까요?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '계속', onPress: () => void doSave() },
+        ]
+      );
+      return;
+    }
+    void doSave();
+  }
+
+  async function doSave() {
+    if (saving) return;
     setSaving(true);
     try {
       let storedPhoto = photoUri;
@@ -161,10 +193,10 @@ export default function EntryFormScreen() {
         date,
         type,
         media_kind: type === 'media' ? mediaKind : null,
-        title: title.trim() || null,
-        quote: type === 'media' && quote.trim() ? quote.trim() : null,
+        title: usesTitle && title.trim() ? title.trim() : null,
+        quote: usesQuote && quote.trim() ? quote.trim() : null,
         body: body.trim() || null,
-        link: type === 'media' && link.trim() ? link.trim() : null,
+        link: usesQuote && link.trim() ? link.trim() : null,
         photo_uri: storedPhoto,
         minutes: type === 'workout' ? minutes : null,
         meal_slot: type === 'meal' ? mealSlot : null,
@@ -175,9 +207,9 @@ export default function EntryFormScreen() {
       } else {
         await saveEntry(input);
       }
-      if (type === 'workout') {
-        await upsertDayLog(date, { workout_done: 1 });
-      }
+      // Workout habit derives from entries (getHabitRange); day_logs.workout_done
+      // is reserved for the manual toggle so deleting/moving an entry never
+      // leaves a stale flag. The diet toggle is an explicit day-level statement.
       if (type === 'meal' && dietKept !== null) {
         await upsertDayLog(date, { diet_kept: dietKept ? 1 : 0 });
       }

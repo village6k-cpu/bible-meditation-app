@@ -14,7 +14,7 @@ import {
   computeStreak,
   getHabitRange,
   getMonthlyStats,
-  getWeekQuotes,
+  getQuotesInRange,
   getWorkoutMinutesByDate,
 } from '../../lib/journal-db';
 
@@ -50,7 +50,7 @@ export default function RhythmScreen() {
       meditation: computeStreak(streakHabits, 'meditation', today),
     });
 
-    // Current week (Mon-Sun) workout minutes
+    // Current week (Mon-Sun) — the same 이번 주 for both the chart and the quotes
     const dow = (parseISODate(today).getDay() + 6) % 7;
     const monday = addDays(today, -dow);
     const weekDates = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
@@ -59,7 +59,7 @@ export default function RhythmScreen() {
       weekDates.map((d, i) => ({ label: DAY_LABELS[i], minutes: minutes[d] ?? 0 }))
     );
 
-    setWeekQuotes(await getWeekQuotes(today));
+    setWeekQuotes(await getQuotesInRange(monday, today));
   }, [year, month, today]);
 
   useFocusEffect(

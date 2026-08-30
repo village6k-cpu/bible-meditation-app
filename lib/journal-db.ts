@@ -81,6 +81,21 @@ function collectTags(input: EntryInput): string {
   return normalizeTags([...(input.tags ?? []), ...inline]);
 }
 
+// '%' and '_' in user text must match literally in LIKE patterns
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+async function deletePhotoFile(rel: string | null): Promise<void> {
+  if (!rel || !rel.startsWith('photos/') || Platform.OS === 'web') return;
+  try {
+    const FileSystem = require('expo-file-system/legacy');
+    await FileSystem.deleteAsync(`${FileSystem.documentDirectory}${rel}`, { idempotent: true });
+  } catch {
+    // best-effort cleanup
+  }
+}
+
 // === Entries ===
 
 export async function saveEntry(input: EntryInput): Promise<number> {
@@ -109,6 +124,10 @@ export async function saveEntry(input: EntryInput): Promise<number> {
 export async function updateEntry(id: number, input: EntryInput): Promise<void> {
   const db = getUserDb();
   if (!db) return;
+  const prev = await getEntry(id);
+  if (prev?.photo_uri && prev.photo_uri !== (input.photo_uri ?? null)) {
+    await deletePhotoFile(prev.photo_uri);
+  }
   await db.runAsync(
     `UPDATE entries SET date = ?, type = ?, media_kind = ?, title = ?, quote = ?, body = ?, link = ?,
      photo_uri = ?, minutes = ?, meal_slot = ?, tags = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -132,7 +151,9 @@ export async function updateEntry(id: number, input: EntryInput): Promise<void> 
 export async function deleteEntry(id: number): Promise<void> {
   const db = getUserDb();
   if (!db) return;
+  const prev = await getEntry(id);
   await db.runAsync('DELETE FROM entries WHERE id = ?', [id]);
+  if (prev) await deletePhotoFile(prev.photo_uri);
 }
 
 export async function getEntry(id: number): Promise<Entry | null> {
@@ -182,6 +203,8 @@ export type LibrarySegment =
   | 'book'
   | 'youtube'
   | 'music'
+  | 'article'
+  | 'movie'
   | 'writing'
   | 'moment'
   | 'meditation';
@@ -204,6 +227,8 @@ export async function getLibraryEntries(opts: {
     case 'book':
     case 'youtube':
     case 'music':
+    case 'article':
+    case 'movie':
       where.push("type = 'media' AND media_kind = ?");
       params.push(opts.segment);
       break;
@@ -216,12 +241,14 @@ export async function getLibraryEntries(opts: {
       break;
   }
   if (opts.tag) {
-    where.push('tags LIKE ?');
-    params.push(`%,${opts.tag},%`);
+    where.push("tags LIKE ? ESCAPE '\\'");
+    params.push(`%,${escapeLike(opts.tag)},%`);
   }
   if (opts.query && opts.query.trim()) {
-    where.push('(title LIKE ? OR quote LIKE ? OR body LIKE ? OR tags LIKE ?)');
-    const q = `%${opts.query.trim()}%`;
+    where.push(
+      "(title LIKE ? ESCAPE '\\' OR quote LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\')"
+    );
+    const q = `%${escapeLike(opts.query.trim())}%`;
     params.push(q, q, q, q);
   }
   const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
@@ -358,7 +385,6 @@ export async function upsertDayLog(
 ): Promise<void> {
   const db = getUserDb();
   if (!db) return;
-  await db.runAsync('INSERT OR IGNORE INTO day_logs (date) VALUES (?)', [date]);
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
   if (patch.day_title !== undefined) {
@@ -374,6 +400,7 @@ export async function upsertDayLog(
     params.push(patch.diet_kept);
   }
   if (sets.length === 0) return;
+  await db.runAsync('INSERT OR IGNORE INTO day_logs (date) VALUES (?)', [date]);
   params.push(date);
   await db.runAsync(`UPDATE day_logs SET ${sets.join(', ')} WHERE date = ?`, params);
 }
@@ -423,6 +450,7 @@ export async function getActiveDates(limit: number, beforeDate?: string): Promis
        SELECT date as d FROM entries
        UNION SELECT date as d FROM todos
        UNION SELECT date as d FROM day_logs
+         WHERE day_title IS NOT NULL OR workout_done = 1 OR diet_kept IS NOT NULL
        UNION SELECT date(created_at, 'localtime') as d FROM notes
      ) WHERE d < ? ORDER BY d DESC LIMIT ?`,
     [before, limit]
@@ -527,13 +555,17 @@ export async function getMonthlyStats(startDate: string, endDate: string): Promi
   };
 }
 
-export async function getWeekQuotes(todayIso: string, limit: number = 3): Promise<Entry[]> {
+export async function getQuotesInRange(
+  startDate: string,
+  endDate: string,
+  limit: number = 3
+): Promise<Entry[]> {
   const db = getUserDb();
   if (!db) return [];
   return db.getAllAsync<Entry>(
     `SELECT * FROM entries WHERE quote IS NOT NULL AND quote != '' AND date BETWEEN ? AND ?
      ORDER BY date DESC, id DESC LIMIT ?`,
-    [addDays(todayIso, -6), todayIso, limit]
+    [startDate, endDate, limit]
   );
 }
 

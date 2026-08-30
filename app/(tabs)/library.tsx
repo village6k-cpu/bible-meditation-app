@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../../lib/theme';
+import { formatISODateKo } from '../../lib/utils';
 import { EntryCard } from '../../components/EntryCard';
 import {
   Entry,
@@ -29,6 +30,8 @@ const SEGMENTS: { key: LibrarySegment; label: string }[] = [
   { key: 'book', label: '책' },
   { key: 'youtube', label: '유튜브' },
   { key: 'music', label: '음악' },
+  { key: 'article', label: '아티클' },
+  { key: 'movie', label: '영화' },
   { key: 'writing', label: '글' },
   { key: 'moment', label: '순간' },
   { key: 'meditation', label: '묵상' },
@@ -146,12 +149,13 @@ export default function LibraryScreen() {
             keyExtractor={(m) => String(m.id)}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.meditationCard}
                 onPress={() => router.push(`/note/${item.id}`)}
               >
-                <Text style={styles.meditationDate}>{item.date}</Text>
+                <Text style={styles.meditationDate}>{formatISODateKo(item.date)}</Text>
                 {item.book_name && item.chapter ? (
                   <Text style={styles.meditationRef}>
                     {item.book_name} {item.chapter}
@@ -173,6 +177,7 @@ export default function LibraryScreen() {
           keyExtractor={(e) => String(e.id)}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             showPinned ? (
               <View style={styles.pinnedBlock}>
@@ -186,7 +191,7 @@ export default function LibraryScreen() {
                     >
                       <Ionicons name="star" size={11} color={colors.accentGreen} />
                       <Text style={styles.pinnedText} numberOfLines={3}>
-                        {e.quote ?? e.body ?? e.title ?? ''}
+                        {e.quote ?? e.body ?? e.title ?? (e.photo_uri ? '사진 기록' : '')}
                       </Text>
                     </TouchableOpacity>
                   ))}

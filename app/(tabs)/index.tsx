@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import {
   getHabitRange,
   getOnThisDay,
   getTodayEntryCount,
+  photoUriToAbsolute,
   relativeDaysLabel,
 } from '../../lib/journal-db';
 import { MEDIA_KIND_LABELS } from '../../lib/journal-utils';
@@ -48,18 +49,23 @@ export default function HomeScreen() {
   const [resurfaced, setResurfaced] = useState<Entry | null>(null);
   const [isOnThisDay, setIsOnThisDay] = useState(false);
 
-  const today = getISODate();
-
+  // The date is computed inside each load/handler at call time: tab screens stay
+  // mounted across midnight, so a render-scoped constant would freeze on yesterday
   async function loadData() {
-    const verse = await getRandomVerse();
-    setDailyVerse(verse);
+    try {
+      const verse = await getRandomVerse();
+      setDailyVerse(verse);
 
-    await loadReadings();
-    await loadWeekHistory();
-    await loadJournal();
+      await loadReadings();
+      await loadWeekHistory();
+      await loadJournal();
+    } catch (e) {
+      console.warn('Home load failed:', e);
+    }
   }
 
   async function loadJournal() {
+    const today = getISODate();
     setTodayCount(await getTodayEntryCount(today));
     const habits = await getHabitRange(today, today);
     setTodayHabit(habits[today] ?? null);
@@ -75,7 +81,7 @@ export default function HomeScreen() {
   }
 
   async function loadReadings() {
-    const r = await getDailyReadings(today);
+    const r = await getDailyReadings(getISODate());
     setReadings(r);
   }
 
@@ -96,6 +102,7 @@ export default function HomeScreen() {
     await loadReadings();
 
     // Check if all done → mark day completed
+    const today = getISODate();
     const updated = await getDailyReadings(today);
     if (updated.length > 0 && updated.every((r) => r.completed)) {
       await markDayCompleted(today);
@@ -104,7 +111,7 @@ export default function HomeScreen() {
   }
 
   async function handleAddReading(bookId: number, startChapter: number, endChapter: number) {
-    await addDailyReading(today, bookId, startChapter, endChapter);
+    await addDailyReading(getISODate(), bookId, startChapter, endChapter);
     await loadReadings();
   }
 
@@ -139,20 +146,26 @@ export default function HomeScreen() {
         {/* 오늘 요약 */}
         <TouchableOpacity
           style={styles.todayStrip}
-          onPress={() => router.push(`/day/${today}`)}
+          onPress={() => router.push(`/day/${getISODate()}`)}
           activeOpacity={0.7}
         >
           <Text style={styles.todayStripText}>오늘의 기록 {todayCount}</Text>
           <View style={styles.todayStripDots}>
             {(
               [
-                ['운동', todayHabit?.workout === true],
-                ['식단', todayHabit?.diet === true],
-                ['묵상', todayHabit?.meditation === true],
-              ] as [string, boolean][]
-            ).map(([label, on]) => (
+                ['운동', todayHabit?.workout === true, false],
+                ['식단', todayHabit?.diet === true, todayHabit?.diet === false],
+                ['묵상', todayHabit?.meditation === true, false],
+              ] as [string, boolean, boolean][]
+            ).map(([label, on, missed]) => (
               <View key={label} style={styles.todayStripItem}>
-                <View style={[styles.todayStripDot, on && styles.todayStripDotOn]} />
+                <View
+                  style={[
+                    styles.todayStripDot,
+                    on && styles.todayStripDotOn,
+                    missed && styles.todayStripDotMissed,
+                  ]}
+                />
                 <Text style={styles.todayStripLabel}>{label}</Text>
               </View>
             ))}
@@ -195,11 +208,19 @@ export default function HomeScreen() {
             activeOpacity={0.7}
             onPress={() => router.push(`/entry/${resurfaced.id}`)}
           >
-            <Text style={styles.resurfaceText} numberOfLines={4}>
-              {resurfaced.quote ?? resurfaced.body ?? resurfaced.title ?? ''}
-            </Text>
+            {resurfaced.quote || resurfaced.body || resurfaced.title ? (
+              <Text style={styles.resurfaceText} numberOfLines={4}>
+                {resurfaced.quote ?? resurfaced.body ?? resurfaced.title}
+              </Text>
+            ) : null}
+            {resurfaced.photo_uri && !(resurfaced.quote || resurfaced.body) ? (
+              <Image
+                source={{ uri: photoUriToAbsolute(resurfaced.photo_uri) ?? undefined }}
+                style={styles.resurfacePhoto}
+              />
+            ) : null}
             <Text style={styles.resurfaceCaption}>
-              {relativeDaysLabel(resurfaced.date, today)}
+              {relativeDaysLabel(resurfaced.date, getISODate())}
               {resurfaced.title && resurfaced.quote
                 ? ` · ${
                     resurfaced.media_kind ? MEDIA_KIND_LABELS[resurfaced.media_kind] : ''
@@ -326,6 +347,11 @@ const styles = StyleSheet.create({
   todayStripDotOn: {
     backgroundColor: colors.accentGreen,
   },
+  todayStripDotMissed: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.accentRed,
+  },
   todayStripLabel: {
     fontFamily: fonts.sansRegular,
     fontSize: 10.5,
@@ -342,6 +368,12 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#AAAAAA',
     marginTop: 10,
+  },
+  resurfacePhoto: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
   },
   resurfaceEmpty: {
     fontFamily: fonts.sansRegular,

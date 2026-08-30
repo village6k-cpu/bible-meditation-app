@@ -23,6 +23,12 @@ export function getISODate(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+// SQLite datetime('now') stores UTC as 'YYYY-MM-DD HH:MM:SS' with no zone marker;
+// parse it as UTC so local getters show the user's wall-clock time
+export function parseSqliteUtc(dt: string): Date {
+  return new Date(dt.includes('T') ? dt : `${dt.replace(' ', 'T')}Z`);
+}
+
 export function parseISODate(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);

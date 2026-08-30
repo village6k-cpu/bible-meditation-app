@@ -90,11 +90,15 @@ export async function initDatabases(): Promise<void> {
 
   // Bible database: copied from bundled assets on first launch.
   // SDK 54 moved the callback file-system API to 'expo-file-system/legacy'.
+  // openDatabaseAsync('bible.db') reads from <documentDirectory>/SQLite/, so the
+  // asset must be copied there — not into the document directory root.
   try {
     const FileSystem = require('expo-file-system/legacy');
     const { Asset } = require('expo-asset');
 
-    const bibleDbPath = `${FileSystem.documentDirectory}bible.db`;
+    const sqliteDir = `${FileSystem.documentDirectory}SQLite`;
+    await FileSystem.makeDirectoryAsync(sqliteDir, { intermediates: true }).catch(() => {});
+    const bibleDbPath = `${sqliteDir}/bible.db`;
     const fileInfo = await FileSystem.getInfoAsync(bibleDbPath);
     if (!fileInfo.exists) {
       const asset = Asset.fromModule(require('../assets/bible/bible.db'));

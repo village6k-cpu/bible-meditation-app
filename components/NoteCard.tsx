@@ -1,6 +1,7 @@
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, fonts } from '../lib/theme';
 import { Note } from '../lib/bible-data';
+import { parseSqliteUtc } from '../lib/utils';
 
 interface Props {
   note: Note;
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function NoteCard({ note, onPress }: Props) {
-  const date = new Date(note.created_at);
+  const date = parseSqliteUtc(note.created_at);
   const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`;
 
   return (

@@ -43,7 +43,7 @@ export function HabitGrid({ daysInMonth, habits }: Props) {
         <Text style={styles.rowLabel} />
         <View style={styles.dots}>
           {days.map((day) => (
-            <Text key={day} style={styles.dayTick}>
+            <Text key={day} style={styles.dayTick} numberOfLines={1}>
               {day === 1 || day % 5 === 0 ? day : ''}
             </Text>
           ))}
@@ -87,8 +87,11 @@ const styles = StyleSheet.create({
   dotEmpty: {
     backgroundColor: 'rgba(0,0,0,0.07)',
   },
+  // Wider than the 7px dot column (negative margins re-center) so two-digit
+  // day numbers render on one line instead of wrapping
   dayTick: {
-    width: 7,
+    width: 15,
+    marginHorizontal: -4,
     fontFamily: fonts.sansRegular,
     fontSize: 7,
     color: colors.textTertiary,

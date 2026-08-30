@@ -67,13 +67,17 @@ export default function DayDetailScreen() {
   if (!date) return null;
 
   async function saveDayTitle() {
-    await upsertDayLog(date!, { day_title: dayTitle.trim() || null });
+    const next = dayTitle.trim() || null;
+    if (next === (dayLog?.day_title ?? null)) return;
+    await upsertDayLog(date!, { day_title: next });
+    setDayLog(await getDayLog(date!));
   }
 
   async function handleAddTodo() {
-    if (!newTodo.trim()) return;
-    await addTodo(date!, newTodo.trim());
+    const content = newTodo.trim();
+    if (!content) return;
     setNewTodo('');
+    await addTodo(date!, content);
     setTodos(await getTodosByDate(date!));
   }
 
@@ -110,7 +114,14 @@ export default function DayDetailScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
+        <TouchableOpacity
+          onPress={() => {
+            // The title input may still be focused — persist before leaving
+            saveDayTitle();
+            router.back();
+          }}
+          hitSlop={8}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerDate}>
@@ -205,6 +216,7 @@ export default function DayDetailScreen() {
             onChangeText={setNewTodo}
             onSubmitEditing={handleAddTodo}
             returnKeyType="done"
+            blurOnSubmit={false}
           />
           {newTodo.trim().length > 0 && (
             <TouchableOpacity onPress={handleAddTodo} hitSlop={8}>

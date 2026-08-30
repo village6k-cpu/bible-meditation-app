@@ -73,7 +73,9 @@ export function buildDayMarkdown(d: DayData): string {
   const allTags = Array.from(new Set(d.entries.flatMap((e) => parseTags(e.tags))));
 
   const fm: string[] = ['---', `date: ${d.date}`];
-  if (d.dayLog?.day_title) fm.push(`title: ${d.dayLog.day_title}`);
+  if (d.dayLog?.day_title) {
+    fm.push(`title: "${d.dayLog.day_title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+  }
   fm.push(`workout: ${workoutDone}`);
   if (workoutMinutes > 0) fm.push(`workout_minutes: ${workoutMinutes}`);
   if (d.dayLog?.diet_kept !== null && d.dayLog?.diet_kept !== undefined) {
@@ -153,7 +155,7 @@ export async function buildRangeMarkdown(
   startDate: string,
   endDate: string
 ): Promise<{ content: string; dayCount: number }> {
-  const dates = (await getActiveDates(1000)).filter((d) => d >= startDate && d <= endDate);
+  const dates = (await getActiveDates(100000)).filter((d) => d >= startDate && d <= endDate);
   dates.sort();
   const docs: string[] = [];
   for (const date of dates) {
