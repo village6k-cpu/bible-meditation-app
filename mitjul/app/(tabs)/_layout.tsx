@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -65,6 +65,8 @@ export default function TabLayout() {
           title: '',
           tabBarButton: () => (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={S.tab_capture}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/compose');
@@ -117,7 +119,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    marginTop: -14,
+    // 안드로이드는 부모 밖 터치가 잘리므로 탭바 안에 머문다
+    marginTop: Platform.OS === 'ios' ? -14 : 0,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },

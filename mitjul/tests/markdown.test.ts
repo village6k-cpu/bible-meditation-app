@@ -81,13 +81,25 @@ test('빌더는 결정적이다 — 두 번 불러도 바이트까지 같다', (
   assert.equal(buildDailyNote('2026-08-30', entries), buildDailyNote('2026-08-30', entries));
 });
 
-test('기간 노트 — 기록 없는 날은 건너뛴다', () => {
+test('기간 노트 — 기록 없는 날은 건너뛰고, 하루뿐이면 데일리 노트 그대로', () => {
   const md = buildRangeNote([
     { day: '2026-08-29', entries: [] },
     { day: '2026-08-30', entries: [entry({ type: 'moment', body: '하루' })] },
   ]);
   assert.ok(!md.includes('8월 29일'));
   assert.ok(md.includes('8월 30일'));
+  assert.ok(md.startsWith('---\ndate: 2026-08-30\n'));
+});
+
+test('여러 날 기간 노트 — 프런트매터는 문서 전체에 단 하나 (옵시디언은 맨 위 YAML만 읽는다)', () => {
+  const md = buildRangeNote([
+    { day: '2026-08-29', entries: [entry({ type: 'moment', body: '금요일', day: '2026-08-29' })] },
+    { day: '2026-08-30', entries: [entry({ type: 'verse', subtitle: '시편 1:1', body: '말씀' })] },
+  ]);
+  assert.equal((md.match(/^---$/gm) ?? []).length, 3); // YAML 경계 2 + 날짜 구분선 1
+  assert.ok(md.startsWith('---\ndate_from: 2026-08-29\ndate_to: 2026-08-30\n'));
+  assert.ok(md.includes('# 8월 29일'));
+  assert.ok(md.includes('# 8월 30일'));
 });
 
 test('사진은 임베드가 아니라 파일명 한 줄', () => {

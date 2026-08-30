@@ -61,7 +61,16 @@ export default function EntryDetailScreen() {
   );
 
   if (!entry) {
-    return <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]} />;
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]} edges={['top']}>
+        <View style={[styles.header, { borderBottomColor: palette.divider }]}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={palette.textPrimary} />
+          </Pressable>
+          <View />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const spec = specOf(entry.type);
@@ -135,8 +144,8 @@ export default function EntryDetailScreen() {
           </Text>
         ) : null}
 
-        {/* 제목(책 외 유형) */}
-        {entry.title && entry.type !== 'book' ? (
+        {/* 제목(책·운동 외 유형 — 운동은 아래 요약 줄이 종류를 보여준다) */}
+        {entry.title && entry.type !== 'book' && entry.type !== 'workout' ? (
           <Text style={[type.titleSerif, { color: palette.textPrimary, marginTop: space.xl }]}>
             {entry.title}
             {entry.type === 'video' && entry.subtitle ? (

@@ -19,8 +19,10 @@ export default function TagScreen() {
   const { palette } = useTheme();
   const db = useSQLiteContext();
   const router = useRouter();
+  // expo-router가 이미 퍼센트 디코딩을 마친 값을 준다 — 다시 디코딩하면
+  // '100%' 같은 태그에서 URIError가 난다
   const { name } = useLocalSearchParams<{ name: string }>();
-  const tag = name ? decodeURIComponent(name) : '';
+  const tag = typeof name === 'string' ? name : '';
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [tagMap, setTagMap] = useState<Map<string, string[]>>(new Map());

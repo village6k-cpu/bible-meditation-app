@@ -15,7 +15,8 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { radius, space, type } from '../../src/theme/tokens';
 
 const DOW_KO = ['월', '화', '수', '목', '금', '토', '일'];
-const MATRIX_DAYS = 28;
+// 3주 — 375pt 화면에서도 점이 스트릭 라벨을 침범하지 않는 폭
+const MATRIX_DAYS = 21;
 
 export default function TrendsScreen() {
   const { palette } = useTheme();

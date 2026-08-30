@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -12,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -22,7 +25,7 @@ import { addDays, formatDayKo, todayKey } from '../src/core/dates';
 import { REGISTRY, specOf } from '../src/core/registry';
 import { parseTagInput } from '../src/core/tags';
 import { EntryInput, EntryType, MEAL_SLOTS, MEAL_SLOT_LABELS, MealSlot } from '../src/core/types';
-import { createEntry, getEntry, recentTitles, updateEntry } from '../src/db/entryRepo';
+import { createEntry, getEntry, recentTitles, tagsOf, updateEntry } from '../src/db/entryRepo';
 import { imageAbs, persistImage } from '../src/export/files';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { radius, space, type } from '../src/theme/tokens';
@@ -60,7 +63,39 @@ export default function ComposeScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadedDone, setLoadedDone] = useState<number | null>(null);
   const bodyRef = useRef<TextInput>(null);
+  const navigation = useNavigation();
+
+  // 쓰던 내용이 있는데 시트를 내리면 확인 없이 사라지지 않도록
+  const dirtyRef = useRef(false);
+  const savedRef = useRef(false);
+  dirtyRef.current =
+    !saved &&
+    (title.trim().length > 0 ||
+      subtitle.trim().length > 0 ||
+      quote.trim().length > 0 ||
+      body.trim().length > 0 ||
+      url.trim().length > 0 ||
+      tagText.trim().length > 0 ||
+      imageIsNew);
+  savedRef.current = saved;
+
+  useEffect(() => {
+    const unsubscribe = (navigation as any).addListener('beforeRemove', (e: any) => {
+      if (!dirtyRef.current || savedRef.current) return;
+      e.preventDefault();
+      Alert.alert('쓰던 기록이 있어요', '지금 닫으면 사라져요.', [
+        { text: '계속 쓰기', style: 'cancel' },
+        {
+          text: S.compose_close,
+          style: 'destructive',
+          onPress: () => (navigation as any).dispatch(e.data.action),
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // 시간대에 맞는 식사 슬롯 기본값
   useEffect(() => {
@@ -70,7 +105,7 @@ export default function ComposeScreen() {
 
   useEffect(() => {
     if (!editingId) return;
-    getEntry(db, editingId).then((e) => {
+    getEntry(db, editingId).then(async (e) => {
       if (!e) return;
       setEntryType(e.type);
       setDay(e.day);
@@ -86,6 +121,10 @@ export default function ComposeScreen() {
       setDueTime(e.due_time ?? '');
       setImageUri(e.image_uri);
       setImageIsNew(false);
+      setLoadedDone(e.done);
+      // 태그도 폼에 되살린다 — 빈 채로 저장하면 기존 태그가 전부 지워지니까
+      const existing = (await tagsOf(db, [e.id])).get(e.id) ?? [];
+      setTagText(existing.map((t) => `#${t}`).join(' '));
     });
   }, [db, editingId]);
 
@@ -103,7 +142,13 @@ export default function ComposeScreen() {
     const ImagePicker = require('expo-image-picker');
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) return;
+      if (!perm.granted) {
+        Alert.alert('카메라를 열 수 없어요', '설정에서 카메라 접근을 허용해 주세요.', [
+          { text: '취소', style: 'cancel' },
+          { text: '설정 열기', onPress: () => Linking.openSettings() },
+        ]);
+        return;
+      }
     }
     const result = fromCamera
       ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
@@ -124,8 +169,26 @@ export default function ComposeScreen() {
   };
   const canSave = spec !== null && spec.requiresOneOf.some((f) => filled[f]);
 
-  async function handleSave() {
+  function handleSave() {
     if (!spec || !canSave || saving) return;
+    // 지금 유형이 저장하지 않는 필드에 쓴 내용이 있으면, 버리기 전에 묻는다
+    const dropped: string[] = [];
+    if (!spec.fields.title && title.trim()) dropped.push('제목');
+    if (!spec.fields.quote && quote.trim()) dropped.push('밑줄');
+    if (!spec.fields.url && url.trim()) dropped.push('링크');
+    if (!spec.fields.body && body.trim()) dropped.push('본문');
+    if (dropped.length > 0) {
+      Alert.alert(S.compose_dropped_warning, `${dropped.join(', ')} 항목이에요. 계속할까요?`, [
+        { text: '취소', style: 'cancel' },
+        { text: '계속', onPress: () => void doSave() },
+      ]);
+      return;
+    }
+    void doSave();
+  }
+
+  async function doSave() {
+    if (!spec || saving) return;
     setSaving(true);
     try {
       let storedImage = imageUri;
@@ -144,7 +207,7 @@ export default function ComposeScreen() {
         slot: spec.fields.slot ? slot : null,
         minutes: spec.fields.minutes ? minutes : null,
         practiced: spec.fields.practiced || spec.key === 'workout' ? (practiced ? 1 : 0) : null,
-        done: spec.key === 'task' ? 0 : null,
+        done: spec.key === 'task' ? (loadedDone ?? 0) : null,
         due_time: spec.fields.dueTime && dueTime.trim() ? dueTime.trim() : null,
         tags: parseTagInput(tagText),
       };
@@ -156,11 +219,19 @@ export default function ComposeScreen() {
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSaved(true);
-      setTimeout(() => router.back(), 1000);
+    } catch {
+      Alert.alert('저장하지 못했어요', '잠시 후 다시 시도해 주세요.');
     } finally {
       setSaving(false);
     }
   }
+
+  // 저장 인사 화면을 잠깐 보여준 뒤 닫는다 — 제스처로 먼저 닫혔으면 타이머를 거둔다
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => router.back(), 1000);
+    return () => clearTimeout(timer);
+  }, [saved, router]);
 
   const photoPreview = imageIsNew ? imageUri : imageAbs(imageUri);
   const today = todayKey();

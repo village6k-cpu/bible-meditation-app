@@ -66,7 +66,7 @@ export default function LibraryScreen() {
     if (sort !== 'dusty') return undefined;
     if (e.last_revisited_at === null) return S.library_never_read;
     const days = Math.max(0, Math.floor((Date.now() - e.last_revisited_at) / 86400_000));
-    return S.library_last_read(days);
+    return days === 0 ? '오늘 읽음' : S.library_last_read(days);
   }
 
   const sortOptions: { key: Sort; label: string }[] = [
@@ -130,11 +130,15 @@ export default function LibraryScreen() {
         </ScrollView>
       </View>
 
-      {/* 갈피(태그) */}
-      {tags.length > 0 && (
+      {/* 갈피(태그) — 선택된 갈피가 상위 목록에서 밀려나도 칩은 남아서 해제할 수 있게 */}
+      {(tags.length > 0 || tag) && (
         <View style={styles.tagWrap}>
           <TagChips
-            tags={tags.map((t) => t.name)}
+            tags={
+              tag && !tags.some((t) => t.name === tag)
+                ? [tag, ...tags.map((t) => t.name)]
+                : tags.map((t) => t.name)
+            }
             selected={tag}
             onPress={(t) => setTag(tag === t ? null : t)}
           />
@@ -184,7 +188,11 @@ export default function LibraryScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[type.bodySerif, { color: palette.textSecondary, textAlign: 'center' }]}>
-              {q.trim() || tag || segment ? S.empty_search : S.empty_library}
+              {sort === 'pinned' && !q.trim() && !tag && !segment
+                ? '아껴둔 기록이 아직 없어요.\n마음에 남는 밑줄에 갈피를 꽂아보세요.'
+                : q.trim() || tag || segment
+                  ? S.empty_search
+                  : S.empty_library}
             </Text>
           </View>
         }

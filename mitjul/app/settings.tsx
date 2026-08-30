@@ -35,7 +35,15 @@ export default function SettingsScreen() {
     setMessage(null);
     try {
       const result = await exportRange(db, range);
-      setMessage(result === 'empty' ? S.export_empty : S.export_done);
+      setMessage(
+        result === 'empty'
+          ? S.export_empty
+          : result === 'unavailable'
+            ? '공유 시트를 열 수 없어요.'
+            : S.export_done
+      );
+    } catch {
+      setMessage('내보내기에 실패했어요. 잠시 후 다시 시도해 주세요.');
     } finally {
       setExporting(null);
     }
@@ -87,7 +95,8 @@ export default function SettingsScreen() {
           {S.settings_export}
         </Text>
         <Text style={[type.caption, { color: palette.textSecondary, marginBottom: space.m }]}>
-          하루 한 문서, 프런트매터 포함 — 옵시디언 데일리 노트 그대로예요.
+          기간의 기록을 프런트매터가 달린 하나의 마크다운으로 묶어 공유 시트로 보내요.
+          하루 한 파일 볼트 내보내기는 다음 판에서 준비할게요.
         </Text>
         <View style={styles.chipRow}>
           {EXPORT_RANGES.map((r) => (

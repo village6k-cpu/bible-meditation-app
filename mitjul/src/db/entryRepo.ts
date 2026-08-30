@@ -208,9 +208,9 @@ export async function tagsOf(db: SQLiteDatabase, entryIds: string[]): Promise<Ma
 
 export async function recentTitles(db: SQLiteDatabase, type: EntryType, limit: number = 5): Promise<string[]> {
   const rows = await db.getAllAsync<{ title: string }>(
-    `SELECT DISTINCT title FROM entries
+    `SELECT title FROM entries
      WHERE type = ? AND title IS NOT NULL AND title != '' AND ${LIVE}
-     ORDER BY created_at DESC LIMIT ?`,
+     GROUP BY title ORDER BY MAX(created_at) DESC LIMIT ?`,
     [type, limit]
   );
   return rows.map((r) => r.title);
@@ -295,7 +295,7 @@ export async function trendRows(db: SQLiteDatabase, from: string, to: string): P
             SUM(CASE WHEN type = 'verse' THEN 1 ELSE 0 END) as verse_count,
             SUM(CASE WHEN type != 'task' THEN 1 ELSE 0 END) as entry_count
      FROM entries
-     WHERE day BETWEEN ? AND ? AND ${LIVE}
+     WHERE day BETWEEN ? AND ? AND ${LIVE} AND type != 'task'
      GROUP BY day ORDER BY day`,
     [from, to]
   );
