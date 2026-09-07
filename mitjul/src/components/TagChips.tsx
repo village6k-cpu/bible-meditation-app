@@ -28,7 +28,7 @@ export function TagChips({ tags, selected, onPress, horizontal = true }: Props) 
           },
         ]}
       >
-        <Text style={[type.caption, { color: active ? palette.surface : palette.textSecondary }]}>
+        <Text style={[type.caption, { color: active ? palette.onAccent : palette.textSecondary }]}>
           #{t}
         </Text>
       </Pressable>

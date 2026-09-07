@@ -12,7 +12,7 @@ interface Props {
   children: React.ReactNode;
 }
 
-// 지면 스캐폴드 — 세리프 제목 아래 인주 획 하나.
+// 지면 스캐폴드 — 세리프 제목 아래 먹 획 하나.
 export function Screen({ title, caption, right, children }: Props) {
   const { palette } = useTheme();
   return (

@@ -67,6 +67,25 @@ const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    // 출처 — 책·영상은 한 번만 등록하고 밑줄은 출처에 매달린다
+    version: 2,
+    sql: `
+      CREATE TABLE sources (
+        id           TEXT PRIMARY KEY,
+        kind         TEXT NOT NULL CHECK (kind IN ('book','video')),
+        title        TEXT NOT NULL,
+        creator      TEXT,
+        created_at   INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL,
+        last_tags    TEXT NOT NULL DEFAULT '',
+        deleted_at   INTEGER
+      );
+      CREATE INDEX idx_sources_kind_used ON sources (kind, last_used_at DESC);
+      ALTER TABLE entries ADD COLUMN source_id TEXT REFERENCES sources(id);
+      CREATE INDEX idx_entries_source ON entries (source_id);
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

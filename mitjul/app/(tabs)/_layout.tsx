@@ -7,7 +7,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { fonts } from '../../src/theme/tokens';
 import { S } from '../../src/core/strings.ko';
 
-// 활성 탭은 아이콘 아래 짧은 인주색 획 — 탭바에서도 밑줄을 긋는다.
+// 활성 탭은 아이콘 아래 짧은 먹색 획 — 탭바에서도 밑줄을 긋는다.
 function TabIcon({ name, color, focused, accent }: {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -79,7 +79,7 @@ export default function TabLayout() {
                 },
               ]}
             >
-              <Ionicons name="add" size={28} color={palette.surface} />
+              <Ionicons name="add" size={28} color={palette.onAccent} />
             </Pressable>
           ),
         }}

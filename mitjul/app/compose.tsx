@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -21,11 +21,19 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { TypePicker } from '../src/components/TypePicker';
 import { Underline } from '../src/components/Underline';
 import { S } from '../src/core/strings.ko';
-import { addDays, formatDayKo, todayKey } from '../src/core/dates';
+import { addDays, formatDayKo, formatDayShortKo, todayKey } from '../src/core/dates';
 import { REGISTRY, specOf } from '../src/core/registry';
 import { parseTagInput } from '../src/core/tags';
-import { EntryInput, EntryType, MEAL_SLOTS, MEAL_SLOT_LABELS, MealSlot } from '../src/core/types';
+import {
+  EntryInput,
+  EntryType,
+  MEAL_SLOTS,
+  MEAL_SLOT_LABELS,
+  MealSlot,
+  Source,
+} from '../src/core/types';
 import { createEntry, getEntry, recentTitles, tagsOf, updateEntry } from '../src/db/entryRepo';
+import { createSource, getSource, recentSources, touchSource } from '../src/db/sourceRepo';
 import { imageAbs, persistImage } from '../src/export/files';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { radius, space, type } from '../src/theme/tokens';
@@ -43,9 +51,7 @@ export default function ComposeScreen() {
   const params = useLocalSearchParams<{ type?: string; id?: string }>();
   const editingId = params.id ?? null;
 
-  const [entryType, setEntryType] = useState<EntryType | null>(
-    isEntryType(params.type) ? params.type : null
-  );
+  const [entryType, setEntryType] = useState<EntryType | null>(null);
   const [day, setDay] = useState(todayKey());
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -60,24 +66,36 @@ export default function ComposeScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageIsNew, setImageIsNew] = useState(false);
   const [tagText, setTagText] = useState('');
+  const [showTags, setShowTags] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadedDone, setLoadedDone] = useState<number | null>(null);
+
+  // 출처 — 책·영상은 한 번만 등록, 밑줄은 연속으로
+  const [sources, setSources] = useState<Source[]>([]);
+  const [sourceId, setSourceId] = useState<string | null>(null);
+  const [newSource, setNewSource] = useState(false);
+  const [count, setCount] = useState(0); // 이번 시트에서 이어 그은 밑줄 수
+  const [flash, setFlash] = useState(false);
+
+  const quoteRef = useRef<TextInput>(null);
   const bodyRef = useRef<TextInput>(null);
   const navigation = useNavigation();
+
+  const spec = entryType ? specOf(entryType) : null;
+  const sourced = !!spec?.sourced;
 
   // 쓰던 내용이 있는데 시트를 내리면 확인 없이 사라지지 않도록
   const dirtyRef = useRef(false);
   const savedRef = useRef(false);
   dirtyRef.current =
     !saved &&
-    (title.trim().length > 0 ||
-      subtitle.trim().length > 0 ||
-      quote.trim().length > 0 ||
+    (quote.trim().length > 0 ||
       body.trim().length > 0 ||
       url.trim().length > 0 ||
-      tagText.trim().length > 0 ||
+      (!sourced && (title.trim().length > 0 || subtitle.trim().length > 0)) ||
+      (newSource && title.trim().length > 0) ||
       imageIsNew);
   savedRef.current = saved;
 
@@ -103,6 +121,30 @@ export default function ComposeScreen() {
     setSlot(h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 18 ? 'snack' : 'dinner');
   }, []);
 
+  // 유형을 고르면: 출처 유형은 마지막에 읽던 책이 이미 선택된 채 열린다
+  const pickType = useCallback(
+    async (t: EntryType) => {
+      setEntryType(t);
+      if (!REGISTRY[t].sourced) return;
+      const rs = await recentSources(db, t as Source['kind']);
+      setSources(rs);
+      if (rs.length > 0) {
+        setSourceId(rs[0].id);
+        setNewSource(false);
+        setTagText(rs[0].last_tags);
+      } else {
+        setSourceId(null);
+        setNewSource(true);
+      }
+    },
+    [db]
+  );
+
+  useEffect(() => {
+    if (!editingId && isEntryType(params.type)) pickType(params.type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!editingId) return;
     getEntry(db, editingId).then(async (e) => {
@@ -125,18 +167,34 @@ export default function ComposeScreen() {
       // 태그도 폼에 되살린다 — 빈 채로 저장하면 기존 태그가 전부 지워지니까
       const existing = (await tagsOf(db, [e.id])).get(e.id) ?? [];
       setTagText(existing.map((t) => `#${t}`).join(' '));
+      if (existing.length > 0) setShowTags(true);
+      if (REGISTRY[e.type].sourced) {
+        setSources(await recentSources(db, e.type as Source['kind']));
+        if (e.source_id && (await getSource(db, e.source_id))) {
+          setSourceId(e.source_id);
+          setNewSource(false);
+        } else {
+          // 출처 없이 남긴 옛 기록 — 제목·저자를 새 출처 폼에 채워 둔다
+          setNewSource(true);
+        }
+      }
     });
   }, [db, editingId]);
 
   useEffect(() => {
-    if (entryType === 'book' || entryType === 'workout') {
+    if (entryType === 'workout') {
       recentTitles(db, entryType).then(setSuggestions);
     } else {
       setSuggestions([]);
     }
   }, [db, entryType]);
 
-  const spec = entryType ? specOf(entryType) : null;
+  // 커서는 이미 문장 칸에 — 붙여넣고 저장이 전부
+  useEffect(() => {
+    if (!spec || newSource) return;
+    const t = setTimeout(() => (quoteRef.current ?? bodyRef.current)?.focus(), 350);
+    return () => clearTimeout(t);
+  }, [spec, newSource, count]);
 
   async function pickPhoto(fromCamera: boolean) {
     const ImagePicker = require('expo-image-picker');
@@ -167,13 +225,22 @@ export default function ComposeScreen() {
     url: url.trim().length > 0,
     minutes: minutes !== null,
   };
-  const canSave = spec !== null && spec.requiresOneOf.some((f) => filled[f]);
+  const sourceReady = !sourced || (newSource ? title.trim().length > 0 : sourceId !== null);
+  const canSave = spec !== null && sourceReady && spec.requiresOneOf.some((f) => filled[f]);
+
+  // 태그를 손대지 않았으면(비었거나 이전 출처의 기본값 그대로면) 새 출처의 기본 태그로 바꾼다
+  function selectSource(s: Source) {
+    const prev = sources.find((x) => x.id === sourceId);
+    const untouched = !tagText.trim() || (prev !== undefined && tagText === prev.last_tags);
+    setSourceId(s.id);
+    setNewSource(false);
+    if (untouched) setTagText(s.last_tags);
+  }
 
   function handleSave() {
     if (!spec || !canSave || saving) return;
     // 지금 유형이 저장하지 않는 필드에 쓴 내용이 있으면, 버리기 전에 묻는다
     const dropped: string[] = [];
-    if (!spec.fields.title && title.trim()) dropped.push('제목');
     if (!spec.fields.quote && quote.trim()) dropped.push('밑줄');
     if (!spec.fields.url && url.trim()) dropped.push('링크');
     if (!spec.fields.body && body.trim()) dropped.push('본문');
@@ -194,11 +261,32 @@ export default function ComposeScreen() {
       let storedImage = imageUri;
       if (imageUri && imageIsNew) storedImage = await persistImage(imageUri);
 
+      const tags = parseTagInput(tagText);
+
+      // 출처: 새로 등록하거나, 고른 것을 맨 앞으로
+      let source: Source | null = null;
+      if (sourced) {
+        if (newSource) {
+          source = await createSource(db, spec.key as Source['kind'], title.trim(), subtitle.trim() || null);
+          setSources((prev) => [source as Source, ...prev]);
+          setSourceId(source.id);
+          setNewSource(false);
+        } else if (sourceId) {
+          source = await getSource(db, sourceId);
+        }
+        if (source) await touchSource(db, source.id, tags);
+      }
+
       const input: EntryInput = {
         type: spec.key,
         day,
-        title: spec.fields.title && title.trim() ? title.trim() : null,
-        subtitle: spec.fields.subtitle && subtitle.trim() ? subtitle.trim() : null,
+        source_id: source?.id ?? null,
+        title: source ? source.title : spec.fields.title && title.trim() ? title.trim() : null,
+        subtitle: source
+          ? source.creator
+          : spec.fields.subtitle && subtitle.trim()
+            ? subtitle.trim()
+            : null,
         quote: spec.fields.quote && quote.trim() ? quote.trim() : null,
         body: spec.fields.body && body.trim() ? body.trim() : null,
         url: spec.fields.url && url.trim() ? url.trim() : null,
@@ -209,7 +297,7 @@ export default function ComposeScreen() {
         practiced: spec.fields.practiced || spec.key === 'workout' ? (practiced ? 1 : 0) : null,
         done: spec.key === 'task' ? (loadedDone ?? 0) : null,
         due_time: spec.fields.dueTime && dueTime.trim() ? dueTime.trim() : null,
-        tags: parseTagInput(tagText),
+        tags,
       };
 
       if (editingId) {
@@ -218,6 +306,19 @@ export default function ComposeScreen() {
         await createEntry(db, input);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // 연속 긋기 — 출처가 있는 새 기록은 시트를 닫지 않고 같은 책에 빈 칸을 다시 연다
+      if (sourced && !editingId) {
+        setCount((n) => n + 1);
+        setQuote('');
+        setBody('');
+        setUrl('');
+        setPage('');
+        setImageUri(null);
+        setImageIsNew(false);
+        setFlash(true);
+        return;
+      }
       setSaved(true);
     } catch {
       Alert.alert('저장하지 못했어요', '잠시 후 다시 시도해 주세요.');
@@ -225,6 +326,12 @@ export default function ComposeScreen() {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(false), 900);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   // 저장 인사 화면을 잠깐 보여준 뒤 닫는다 — 제스처로 먼저 닫혔으면 타이머를 거둔다
   useEffect(() => {
@@ -236,7 +343,6 @@ export default function ComposeScreen() {
   const photoPreview = imageIsNew ? imageUri : imageAbs(imageUri);
   const today = todayKey();
 
-  // 저장 직후 — 밑줄이 그어지는 그 순간
   if (saved) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
@@ -250,6 +356,10 @@ export default function ComposeScreen() {
     );
   }
 
+  const headerTitle = spec
+    ? `${spec.label}${count > 0 ? ` · ${S.compose_nth(count)}` : ''}`
+    : S.compose_title;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -259,11 +369,11 @@ export default function ComposeScreen() {
         {/* 헤더 */}
         <View style={[styles.header, { borderBottomColor: palette.divider }]}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={[type.label, { color: palette.textSecondary }]}>{S.compose_close}</Text>
+            <Text style={[type.label, { color: palette.textSecondary }]}>
+              {count > 0 ? S.compose_stop : S.compose_close}
+            </Text>
           </Pressable>
-          <Text style={[type.label, { color: palette.textPrimary }]}>
-            {spec ? spec.label : S.compose_title}
-          </Text>
+          <Text style={[type.label, { color: palette.textPrimary }]}>{headerTitle}</Text>
           <Pressable onPress={handleSave} disabled={!canSave || saving} hitSlop={8}>
             <Text
               style={[
@@ -281,13 +391,20 @@ export default function ComposeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* 1단계 — 유형 선택 */}
           {!spec ? (
-            <TypePicker selected={entryType} onSelect={setEntryType} />
+            <TypePicker selected={entryType} onSelect={(t) => void pickType(t)} />
           ) : (
             <>
-              {/* 유형 바꾸기(새 기록일 때만) + 날짜 */}
-              {!editingId && (
+              {/* 방금 담아둔 밑줄 — 잠깐의 인사 */}
+              {flash && (
+                <View style={styles.flash}>
+                  <Text style={[type.quote, { color: palette.textPrimary }]}>{S.compose_flash}</Text>
+                  <Underline width={56} />
+                </View>
+              )}
+
+              {/* 유형 바꾸기 — 새 기록이고 아직 아무것도 긋지 않았을 때만 */}
+              {!editingId && count === 0 && (
                 <Pressable onPress={() => setEntryType(null)} style={styles.typeBack}>
                   <Ionicons name="chevron-back" size={13} color={palette.textTertiary} />
                   <Text style={[type.caption, { color: palette.textTertiary }]}>
@@ -295,22 +412,56 @@ export default function ComposeScreen() {
                   </Text>
                 </Pressable>
               )}
-              <View style={styles.dateRow}>
-                <Pressable onPress={() => setDay(addDays(day, -1))} hitSlop={10}>
-                  <Ionicons name="chevron-back" size={15} color={palette.textSecondary} />
-                </Pressable>
-                <Text style={[type.caption, { color: palette.textSecondary }]}>
-                  {day === today ? `오늘 · ${formatDayKo(day)}` : formatDayKo(day)}
-                </Text>
-                <Pressable
-                  onPress={() => setDay(addDays(day, 1))}
-                  hitSlop={10}
-                  disabled={day >= today}
-                  style={day >= today && { opacity: 0.25 }}
-                >
-                  <Ionicons name="chevron-forward" size={15} color={palette.textSecondary} />
-                </Pressable>
-              </View>
+
+              {/* 출처 스트립 — 최근 읽던 책이 맨 앞, 이미 선택됨 */}
+              {sourced && (
+                <>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    style={styles.sourceStrip}
+                    contentContainerStyle={styles.sourceStripContent}
+                  >
+                    {sources.map((s) => (
+                      <Chip
+                        key={s.id}
+                        label={s.title}
+                        active={!newSource && sourceId === s.id}
+                        onPress={() => selectSource(s)}
+                      />
+                    ))}
+                    <Chip
+                      label={S.compose_new_source(spec.label)}
+                      active={newSource}
+                      outline
+                      onPress={() => {
+                        setNewSource(true);
+                        setTitle('');
+                        setSubtitle('');
+                        setTagText('');
+                      }}
+                    />
+                  </ScrollView>
+                  {newSource && (
+                    <View style={styles.sourceForm}>
+                      <Field
+                        value={title}
+                        onChangeText={setTitle}
+                        placeholder={spec.fields.title?.placeholder ?? ''}
+                        autoFocus
+                        grow
+                      />
+                      <Field
+                        value={subtitle}
+                        onChangeText={setSubtitle}
+                        placeholder={spec.fields.subtitle?.placeholder ?? ''}
+                        short
+                      />
+                    </View>
+                  )}
+                </>
+              )}
 
               {/* 식사 슬롯 */}
               {spec.fields.slot && (
@@ -326,8 +477,8 @@ export default function ComposeScreen() {
                 </View>
               )}
 
-              {/* 제목·부제 */}
-              {spec.fields.title && (
+              {/* 제목·부제 (출처 없는 유형) */}
+              {!sourced && spec.fields.title && (
                 <>
                   <Field
                     value={title}
@@ -343,7 +494,7 @@ export default function ComposeScreen() {
                   )}
                 </>
               )}
-              {spec.fields.subtitle && (
+              {!sourced && spec.fields.subtitle && (
                 <Field
                   value={subtitle}
                   onChangeText={setSubtitle}
@@ -352,35 +503,25 @@ export default function ComposeScreen() {
                 />
               )}
 
-              {/* URL */}
-              {spec.fields.url && (
-                <Field
-                  value={url}
-                  onChangeText={setUrl}
-                  placeholder="https://"
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  color={palette.secondary}
-                />
-              )}
-
-              {/* 인용문 — 세리프, 포커스 시 밑줄 */}
+              {/* 인용문 — 세리프, 포커스 시 밑줄. 이 시트의 주인공 */}
               {spec.fields.quote && (
                 <QuoteField
+                  inputRef={quoteRef}
                   value={quote}
                   onChangeText={setQuote}
                   placeholder={spec.fields.quote.placeholder}
                 />
               )}
 
-              {/* 쪽수 */}
-              {spec.fields.page && (
+              {/* URL */}
+              {spec.fields.url && (
                 <Field
-                  value={page}
-                  onChangeText={setPage}
-                  placeholder="쪽수 (선택)"
-                  keyboardType="number-pad"
-                  short
+                  value={url}
+                  onChangeText={setUrl}
+                  placeholder="링크 (선택)"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  color={palette.secondary}
                 />
               )}
 
@@ -398,7 +539,7 @@ export default function ComposeScreen() {
                 </View>
               )}
 
-              {/* 본문 */}
+              {/* 본문 — 출처 유형에서는 한 줄짜리 메모 */}
               {spec.fields.body && (
                 <TextInput
                   ref={bodyRef}
@@ -408,7 +549,7 @@ export default function ComposeScreen() {
                     {
                       color: palette.textPrimary,
                       backgroundColor: palette.surfaceSunken,
-                      minHeight: entryType === 'writing' ? 200 : 96,
+                      minHeight: entryType === 'writing' ? 200 : sourced ? 44 : 96,
                     },
                   ]}
                   placeholder={spec.fields.body.placeholder}
@@ -443,50 +584,84 @@ export default function ComposeScreen() {
                 </Pressable>
               )}
 
-              {/* 사진 */}
-              {spec.fields.image &&
-                (photoPreview ? (
-                  <View>
-                    <Image
-                      source={{ uri: photoPreview }}
-                      style={[styles.photo, { backgroundColor: palette.surfaceSunken }]}
-                    />
-                    <Pressable
-                      style={styles.photoRemove}
-                      onPress={() => {
-                        setImageUri(null);
-                        setImageIsNew(false);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="close-circle" size={22} color={palette.textSecondary} />
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.chipRow}>
-                    <Chip
-                      label={S.compose_photo_camera}
-                      icon="camera-outline"
-                      active={false}
-                      onPress={() => pickPhoto(true)}
-                    />
-                    <Chip
-                      label={S.compose_photo_album}
-                      icon="images-outline"
-                      active={false}
-                      onPress={() => pickPhoto(false)}
-                    />
-                  </View>
-                ))}
-
-              {/* 태그 */}
-              {entryType !== 'task' && (
+              {/* 접힌 보조 항목 — 쪽수 · 태그 · 날짜 · 사진 */}
+              <View style={styles.chipRow}>
+                {spec.fields.page && (
+                  <TextInput
+                    style={[
+                      type.caption,
+                      styles.pageInput,
+                      { color: palette.textPrimary, backgroundColor: palette.surfaceSunken },
+                    ]}
+                    placeholder="쪽 (선택)"
+                    placeholderTextColor={palette.textTertiary}
+                    value={page}
+                    onChangeText={setPage}
+                    keyboardType="number-pad"
+                  />
+                )}
+                {entryType !== 'task' && !showTags && (
+                  <Chip
+                    label={
+                      tagText.trim()
+                        ? `#${tagText.trim().split(/\s+/)[0].replace(/^#/, '')}${
+                            tagText.trim().split(/\s+/).length > 1 ? ' 외' : ''
+                          }`
+                        : S.compose_add_tags
+                    }
+                    active={false}
+                    outline
+                    onPress={() => setShowTags(true)}
+                  />
+                )}
+                <Chip
+                  label={`${day === today ? '오늘' : formatDayShortKo(day)} ‹`}
+                  active={false}
+                  outline
+                  onPress={() => setDay(addDays(day, -1))}
+                />
+                {day < today && (
+                  <Chip label="›" active={false} outline onPress={() => setDay(addDays(day, 1))} />
+                )}
+                {spec.fields.image && !photoPreview && (
+                  <>
+                    <Chip label="" icon="camera-outline" active={false} outline onPress={() => pickPhoto(true)} />
+                    <Chip label="" icon="images-outline" active={false} outline onPress={() => pickPhoto(false)} />
+                  </>
+                )}
+              </View>
+              {entryType !== 'task' && showTags && (
                 <Field
                   value={tagText}
                   onChangeText={setTagText}
                   placeholder={S.compose_tags_placeholder}
                   autoCapitalize="none"
+                  autoFocus
                 />
+              )}
+              {photoPreview ? (
+                <View style={{ marginTop: space.m }}>
+                  <Image
+                    source={{ uri: photoPreview }}
+                    style={[styles.photo, { backgroundColor: palette.surfaceSunken }]}
+                  />
+                  <Pressable
+                    style={styles.photoRemove}
+                    onPress={() => {
+                      setImageUri(null);
+                      setImageIsNew(false);
+                    }}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="close-circle" size={22} color={palette.textSecondary} />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {sourced && !editingId && (
+                <Text style={[type.caption, styles.hint, { color: palette.textTertiary }]}>
+                  {S.compose_continuous_hint(spec.label)}
+                </Text>
               )}
             </>
           )}
@@ -503,6 +678,8 @@ function Field({
   placeholder,
   color,
   short,
+  grow,
+  autoFocus,
   autoCapitalize,
   keyboardType,
 }: {
@@ -511,6 +688,8 @@ function Field({
   placeholder: string;
   color?: string;
   short?: boolean;
+  grow?: boolean;
+  autoFocus?: boolean;
   autoCapitalize?: 'none' | 'sentences';
   keyboardType?: 'default' | 'url' | 'number-pad';
 }) {
@@ -523,25 +702,29 @@ function Field({
         {
           color: color ?? palette.textPrimary,
           backgroundColor: palette.surfaceSunken,
-          width: short ? 160 : undefined,
+          width: short ? 130 : undefined,
+          flex: grow ? 1 : undefined,
         },
       ]}
       placeholder={placeholder}
       placeholderTextColor={palette.textTertiary}
       value={value}
       onChangeText={onChangeText}
+      autoFocus={autoFocus}
       autoCapitalize={autoCapitalize}
       keyboardType={keyboardType}
     />
   );
 }
 
-// 인용문 필드 — 세리프로 입력되고, 포커스하면 아래에 인주 밑줄이 그어진다
+// 인용문 필드 — 세리프로 입력되고, 포커스하면 아래에 밑줄이 그어진다
 function QuoteField({
+  inputRef,
   value,
   onChangeText,
   placeholder,
 }: {
+  inputRef: React.RefObject<TextInput | null>;
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
@@ -551,6 +734,7 @@ function QuoteField({
   return (
     <View style={styles.quoteWrap}>
       <TextInput
+        ref={inputRef}
         style={[
           type.quote,
           styles.quoteInput,
@@ -574,11 +758,13 @@ function Chip({
   active,
   onPress,
   icon,
+  outline,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  outline?: boolean;
 }) {
   const { palette } = useTheme();
   return (
@@ -586,21 +772,30 @@ function Chip({
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
-        {
-          backgroundColor: active ? palette.accent : palette.surfaceSunken,
-          opacity: pressed ? 0.7 : 1,
-        },
+        outline
+          ? { borderWidth: StyleSheet.hairlineWidth, borderColor: active ? palette.accent : palette.divider, backgroundColor: active ? palette.accentSoft : 'transparent' }
+          : { backgroundColor: active ? palette.accent : palette.surfaceSunken },
+        { opacity: pressed ? 0.7 : 1 },
       ]}
     >
       {icon ? (
-        <Ionicons name={icon} size={14} color={active ? palette.surface : palette.textSecondary} />
+        <Ionicons
+          name={icon}
+          size={14}
+          color={active && !outline ? palette.onAccent : palette.textSecondary}
+        />
       ) : null}
-      <Text
-        style={[type.caption, { color: active ? palette.surface : palette.textSecondary }]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
+      {label ? (
+        <Text
+          style={[
+            type.caption,
+            { color: active && !outline ? palette.onAccent : active ? palette.accent : palette.textSecondary },
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -619,24 +814,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.gutter,
     paddingTop: space.l,
   },
+  flash: {
+    alignItems: 'center',
+    gap: 2,
+    paddingBottom: space.l,
+  },
   typeBack: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
     marginBottom: space.m,
   },
-  dateRow: {
+  sourceStrip: {
+    marginHorizontal: -space.gutter,
+    marginBottom: space.m,
+  },
+  sourceStripContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.l,
-    marginBottom: space.l,
+    gap: space.s,
+    paddingHorizontal: space.gutter,
+  },
+  sourceForm: {
+    flexDirection: 'row',
+    gap: space.s,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     gap: space.s,
     marginBottom: space.m,
+    paddingHorizontal: 0,
   },
   chip: {
     flexDirection: 'row',
@@ -653,12 +862,18 @@ const styles = StyleSheet.create({
     paddingVertical: space.m,
     marginBottom: space.m,
   },
+  pageInput: {
+    width: 84,
+    borderRadius: radius.chip,
+    paddingHorizontal: space.m,
+    paddingVertical: 8,
+  },
   quoteWrap: { marginBottom: space.m },
   quoteInput: {
     borderRadius: radius.button,
     paddingHorizontal: space.l,
     paddingVertical: space.m,
-    minHeight: 88,
+    minHeight: 96,
     textAlignVertical: 'top',
   },
   bodyInput: {
@@ -678,12 +893,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 180,
     borderRadius: radius.card,
-    marginBottom: space.m,
   },
   photoRemove: {
     position: 'absolute',
     top: 8,
     right: 8,
+  },
+  hint: {
+    marginTop: space.s,
   },
   savedWrap: {
     flex: 1,

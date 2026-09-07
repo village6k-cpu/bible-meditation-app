@@ -15,7 +15,7 @@ interface Props {
 }
 
 // 낱장 — 유형마다 다른 조판으로 렌더링되는 기록 카드.
-// 인용문이 있으면 인용문이 주인공이고, 그 아래 인주 밑줄이 그어진다.
+// 인용문이 있으면 인용문이 주인공이고, 그 아래 먹 밑줄이 그어진다.
 export function EntryCard({ entry, tags, meta, onPress }: Props) {
   const { palette } = useTheme();
   const spec = specOf(entry.type);
@@ -65,7 +65,7 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
         </Text>
       ) : null}
 
-      {/* 인용문 + 인주 밑줄 */}
+      {/* 인용문 + 먹 밑줄 */}
       {entry.quote ? (
         <View style={styles.quoteWrap}>
           <Text style={[type.quote, { color: palette.textPrimary }]} numberOfLines={5}>

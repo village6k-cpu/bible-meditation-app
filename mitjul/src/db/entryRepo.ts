@@ -21,15 +21,16 @@ export async function createEntry(db: SQLiteDatabase, input: EntryInput): Promis
   const id = newId();
   const now = Date.now();
   await db.runAsync(
-    `INSERT INTO entries (id, type, day, created_at, updated_at, title, subtitle, quote, body,
+    `INSERT INTO entries (id, type, day, created_at, updated_at, source_id, title, subtitle, quote, body,
                           url, image_uri, page, slot, minutes, practiced, done, due_time)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.type,
       input.day,
       now,
       now,
+      input.source_id ?? null,
       input.title ?? null,
       input.subtitle ?? null,
       input.quote ?? null,
@@ -50,12 +51,13 @@ export async function createEntry(db: SQLiteDatabase, input: EntryInput): Promis
 
 export async function updateEntry(db: SQLiteDatabase, id: string, input: EntryInput): Promise<void> {
   await db.runAsync(
-    `UPDATE entries SET day = ?, title = ?, subtitle = ?, quote = ?, body = ?, url = ?,
+    `UPDATE entries SET day = ?, source_id = ?, title = ?, subtitle = ?, quote = ?, body = ?, url = ?,
                         image_uri = ?, page = ?, slot = ?, minutes = ?, practiced = ?,
                         done = ?, due_time = ?, updated_at = ?
      WHERE id = ?`,
     [
       input.day,
+      input.source_id ?? null,
       input.title ?? null,
       input.subtitle ?? null,
       input.quote ?? null,

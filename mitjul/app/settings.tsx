@@ -79,7 +79,7 @@ export default function SettingsScreen() {
                 ]}
               >
                 <Text
-                  style={[type.caption, { color: active ? palette.surface : palette.textSecondary }]}
+                  style={[type.caption, { color: active ? palette.onAccent : palette.textSecondary }]}
                 >
                   {m.label}
                 </Text>

@@ -7,6 +7,8 @@ export interface TypeSpec {
   key: EntryType;
   label: string;
   icon: string; // Ionicons
+  // 출처(책·영상)에 매달리는 유형 — 제목·저자는 출처에 한 번만, 밑줄은 연속으로
+  sourced?: boolean;
   // 컴포저에 노출할 필드와 그 문구
   fields: {
     title?: { label: string; placeholder: string };
@@ -53,28 +55,31 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     key: 'book',
     label: '책',
     icon: 'book-outline',
+    sourced: true,
     fields: {
-      title: { label: '책 제목', placeholder: '『모모』' },
-      subtitle: { label: '저자', placeholder: '미하엘 엔데' },
+      // title/subtitle은 출처 등록 폼의 문구로만 쓰인다 — 밑줄마다 묻지 않는다
+      title: { label: '책 제목', placeholder: '책 제목' },
+      subtitle: { label: '저자', placeholder: '저자' },
       quote: { label: '밑줄', placeholder: '밑줄 그은 문장을 옮겨 적어보세요' },
       page: true,
-      body: { label: '메모', placeholder: '이 문장이 왜 좋았는지' },
+      body: { label: '메모', placeholder: '메모 (선택)' },
       image: true,
     },
-    requiresOneOf: ['quote', 'body'],
+    requiresOneOf: ['quote', 'body', 'image_uri'],
     exportHeading: '책',
   },
   video: {
     key: 'video',
     label: '영상',
     icon: 'play-outline',
+    sourced: true,
     fields: {
-      url: true,
       title: { label: '영상 제목', placeholder: '영상 제목' },
-      subtitle: { label: '채널', placeholder: '채널 이름' },
+      subtitle: { label: '채널', placeholder: '채널 (선택)' },
+      url: true,
       body: { label: '메모', placeholder: '기억하고 싶은 내용' },
     },
-    requiresOneOf: ['url', 'title', 'body'],
+    requiresOneOf: ['url', 'body'],
     exportHeading: '영상',
   },
   verse: {

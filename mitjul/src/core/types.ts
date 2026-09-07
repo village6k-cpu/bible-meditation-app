@@ -12,6 +12,19 @@ export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export type Reaction = 'kept' | 'skipped' | 'retired';
 
+// 출처 — 책·영상은 한 번만 등록하고, 밑줄은 출처에 매달린다.
+// 하루에 수십 개의 밑줄을 긋는 사람이 제목을 수십 번 치지 않도록.
+export interface Source {
+  id: string;
+  kind: 'book' | 'video';
+  title: string;
+  creator: string | null; // 저자 / 채널
+  created_at: number;
+  last_used_at: number; // 최근 사용 순 — 컴포저는 이 순서로 칩을 늘어놓고 첫 것을 미리 고른다
+  last_tags: string; // 이 출처에 마지막으로 붙인 태그 (공백 구분) — 다음 밑줄의 기본값
+  deleted_at: number | null;
+}
+
 // 단일 테이블 + 유형별 nullable 컬럼. 레포지토리가 이 형태 그대로 돌려준다.
 export interface Entry {
   id: string;
@@ -23,6 +36,7 @@ export interface Entry {
   pinned: number; // 0/1 — 아껴둔 밑줄
   revisit_count: number; // 상세를 연 횟수
   last_revisited_at: number | null; // 마지막으로 '다시 읽은' 시각
+  source_id: string | null; // book/video — 출처. title/subtitle은 출처에서 복사되어 온다
   title: string | null; // book:책제목 / video:영상제목 / workout:종류 / writing:글제목 / task:내용
   subtitle: string | null; // book:저자 / video:채널 / verse:본문 주소('시편 23:1')
   quote: string | null; // book:밑줄 문장 / verse:옮겨 적은 말씀
@@ -40,6 +54,7 @@ export interface Entry {
 export interface EntryInput {
   type: EntryType;
   day: string;
+  source_id?: string | null;
   title?: string | null;
   subtitle?: string | null;
   quote?: string | null;

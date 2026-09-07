@@ -27,6 +27,7 @@ function entry(partial: Partial<Entry> & { type: Entry['type'] }, tags: string[]
     practiced: null,
     done: null,
     due_time: null,
+    source_id: null,
     ...partial,
     tags,
   };

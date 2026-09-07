@@ -5,7 +5,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { space, type } from '../theme/tokens';
 
 // 먹점 매트릭스 — 그래프가 아니라 먹의 농담으로 그린 잔결.
-// 행마다 0 / 0.4 / 0.7 / 1.0 네 단계의 농도, 오늘만 인주색 링.
+// 행마다 0 / 0.4 / 0.7 / 1.0 네 단계의 농도, 오늘만 먹색 링.
 
 export type DotLevel = 0 | 1 | 2 | 3;
 

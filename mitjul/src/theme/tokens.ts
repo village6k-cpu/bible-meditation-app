@@ -1,54 +1,57 @@
-// 밑줄의 색은 셋뿐 — 종이, 먹, 인주.
-// 순수한 흰색도 순수한 검정도 쓰지 않는다. 종이는 늘 종이색이다.
+// 밑줄의 색은 둘뿐 — 흰 종이와 검은 먹. 모노톤.
+// 밑줄(강조)은 먹 그 자체다. 색으로 말하지 않고 획으로 말한다.
 
 export interface Palette {
   bg: string; // 지면
-  surface: string; // 카드·낱장
+  surface: string; // 카드·시트 (지면과 같은 흰색 — 구획은 헤어라인으로)
   surfaceSunken: string; // 입력창·검색창 바닥
   textPrimary: string; // 먹
   textSecondary: string;
   textTertiary: string;
-  accent: string; // 인주 — 모든 밑줄과 활성 상태
-  accentSoft: string; // 선택·하이라이트 워시
+  accent: string; // 먹 — 모든 밑줄과 활성 상태
+  accentSoft: string; // 선택 워시
   accentInk: string; // pressed
-  secondary: string; // 쪽빛 — 링크·성경 장절·URL 전용
+  secondary: string; // 링크·본문 주소 (회색 톤, 밑줄로 구분)
   divider: string;
   dotInk: string; // 흐름 탭 먹점
   overlay: string;
+  onAccent: string; // 먹 위의 글자색
 }
 
-// 낮의 서재 — 한지와 먹, 그리고 인주
+// 낮 — 흰 종이
 export const light: Palette = {
-  bg: '#F6F1E6',
-  surface: '#FDFAF2',
-  surfaceSunken: '#EEE7D7',
-  textPrimary: '#2C2620',
-  textSecondary: '#6E6355',
-  textTertiary: '#A09582',
-  accent: '#C24A2F',
-  accentSoft: '#F6E0D5',
-  accentInk: '#8E3421',
-  secondary: '#3D5A78',
-  divider: '#E5DCC8',
-  dotInk: '#2C2620',
-  overlay: 'rgba(44,38,32,0.45)',
+  bg: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceSunken: '#F3F3F3',
+  textPrimary: '#111111',
+  textSecondary: '#6E6E6E',
+  textTertiary: '#A6A6A6',
+  accent: '#111111',
+  accentSoft: '#EDEDED',
+  accentInk: '#000000',
+  secondary: '#4A4A4A',
+  divider: '#E7E7E7',
+  dotInk: '#111111',
+  overlay: 'rgba(0,0,0,0.4)',
+  onAccent: '#FFFFFF',
 };
 
-// 밤의 서재 — 등불에 데워진 갈색 어둠
+// 밤 — 검은 지면
 export const dark: Palette = {
-  bg: '#17130F',
-  surface: '#201B15',
-  surfaceSunken: '#282219',
-  textPrimary: '#EDE4D3',
-  textSecondary: '#A99C88',
-  textTertiary: '#7A6F5F',
-  accent: '#E2694A',
-  accentSoft: '#3A241C',
-  accentInk: '#F0876B',
-  secondary: '#92B0CE',
-  divider: '#322B22',
-  dotInk: '#EDE4D3',
-  overlay: 'rgba(0,0,0,0.55)',
+  bg: '#0C0C0C',
+  surface: '#0C0C0C',
+  surfaceSunken: '#1C1C1C',
+  textPrimary: '#F2F2F2',
+  textSecondary: '#9A9A9A',
+  textTertiary: '#5E5E5E',
+  accent: '#F2F2F2',
+  accentSoft: '#262626',
+  accentInk: '#FFFFFF',
+  secondary: '#BDBDBD',
+  divider: '#242424',
+  dotInk: '#F2F2F2',
+  overlay: 'rgba(0,0,0,0.6)',
+  onAccent: '#0C0C0C',
 };
 
 // 사용자가 쓴 것은 바탕체, 앱이 말하는 것은 산스체.

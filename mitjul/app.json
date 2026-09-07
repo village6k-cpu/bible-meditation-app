@@ -19,7 +19,7 @@
     "android": {
       "package": "com.village6k.mitjul",
       "adaptiveIcon": {
-        "backgroundColor": "#F6F1E6",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -39,9 +39,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#F6F1E6",
+          "backgroundColor": "#FFFFFF",
           "dark": {
-            "backgroundColor": "#17130F"
+            "backgroundColor": "#0C0C0C"
           }
         }
       ],

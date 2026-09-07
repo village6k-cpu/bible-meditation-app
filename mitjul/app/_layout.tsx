@@ -65,10 +65,10 @@ export default function RootLayout() {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#F6F1E6',
+          backgroundColor: '#FFFFFF',
         }}
       >
-        <Text style={{ fontSize: 18, color: '#2C2620' }}>
+        <Text style={{ fontSize: 18, color: '#111111' }}>
           {S.appName} — 아직 웹은 준비 중이에요. 아이폰에서 만나요.
         </Text>
       </View>
