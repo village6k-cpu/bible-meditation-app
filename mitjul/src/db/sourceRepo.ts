@@ -27,26 +27,51 @@ export async function findSource(
   );
 }
 
-// 없으면 만들고, 있으면 그것을 돌려준다 (비어 있던 저자·링크는 이번 입력으로 채운다)
+// 같은 링크(정규형)의 살아 있는 출처 — 붙여넣은 영상을 이미 담아뒀는지 링크로 안다
+export async function findSourceByUrl(
+  db: SQLiteDatabase,
+  kind: Source['kind'],
+  url: string
+): Promise<Source | null> {
+  return db.getFirstAsync<Source>(
+    'SELECT * FROM sources WHERE kind = ? AND url = ? AND deleted_at IS NULL ORDER BY last_used_at DESC LIMIT 1',
+    [kind, url]
+  );
+}
+
+export interface SourceExtra {
+  url?: string | null;
+  thumbnail_uri?: string | null;
+}
+
+// 없으면 만들고, 있으면 그것을 돌려준다 (링크로 먼저, 제목으로 다음; 비어 있던 저자·링크·썸네일은 이번 입력으로 채운다)
 export async function createSource(
   db: SQLiteDatabase,
   kind: Source['kind'],
   title: string,
   creator: string | null,
-  url: string | null = null
+  extra: SourceExtra = {}
 ): Promise<Source> {
   const t = title.trim();
-  const existing = await findSource(db, kind, t);
+  const url = extra.url ?? null;
+  const thumbnail = extra.thumbnail_uri ?? null;
+  const existing = (url && (await findSourceByUrl(db, kind, url))) || (await findSource(db, kind, t));
   if (existing) {
     const merged: Source = {
       ...existing,
       creator: existing.creator ?? creator,
       url: existing.url ?? url,
+      thumbnail_uri: existing.thumbnail_uri ?? thumbnail,
     };
-    if (merged.creator !== existing.creator || merged.url !== existing.url) {
-      await db.runAsync('UPDATE sources SET creator = ?, url = ? WHERE id = ?', [
+    if (
+      merged.creator !== existing.creator ||
+      merged.url !== existing.url ||
+      merged.thumbnail_uri !== existing.thumbnail_uri
+    ) {
+      await db.runAsync('UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ? WHERE id = ?', [
         merged.creator,
         merged.url,
+        merged.thumbnail_uri,
         existing.id,
       ]);
     }
@@ -59,14 +84,15 @@ export async function createSource(
     title: t,
     creator,
     url,
+    thumbnail_uri: thumbnail,
     created_at: now,
     last_used_at: now,
     last_tags: '',
     deleted_at: null,
   };
   await db.runAsync(
-    'INSERT INTO sources (id, kind, title, creator, url, created_at, last_used_at, last_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [source.id, kind, t, creator, url, now, now, '']
+    'INSERT INTO sources (id, kind, title, creator, url, thumbnail_uri, created_at, last_used_at, last_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [source.id, kind, t, creator, url, thumbnail, now, now, '']
   );
   return source;
 }

@@ -9,6 +9,8 @@ export interface TypeSpec {
   icon: string; // Ionicons
   // 출처(책·영상)에 매달리는 유형 — 제목·저자는 출처에 한 번만, 밑줄은 연속으로
   sourced?: boolean;
+  // 링크를 붙여넣는 것이 시작인 유형 — 제목·채널·썸네일은 링크에서 알아서 온다
+  linkFirst?: boolean;
   // 컴포저에 노출할 필드와 그 문구
   fields: {
     title?: { label: string; placeholder: string };
@@ -73,11 +75,12 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     label: '영상',
     icon: 'play-outline',
     sourced: true,
+    linkFirst: true,
     fields: {
       title: { label: '영상 제목', placeholder: '영상 제목' },
       subtitle: { label: '채널', placeholder: '채널 (선택)' },
       url: true,
-      body: { label: '메모', placeholder: '기억하고 싶은 내용' },
+      body: { label: '메모', placeholder: '기억하고 싶은 내용 (선택)' },
     },
     requiresOneOf: ['url', 'body'],
     exportHeading: '영상',

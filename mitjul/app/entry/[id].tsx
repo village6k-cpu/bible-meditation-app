@@ -16,8 +16,10 @@ import * as Haptics from 'expo-haptics';
 import { useSQLiteContext } from 'expo-sqlite';
 import { EntryCard } from '../../src/components/EntryCard';
 import { Underline } from '../../src/components/Underline';
+import { VideoPlayer } from '../../src/components/VideoPlayer';
 import { S } from '../../src/core/strings.ko';
 import { formatDayKo } from '../../src/core/dates';
+import { parseVideoLink } from '../../src/core/links';
 import { specOf } from '../../src/core/registry';
 import { Entry, MEAL_SLOT_LABELS } from '../../src/core/types';
 import {
@@ -30,7 +32,7 @@ import {
 } from '../../src/db/entryRepo';
 import { imageAbs } from '../../src/export/files';
 import { useTheme } from '../../src/theme/ThemeProvider';
-import { radius, space, type, underline } from '../../src/theme/tokens';
+import { radius, space, type } from '../../src/theme/tokens';
 
 export default function EntryDetailScreen() {
   const { palette } = useTheme();
@@ -75,6 +77,7 @@ export default function EntryDetailScreen() {
 
   const spec = specOf(entry.type);
   const photo = imageAbs(entry.image_uri);
+  const video = entry.type === 'video' && entry.url ? parseVideoLink(entry.url) : null;
 
   const sourceLine =
     entry.type === 'book'
@@ -156,6 +159,17 @@ export default function EntryDetailScreen() {
           </Text>
         ) : null}
 
+        {/* 영상 — 붙여넣은 링크의 얼굴. 누르면 그 자리에서 재생된다 */}
+        {entry.type === 'video' && (photo || video) ? (
+          <View style={{ marginTop: space.l }}>
+            <VideoPlayer
+              thumbnail={photo}
+              embedUrl={video?.embedUrl ?? null}
+              onOpenExternal={() => entry.url && Linking.openURL(entry.url).catch(() => {})}
+            />
+          </View>
+        ) : null}
+
         {/* 인용문 — 이 화면의 주인공 */}
         {entry.quote ? (
           <View style={{ marginTop: space.xl }}>
@@ -193,8 +207,8 @@ export default function EntryDetailScreen() {
           </Text>
         ) : null}
 
-        {/* 사진 */}
-        {photo ? (
+        {/* 사진 (영상의 썸네일은 위 플레이어가 맡는다) */}
+        {photo && entry.type !== 'video' ? (
           <Image
             source={{ uri: photo }}
             style={[styles.photo, { backgroundColor: palette.surfaceSunken }]}

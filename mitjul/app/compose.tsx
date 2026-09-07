@@ -16,12 +16,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useSQLiteContext } from 'expo-sqlite';
 import { TypePicker } from '../src/components/TypePicker';
 import { Underline } from '../src/components/Underline';
+import { VideoPlayer } from '../src/components/VideoPlayer';
 import { S } from '../src/core/strings.ko';
 import { addDays, formatDayShortKo, todayKey } from '../src/core/dates';
+import { parseVideoLink } from '../src/core/links';
 import { REGISTRY, specOf } from '../src/core/registry';
 import { parseTagInput } from '../src/core/tags';
 import {
@@ -37,12 +40,14 @@ import {
   createSource,
   deleteSource,
   findSource,
+  findSourceByUrl,
   getSource,
   recentSources,
   renameSource,
   touchSource,
 } from '../src/db/sourceRepo';
-import { imageAbs, persistImage } from '../src/export/files';
+import { cacheRemoteImage, imageAbs, persistImage } from '../src/export/files';
+import { LinkMeta, domainOf, previewLink, resolveLink } from '../src/export/linkMeta';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { radius, space, type } from '../src/theme/tokens';
 
@@ -103,15 +108,28 @@ export default function ComposeScreen() {
   const [count, setCount] = useState(0); // 이번 시트에서 이어 그은 밑줄 수
   const [flash, setFlash] = useState(false);
 
+  // 링크가 먼저인 유형(영상) — 붙여넣는 순간 썸네일이 뜨고, 제목·채널은 링크에서 온다
+  const [linkMeta, setLinkMeta] = useState<LinkMeta | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [clipHint, setClipHint] = useState(false); // 클립보드에 링크가 있다
+  const [showTitleFields, setShowTitleFields] = useState(false); // 제목·채널을 손으로 적는 중
+  const [knownHint, setKnownHint] = useState(false); // 붙여넣은 링크가 이미 담아둔 영상
+  const autoTitle = useRef(false); // 제목이 링크에서 채워졌다(사용자가 고치지 않았다)
+  const autoCreator = useRef(false);
+  const resolveSeq = useRef(0);
+
   const quoteRef = useRef<TextInput>(null);
   const bodyRef = useRef<TextInput>(null);
+  const linkRef = useRef<TextInput>(null);
   const pickSeq = useRef(0);
   const navigation = useNavigation();
 
   const spec = entryType ? specOf(entryType) : null;
   const sourced = !!spec?.sourced;
+  const linkFirst = !!spec?.linkFirst;
   const selectedSource =
     !newSource && sourceId ? (sources.find((s) => s.id === sourceId) ?? null) : null;
+  const selectedVideo = selectedSource?.url ? parseVideoLink(selectedSource.url) : null;
 
   // 쓰던 내용이 있는데 시트를 내리면 확인 없이 사라지지 않도록
   const dirtyRef = useRef(false);
@@ -164,10 +182,21 @@ export default function ComposeScreen() {
       setNewSource(false);
       setEditingSource(null);
       setLegacy(false);
+      setLinkMeta(null);
+      setShowTitleFields(false);
+      setKnownHint(false);
+      autoTitle.current = false;
+      autoCreator.current = false;
       if (!REGISTRY[t].sourced) return;
+      // 링크가 먼저인 유형은 링크 칸이 열린 채 시작한다 — 최근 영상은 칩으로만
+      if (REGISTRY[t].linkFirst) {
+        setNewSource(true);
+        void checkClipboard();
+      }
       const rs = await recentSources(db, t as Source['kind']);
       if (seq !== pickSeq.current) return; // 그새 다른 유형으로 옮겨 갔다
       setSources(rs);
+      if (REGISTRY[t].linkFirst) return;
       if (rs.length > 0) {
         setSourceId(rs[0].id);
         setTagText(rs[0].last_tags);
@@ -177,6 +206,32 @@ export default function ComposeScreen() {
     },
     [db]
   );
+
+  // 클립보드에 링크가 있으면 붙여넣기 칩을 보여준다 — 읽지는 않는다(iOS는 읽는 순간 알림이 뜬다)
+  async function checkClipboard() {
+    try {
+      const has =
+        Platform.OS === 'ios' ? await Clipboard.hasUrlAsync() : await Clipboard.hasStringAsync();
+      setClipHint(!!has);
+    } catch {
+      setClipHint(false);
+    }
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await Clipboard.getStringAsync();
+      const found = previewLink(text);
+      if (!found) {
+        setClipHint(false);
+        Alert.alert(S.compose_clipboard_empty);
+        return;
+      }
+      setSourceUrl(found.url);
+    } catch {
+      Alert.alert(S.compose_clipboard_empty);
+    }
+  }
 
   useEffect(() => {
     if (!editingId && isEntryType(params.type)) pickType(params.type);
@@ -224,6 +279,8 @@ export default function ComposeScreen() {
           // 제목·저자를 새 출처 폼에 채워 두되, 제목 없이도 저장할 수 있게 둔다
           setLegacy(true);
           setNewSource(true);
+          setShowTitleFields(true);
+          if (REGISTRY[e.type].linkFirst) setSourceUrl(e.url ?? '');
         }
       }
     });
@@ -250,6 +307,51 @@ export default function ComposeScreen() {
     }, 350);
     return () => clearTimeout(t);
   }, [spec, sourced, editingId, newSource]);
+
+  // 링크를 붙여넣으면: 유튜브는 썸네일이 즉시, 제목·채널은 잠시 뒤 링크에서.
+  // 이미 담아둔 영상이면 새로 만들지 않고 그 출처를 고른다.
+  useEffect(() => {
+    if (!linkFirst || !newSource || editingSource) return;
+    const preview = previewLink(sourceUrl);
+    if (!preview) {
+      setLinkMeta(null);
+      setResolving(false);
+      return;
+    }
+    setLinkMeta((prev) => (prev && prev.url === preview.url ? prev : preview));
+    const seq = ++resolveSeq.current;
+    const ctrl = new AbortController();
+    setResolving(true);
+    const timer = setTimeout(async () => {
+      try {
+        const existing = await findSourceByUrl(db, 'video', preview.canonicalUrl);
+        if (seq !== resolveSeq.current) return;
+        if (existing) {
+          selectExistingFromLink(existing, preview);
+          return;
+        }
+        const meta = await resolveLink(preview.url, ctrl.signal);
+        if (seq !== resolveSeq.current || !meta) return;
+        setLinkMeta(meta);
+        if (meta.title) {
+          setTitle((prev) => (!prev.trim() || autoTitle.current ? meta.title! : prev));
+          autoTitle.current = true;
+        } else {
+          setShowTitleFields(true); // 링크에서 제목을 못 얻었다 — 손으로
+        }
+        if (meta.creator) {
+          setSubtitle((prev) => (!prev.trim() || autoCreator.current ? meta.creator! : prev));
+          autoCreator.current = true;
+        }
+      } finally {
+        if (seq === resolveSeq.current) setResolving(false);
+      }
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [sourceUrl, linkFirst, newSource, editingSource, db]);
 
   async function pickPhoto(fromCamera: boolean) {
     const ImagePicker = require('expo-image-picker');
@@ -278,11 +380,13 @@ export default function ComposeScreen() {
     body: body.trim().length > 0,
     image_uri: imageUri !== null,
     // 영상은 출처가 링크를 지니므로, 메모마다 링크를 다시 붙이지 않아도 된다
-    url: url.trim().length > 0 || sourceUrl.trim().length > 0 || !!selectedSource?.url,
+    url: url.trim().length > 0 || !!linkMeta || !!selectedSource?.url,
     minutes: minutes !== null,
   };
   const sourceReady =
-    !sourced || legacy || (newSource ? title.trim().length > 0 : sourceId !== null);
+    !sourced ||
+    legacy ||
+    (newSource ? title.trim().length > 0 || (linkFirst && !!linkMeta) : sourceId !== null);
   const canSave =
     spec !== null &&
     sourceReady &&
@@ -305,6 +409,26 @@ export default function ComposeScreen() {
     setSubtitle('');
     setSourceUrl('');
     setTagText('');
+    setLinkMeta(null);
+    setShowTitleFields(false);
+    setKnownHint(false);
+    autoTitle.current = false;
+    autoCreator.current = false;
+    if (linkFirst) void checkClipboard();
+  }
+
+  // 붙여넣은 링크가 이미 담아둔 영상이면 — 그 출처에 메모를 이어서
+  function selectExistingFromLink(existing: Source, meta: LinkMeta) {
+    setSources((prev) => (prev.some((s) => s.id === existing.id) ? prev : [existing, ...prev]));
+    setSourceId(existing.id);
+    setNewSource(false);
+    setLinkMeta(null);
+    setSourceUrl('');
+    setResolving(false);
+    setKnownHint(true);
+    if (meta.url !== meta.canonicalUrl) setUrl(meta.url); // 시점이 있는 링크는 기록에 남긴다
+    setTagText((prev) => (prev.trim() ? prev : existing.last_tags));
+    setTimeout(() => bodyRef.current?.focus(), 50);
   }
 
   // 출처 칩을 길게 누르면 — 잘못 친 제목은 영원하지 않아야 한다
@@ -322,6 +446,8 @@ export default function ComposeScreen() {
     setTitle(s.title);
     setSubtitle(s.creator ?? '');
     setSourceUrl(s.url ?? '');
+    setLinkMeta(null);
+    setShowTitleFields(true);
   }
 
   function cancelRename() {
@@ -330,6 +456,7 @@ export default function ComposeScreen() {
     setTitle('');
     setSubtitle('');
     setSourceUrl('');
+    setLinkMeta(null);
   }
 
   async function applyRename(): Promise<Source | null> {
@@ -337,7 +464,7 @@ export default function ComposeScreen() {
     const t = title.trim();
     if (!t) return editingSource;
     const creator = subtitle.trim() || null;
-    const u = sourceUrl.trim() || null;
+    const u = sourceUrl.trim() ? (previewLink(sourceUrl)?.canonicalUrl ?? sourceUrl.trim()) : null;
     await renameSource(db, editingSource.id, t, creator, u);
     const updated: Source = { ...editingSource, title: t, creator, url: u };
     setSources((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
@@ -413,14 +540,15 @@ export default function ComposeScreen() {
         if (editingSource) {
           source = await applyRename();
         } else if (newSource) {
-          if (title.trim()) {
-            const created = await createSource(
-              db,
-              kind,
-              title.trim(),
-              subtitle.trim() || null,
-              sourceUrl.trim() || null
-            );
+          // 링크가 먼저인 유형은 제목이 없어도 링크에서 온 제목(없으면 도메인)으로 등록한다
+          const meta = linkFirst ? linkMeta : null;
+          const name = title.trim() || meta?.title || (meta ? domainOf(meta.url) : '');
+          if (name) {
+            const thumb = meta?.thumbnailUrl ? await cacheRemoteImage(meta.thumbnailUrl) : null;
+            const created = await createSource(db, kind, name, subtitle.trim() || meta?.creator || null, {
+              url: meta?.canonicalUrl ?? (sourceUrl.trim() || null),
+              thumbnail_uri: thumb,
+            });
             source = created;
             setSources((prev) =>
               prev.some((s) => s.id === created.id) ? prev : [created, ...prev]
@@ -457,8 +585,11 @@ export default function ComposeScreen() {
             : null,
         quote: spec.fields.quote && quote.trim() ? quote.trim() : null,
         body: spec.fields.body && body.trim() ? body.trim() : null,
-        url: spec.fields.url ? url.trim() || sourceUrl.trim() || src?.url || null : null,
-        image_uri: spec.fields.image ? storedImage : null,
+        url: spec.fields.url
+          ? url.trim() || linkMeta?.url || sourceUrl.trim() || src?.url || null
+          : null,
+        // 영상은 사진 대신 출처의 썸네일을 지닌다 — 카드와 상세에 얼굴이 있도록
+        image_uri: spec.fields.image ? storedImage : (src?.thumbnail_uri ?? null),
         page: spec.fields.page && page.trim() ? Number(page) || null : null,
         slot: spec.fields.slot ? slot : null,
         minutes: spec.fields.minutes ? minutes : null,
@@ -475,7 +606,8 @@ export default function ComposeScreen() {
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // 연속 긋기 — 출처가 있는 새 기록은 시트를 닫지 않고 같은 책에 빈 칸을 다시 연다
+      // 연속 긋기 — 출처가 있는 새 기록은 시트를 닫지 않고 같은 책에 빈 칸을 다시 연다.
+      // 링크가 먼저인 유형은 다음 링크를 받을 준비를 한다 (방금 영상은 칩으로 남는다)
       if (sourced && !editingId) {
         setCount((n) => n + 1);
         setQuote('');
@@ -485,7 +617,21 @@ export default function ComposeScreen() {
         setImageUri(null);
         setImageIsNew(false);
         setFlash(true);
-        (quoteRef.current ?? bodyRef.current)?.focus();
+        setKnownHint(false);
+        if (linkFirst) {
+          setNewSource(true);
+          setSourceUrl('');
+          setLinkMeta(null);
+          setTitle('');
+          setSubtitle('');
+          setShowTitleFields(false);
+          autoTitle.current = false;
+          autoCreator.current = false;
+          void checkClipboard();
+          setTimeout(() => linkRef.current?.focus(), 50);
+        } else {
+          (quoteRef.current ?? bodyRef.current)?.focus();
+        }
         return;
       }
       setSaved(true);
@@ -614,22 +760,92 @@ export default function ComposeScreen() {
                   </ScrollView>
                   {newSource && (
                     <View style={styles.sourceForm}>
-                      <View style={styles.sourceFormRow}>
-                        <Field
-                          value={title}
-                          onChangeText={setTitle}
-                          placeholder={spec.fields.title?.placeholder ?? ''}
-                          autoFocus={!legacy}
-                          grow
-                        />
-                        <Field
-                          value={subtitle}
-                          onChangeText={setSubtitle}
-                          placeholder={spec.fields.subtitle?.placeholder ?? ''}
-                          short
-                        />
-                      </View>
-                      {spec.fields.url && (
+                      {/* 링크가 먼저 — 붙여넣는 순간 썸네일이 뜨고, 제목·채널은 알아서 온다 */}
+                      {linkFirst && !editingSource && (
+                        <>
+                          {clipHint && !sourceUrl.trim() && (
+                            <View style={styles.chipRow}>
+                              <Chip
+                                label={S.compose_paste_clipboard}
+                                icon="clipboard-outline"
+                                outline
+                                onPress={() => void pasteFromClipboard()}
+                              />
+                            </View>
+                          )}
+                          <Field
+                            inputRef={linkRef}
+                            value={sourceUrl}
+                            onChangeText={setSourceUrl}
+                            placeholder={S.compose_link_placeholder}
+                            autoCapitalize="none"
+                            keyboardType="url"
+                            autoFocus={!legacy}
+                            color={palette.secondary}
+                          />
+                          {linkMeta && (
+                            <View style={{ marginBottom: space.m }}>
+                              <VideoPlayer
+                                thumbnail={linkMeta.thumbnailUrl}
+                                embedUrl={linkMeta.video?.embedUrl ?? null}
+                                title={
+                                  title.trim() ||
+                                  linkMeta.title ||
+                                  (resolving ? S.compose_link_reading : domainOf(linkMeta.url))
+                                }
+                                creator={subtitle.trim() || linkMeta.creator}
+                                onOpenExternal={() => Linking.openURL(linkMeta.url).catch(() => {})}
+                              />
+                              {!showTitleFields && (
+                                <Pressable
+                                  onPress={() => setShowTitleFields(true)}
+                                  hitSlop={8}
+                                  style={{ marginTop: space.xs }}
+                                >
+                                  <Text style={[type.caption, { color: palette.textTertiary }]}>
+                                    {S.compose_edit_title}
+                                  </Text>
+                                </Pressable>
+                              )}
+                            </View>
+                          )}
+                          {!linkMeta && !showTitleFields && !legacy && (
+                            <Pressable
+                              onPress={() => setShowTitleFields(true)}
+                              hitSlop={8}
+                              style={{ marginBottom: space.m }}
+                            >
+                              <Text style={[type.caption, { color: palette.textTertiary }]}>
+                                {S.compose_no_link}
+                              </Text>
+                            </Pressable>
+                          )}
+                        </>
+                      )}
+                      {(!linkFirst || editingSource || showTitleFields) && (
+                        <View style={styles.sourceFormRow}>
+                          <Field
+                            value={title}
+                            onChangeText={(t) => {
+                              autoTitle.current = false;
+                              setTitle(t);
+                            }}
+                            placeholder={spec.fields.title?.placeholder ?? ''}
+                            autoFocus={!legacy && !linkFirst}
+                            grow
+                          />
+                          <Field
+                            value={subtitle}
+                            onChangeText={(t) => {
+                              autoCreator.current = false;
+                              setSubtitle(t);
+                            }}
+                            placeholder={spec.fields.subtitle?.placeholder ?? ''}
+                            short
+                          />
+                        </View>
+                      )}
+                      {spec.fields.url && (editingSource || !linkFirst) && (
                         <Field
                           value={sourceUrl}
                           onChangeText={setSourceUrl}
@@ -659,6 +875,23 @@ export default function ComposeScreen() {
                             </Text>
                           </Pressable>
                         </View>
+                      )}
+                    </View>
+                  )}
+                  {/* 고른 영상 — 얼굴이 있고, 누르면 그 자리에서 재생된다 */}
+                  {linkFirst && selectedSource && (selectedSource.thumbnail_uri || selectedVideo) && (
+                    <View style={{ marginBottom: space.m }}>
+                      <VideoPlayer
+                        thumbnail={imageAbs(selectedSource.thumbnail_uri)}
+                        embedUrl={selectedVideo?.embedUrl ?? null}
+                        onOpenExternal={() =>
+                          selectedSource.url && Linking.openURL(selectedSource.url).catch(() => {})
+                        }
+                      />
+                      {knownHint && (
+                        <Text style={[type.caption, { color: palette.textTertiary, marginTop: space.xs }]}>
+                          {S.compose_link_known}
+                        </Text>
                       )}
                     </View>
                   )}
@@ -915,6 +1148,7 @@ export default function ComposeScreen() {
 }
 
 function Field({
+  inputRef,
   value,
   onChangeText,
   placeholder,
@@ -925,6 +1159,7 @@ function Field({
   autoCapitalize,
   keyboardType,
 }: {
+  inputRef?: React.RefObject<TextInput | null>;
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
@@ -938,6 +1173,7 @@ function Field({
   const { palette } = useTheme();
   return (
     <TextInput
+      ref={inputRef}
       style={[
         type.label,
         styles.field,

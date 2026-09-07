@@ -122,6 +122,14 @@ const MIGRATIONS: Migration[] = [
       WHERE kind = 'video' AND url IS NULL;
     `,
   },
+  {
+    // 링크를 붙여넣으면 썸네일이 뜬다 — 출처가 내려받아 둔 썸네일을 지니고, 링크로 출처를 찾는다
+    version: 4,
+    sql: `
+      ALTER TABLE sources ADD COLUMN thumbnail_uri TEXT;
+      CREATE INDEX idx_sources_url ON sources (kind, url);
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

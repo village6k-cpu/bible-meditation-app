@@ -21,6 +21,26 @@ export async function persistImage(tempUri: string): Promise<string> {
   return `images/${name}`;
 }
 
+// 영상 썸네일은 한 번 내려받아 둔다 — 지하철에서도 카드에 얼굴이 있어야 하니까.
+// 실패하면 null: 썸네일 없이도 기록은 남는다.
+export async function cacheRemoteImage(remoteUrl: string | null): Promise<string | null> {
+  if (!remoteUrl || Platform.OS === 'web') return null;
+  const FileSystem = fs();
+  const dir = `${FileSystem.documentDirectory}images`;
+  const name = `thumb-${newId()}.jpg`;
+  try {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
+    const result = await FileSystem.downloadAsync(remoteUrl, `${dir}/${name}`);
+    if (result.status !== 200) {
+      await FileSystem.deleteAsync(`${dir}/${name}`, { idempotent: true }).catch(() => {});
+      return null;
+    }
+    return `images/${name}`;
+  } catch {
+    return null;
+  }
+}
+
 export function imageAbs(rel: string | null): string | null {
   if (!rel) return null;
   if (!rel.startsWith('images/')) return rel;

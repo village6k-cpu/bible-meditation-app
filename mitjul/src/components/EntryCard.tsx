@@ -58,6 +58,16 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
         <Image source={{ uri: photo }} style={[styles.momentPhoto, { backgroundColor: palette.surfaceSunken }]} />
       ) : null}
 
+      {/* 영상: 썸네일이 얼굴 — 재생은 상세에서 */}
+      {entry.type === 'video' && photo ? (
+        <View style={styles.videoThumb}>
+          <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <View style={styles.playBadge}>
+            <Ionicons name="play" size={13} color="#111111" style={{ marginLeft: 2 }} />
+          </View>
+        </View>
+      ) : null}
+
       {/* 묵상: 쪽빛 본문 주소 */}
       {entry.type === 'verse' && entry.subtitle ? (
         <Text style={[type.label, { color: palette.secondary, marginBottom: space.xs }]}>
@@ -99,8 +109,8 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
         </Text>
       ) : null}
 
-      {/* 순간이 아닌 유형의 사진은 아래 작게 */}
-      {photo && entry.type !== 'moment' ? (
+      {/* 순간·영상이 아닌 유형의 사진은 아래 작게 */}
+      {photo && entry.type !== 'moment' && entry.type !== 'video' ? (
         <Image source={{ uri: photo }} style={[styles.photo, { backgroundColor: palette.surfaceSunken }]} />
       ) : null}
 
@@ -141,6 +151,24 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 3,
     borderRadius: radius.card,
     marginBottom: space.m,
+  },
+  videoThumb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: radius.card,
+    marginBottom: space.m,
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   photo: {
     width: '100%',
