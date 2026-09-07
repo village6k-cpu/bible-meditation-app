@@ -78,7 +78,7 @@ export default function EntryDetailScreen() {
 
   const spec = specOf(entry.type);
   const photo = imageAbs(entry.image_uri);
-  const video = entry.type === 'video' && entry.url ? parseVideoLink(entry.url) : null;
+  const video = entry.type === 'link' && entry.url ? parseVideoLink(entry.url) : null;
 
   const sourceLine =
     entry.type === 'book'
@@ -143,16 +143,16 @@ export default function EntryDetailScreen() {
 
         {/* 묵상 본문 주소 */}
         {entry.type === 'verse' && entry.subtitle ? (
-          <Text style={[type.titleSerif, { color: palette.secondary, marginTop: space.xl }]}>
+          <Text style={[type.title, { color: palette.secondary, marginTop: space.xl }]}>
             {entry.subtitle}
           </Text>
         ) : null}
 
         {/* 제목(책·운동 외 유형 — 운동은 아래 요약 줄이 종류를 보여준다) */}
         {entry.title && entry.type !== 'book' && entry.type !== 'workout' ? (
-          <Text style={[type.titleSerif, { color: palette.textPrimary, marginTop: space.xl }]}>
+          <Text style={[type.title, { color: palette.textPrimary, marginTop: space.xl }]}>
             {entry.title}
-            {entry.type === 'video' && entry.subtitle ? (
+            {entry.type === 'link' && entry.subtitle ? (
               <Text style={[type.caption, { color: palette.textSecondary }]}>
                 {'  '}— {entry.subtitle}
               </Text>
@@ -161,7 +161,7 @@ export default function EntryDetailScreen() {
         ) : null}
 
         {/* 영상 — 붙여넣은 링크의 얼굴. 누르면 그 자리에서 재생된다 */}
-        {entry.type === 'video' && (photo || video) ? (
+        {entry.type === 'link' && (photo || video) ? (
           <View style={{ marginTop: space.l }}>
             <VideoPlayer
               thumbnail={photo ?? video?.thumbnailUrl ?? null}
@@ -183,14 +183,14 @@ export default function EntryDetailScreen() {
             ) : null}
           </View>
         ) : entry.type === 'book' && sourceLine ? (
-          <Text style={[type.titleSerif, { color: palette.textPrimary, marginTop: space.xl }]}>
+          <Text style={[type.title, { color: palette.textPrimary, marginTop: space.xl }]}>
             {sourceLine}
           </Text>
         ) : null}
 
         {/* 본문 */}
         {entry.body ? (
-          <Text style={[type.bodySerif, { color: palette.textPrimary, marginTop: space.xl }]}>
+          <Text style={[type.body, { color: palette.textPrimary, marginTop: space.xl }]}>
             {entry.body}
           </Text>
         ) : null}
@@ -209,7 +209,7 @@ export default function EntryDetailScreen() {
         ) : null}
 
         {/* 사진 (영상의 썸네일은 위 플레이어가 맡는다) */}
-        {photo && entry.type !== 'video' ? (
+        {photo && entry.type !== 'link' ? (
           <Image
             source={{ uri: photo }}
             style={[styles.photo, { backgroundColor: palette.surfaceSunken }]}
@@ -230,7 +230,7 @@ export default function EntryDetailScreen() {
               ]}
               numberOfLines={1}
             >
-              {entry.type === 'video' ? `${S.video_open_external} · ${domainOf(entry.url)}` : entry.url}
+              {entry.type === 'link' ? `${S.video_open_external} · ${domainOf(entry.url)}` : entry.url}
             </Text>
           </Pressable>
         ) : null}

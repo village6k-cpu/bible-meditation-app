@@ -6,14 +6,14 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { SQLiteProvider } from 'expo-sqlite';
 import {
-  GowunBatang_400Regular,
-  GowunBatang_700Bold,
-} from '@expo-google-fonts/gowun-batang';
-import {
   IBMPlexSansKR_400Regular,
   IBMPlexSansKR_500Medium,
   IBMPlexSansKR_600SemiBold,
 } from '@expo-google-fonts/ibm-plex-sans-kr';
+import {
+  IBMPlexMono_400Regular,
+  IBMPlexMono_500Medium,
+} from '@expo-google-fonts/ibm-plex-mono';
 import { migrate } from '../src/db/migrations';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { S } from '../src/core/strings.ko';
@@ -48,14 +48,14 @@ function Shell() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    GowunBatang_400Regular,
-    GowunBatang_700Bold,
     IBMPlexSansKR_400Regular,
     IBMPlexSansKR_500Medium,
     IBMPlexSansKR_600SemiBold,
+    IBMPlexMono_400Regular,
+    IBMPlexMono_500Medium,
   });
 
-  // 세리프가 주인공인 앱 — 폰트 없이 지면을 먼저 보여주지 않는다
+  // 글자가 곧 구조인 앱 — 폰트 없이 지면을 먼저 보여주지 않는다
   if (!fontsLoaded && !fontError) return null;
 
   if (Platform.OS === 'web') {

@@ -1,6 +1,6 @@
 export type EntryType =
   | 'book'
-  | 'video'
+  | 'link'
   | 'verse'
   | 'meal'
   | 'workout'
@@ -14,9 +14,11 @@ export type Reaction = 'kept' | 'skipped' | 'retired';
 
 // 출처 — 책·영상은 한 번만 등록하고, 밑줄은 출처에 매달린다.
 // 하루에 수십 개의 밑줄을 긋는 사람이 제목을 수십 번 치지 않도록.
+export type SourceKind = 'book' | 'video' | 'article';
+
 export interface Source {
   id: string;
-  kind: 'book' | 'video';
+  kind: SourceKind;
   title: string;
   creator: string | null; // 저자 / 채널
   url: string | null; // 영상 링크(정규형) — 같은 영상의 메모마다 링크를 다시 붙이지 않도록 출처가 지닌다
@@ -38,16 +40,17 @@ export interface Entry {
   pinned: number; // 0/1 — 아껴둔 밑줄
   revisit_count: number; // 상세를 연 횟수
   last_revisited_at: number | null; // 마지막으로 '다시 읽은' 시각
+  filed_at: number | null; // 구조가 붙었다고 확인된 시각 — 검토 큐에서 빠진다
   source_id: string | null; // book/video — 출처. title/subtitle은 출처에서 복사되어 온다
   title: string | null; // book:책제목 / video:영상제목 / workout:종류 / writing:글제목 / task:내용
   subtitle: string | null; // book:저자 / video:채널 / verse:본문 주소('시편 23:1')
   quote: string | null; // book:밑줄 문장 / verse:옮겨 적은 말씀
   body: string | null;
-  url: string | null; // video
+  url: string | null; // link
   image_uri: string | null; // 'images/…' 상대 경로
   page: number | null; // book
   slot: MealSlot | null; // meal
-  minutes: number | null; // workout
+  minutes: number | null; // workout (분)
   practiced: number | null; // meal/workout 실천(1/0)
   done: number | null; // task
   due_time: string | null; // task 'HH:MM'

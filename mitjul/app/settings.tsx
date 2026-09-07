@@ -133,7 +133,7 @@ export default function SettingsScreen() {
         </Text>
         <Text style={[type.quote, { color: palette.textPrimary }]}>{S.appName}</Text>
         <Underline width={44} />
-        <Text style={[type.bodySerif, { color: palette.textSecondary, marginTop: space.m }]}>
+        <Text style={[type.body, { color: palette.textSecondary, marginTop: space.m }]}>
           {S.tagline}
         </Text>
       </ScrollView>

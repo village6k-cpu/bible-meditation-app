@@ -187,7 +187,7 @@ export default function LibraryScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={[type.bodySerif, { color: palette.textSecondary, textAlign: 'center' }]}>
+            <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
               {sort === 'pinned' && !q.trim() && !tag && !segment
                 ? '아껴둔 기록이 아직 없어요.\n마음에 남는 밑줄에 갈피를 꽂아보세요.'
                 : q.trim() || tag || segment

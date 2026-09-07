@@ -28,6 +28,7 @@ function entry(partial: Partial<Entry> & { type: Entry['type'] }, tags: string[]
     done: null,
     due_time: null,
     source_id: null,
+    filed_at: null,
     ...partial,
     tags,
   };

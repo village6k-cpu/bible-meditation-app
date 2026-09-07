@@ -5,7 +5,7 @@ import { EntryType } from './types';
 // 오늘의 노출 기록은 덱을 바꾸지 않는다: lastShownDay는 반드시 '이전 날'의 노출만 담아 넘길 것.
 
 export const FORGOTTEN_COOLDOWN_DAYS = 30;
-const TEXTUAL_TYPES: EntryType[] = ['book', 'verse', 'writing', 'moment', 'video'];
+const TEXTUAL_TYPES: EntryType[] = ['book', 'verse', 'writing', 'moment', 'link'];
 
 export interface ResurfaceCandidate {
   id: string;

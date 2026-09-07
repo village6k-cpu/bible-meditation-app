@@ -1,14 +1,16 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { newId } from '../core/ids';
 import { canonicalLinkUrl } from '../core/links';
-import { Source } from '../core/types';
+import { Source, SourceKind } from '../core/types';
 
 // 최근 사용 순으로 전부 — 컴포저는 첫 번째를 미리 골라 둔다.
 // 스트립은 가로로 스크롤되므로 자르지 않는다. 잘라내면 밀려난 책을 다시 등록하게 되고, 그게 곧 중복이다.
-export async function recentSources(db: SQLiteDatabase, kind: Source['kind']): Promise<Source[]> {
+export async function recentSources(db: SQLiteDatabase, kinds: SourceKind[]): Promise<Source[]> {
+  if (kinds.length === 0) return [];
+  const holes = kinds.map(() => '?').join(', ');
   return db.getAllAsync<Source>(
-    'SELECT * FROM sources WHERE kind = ? AND deleted_at IS NULL ORDER BY last_used_at DESC',
-    [kind]
+    `SELECT * FROM sources WHERE kind IN (${holes}) AND deleted_at IS NULL ORDER BY last_used_at DESC`,
+    kinds
   );
 }
 
@@ -19,24 +21,23 @@ export async function getSource(db: SQLiteDatabase, id: string): Promise<Source 
 // 같은 제목의 살아 있는 출처 — 출처는 한 번만 등록되어야 하므로 만들기 전에 반드시 찾는다
 export async function findSource(
   db: SQLiteDatabase,
-  kind: Source['kind'],
+  kinds: SourceKind[],
   title: string
 ): Promise<Source | null> {
+  if (kinds.length === 0) return null;
+  const holes = kinds.map(() => '?').join(', ');
   return db.getFirstAsync<Source>(
-    'SELECT * FROM sources WHERE kind = ? AND title = ? AND deleted_at IS NULL ORDER BY last_used_at DESC LIMIT 1',
-    [kind, title.trim()]
+    `SELECT * FROM sources WHERE kind IN (${holes}) AND title = ? AND deleted_at IS NULL ORDER BY last_used_at DESC LIMIT 1`,
+    [...kinds, title.trim()]
   );
 }
 
 // 같은 링크(정규형)의 살아 있는 출처 — 붙여넣은 영상을 이미 담아뒀는지 링크로 안다
-export async function findSourceByUrl(
-  db: SQLiteDatabase,
-  kind: Source['kind'],
-  url: string
-): Promise<Source | null> {
+// 링크는 종류를 가리지 않고 찾는다 — 같은 주소면 영상이든 글이든 같은 출처다
+export async function findSourceByUrl(db: SQLiteDatabase, url: string): Promise<Source | null> {
   return db.getFirstAsync<Source>(
-    'SELECT * FROM sources WHERE kind = ? AND url = ? AND deleted_at IS NULL ORDER BY last_used_at DESC LIMIT 1',
-    [kind, url]
+    'SELECT * FROM sources WHERE url = ? AND deleted_at IS NULL ORDER BY last_used_at DESC LIMIT 1',
+    [url]
   );
 }
 
@@ -49,7 +50,7 @@ export interface SourceExtra {
 // 링크가 있으면 링크로만 찾는다 — 제목이 같아도(제목을 못 얻어 'YouTube · id'로 남긴 두 영상) 다른 영상이다.
 export async function createSource(
   db: SQLiteDatabase,
-  kind: Source['kind'],
+  kind: SourceKind,
   title: string,
   creator: string | null,
   extra: SourceExtra = {}
@@ -57,7 +58,7 @@ export async function createSource(
   const t = title.trim();
   const url = extra.url ?? null;
   const thumbnail = extra.thumbnail_uri ?? null;
-  const existing = url ? await findSourceByUrl(db, kind, url) : await findSource(db, kind, t);
+  const existing = url ? await findSourceByUrl(db, url) : await findSource(db, [kind], t);
   if (existing) {
     const merged: Source = {
       ...existing,
@@ -161,7 +162,7 @@ export async function renameSource(
   const t = title.trim();
   const now = Date.now();
   const target =
-    (url && (await findSourceByUrl(db, before.kind, url))) || (await findSource(db, before.kind, t));
+    (url && (await findSourceByUrl(db, url))) || (await findSource(db, [before.kind], t));
 
   if (target && target.id !== id) {
     const merged: Source = {

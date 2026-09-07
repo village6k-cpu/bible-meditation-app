@@ -20,16 +20,20 @@ function collectTags(input: EntryInput): string[] {
 export async function createEntry(db: SQLiteDatabase, input: EntryInput): Promise<string> {
   const id = newId();
   const now = Date.now();
+  const tagsNow = collectTags(input);
+  // 구조가 이미 붙었으면(출처나 갈피가 있으면) 검토 큐에 올리지 않는다
+  const filed = input.source_id || tagsNow.length > 0 ? now : null;
   await db.runAsync(
-    `INSERT INTO entries (id, type, day, created_at, updated_at, source_id, title, subtitle, quote, body,
+    `INSERT INTO entries (id, type, day, created_at, updated_at, filed_at, source_id, title, subtitle, quote, body,
                           url, image_uri, page, slot, minutes, practiced, done, due_time)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.type,
       input.day,
       now,
       now,
+      filed,
       input.source_id ?? null,
       input.title ?? null,
       input.subtitle ?? null,
@@ -324,4 +328,38 @@ export async function monthShelf(db: SQLiteDatabase, from: string, to: string): 
      GROUP BY type ORDER BY count DESC`,
     [from, to]
   );
+}
+
+// ─── 정리 리듬 ───
+// 정리는 사용자가 기억해야 할 일이 아니라 앱이 내미는 줄이어야 한다.
+// 아직 구조가 붙지 않은(출처도 갈피도 없는) 기록을 오래된 것부터 내민다.
+
+export async function unfiledCount(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM entries
+     WHERE deleted_at IS NULL AND filed_at IS NULL AND source_id IS NULL
+       AND type != 'task'
+       AND id NOT IN (SELECT entry_id FROM entry_tags)`
+  );
+  return row?.n ?? 0;
+}
+
+export async function unfiledEntries(db: SQLiteDatabase, limit: number = 20): Promise<Entry[]> {
+  return db.getAllAsync<Entry>(
+    `SELECT * FROM entries
+     WHERE deleted_at IS NULL AND filed_at IS NULL AND source_id IS NULL
+       AND type != 'task'
+       AND id NOT IN (SELECT entry_id FROM entry_tags)
+     ORDER BY created_at ASC LIMIT ?`,
+    [limit]
+  );
+}
+
+// '이대로 둔다' — 구조 없이 두기로 한 기록은 다시 묻지 않는다
+export async function markFiled(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync('UPDATE entries SET filed_at = ?, updated_at = ? WHERE id = ?', [
+    Date.now(),
+    Date.now(),
+    id,
+  ]);
 }

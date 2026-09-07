@@ -35,6 +35,7 @@ import {
   MEAL_SLOT_LABELS,
   MealSlot,
   Source,
+  SourceKind,
 } from '../src/core/types';
 import { createEntry, getEntry, recentTitles, tagsOf, updateEntry } from '../src/db/entryRepo';
 import {
@@ -208,7 +209,7 @@ export default function ComposeScreen() {
         setNewSource(true);
         void checkClipboard();
       }
-      const rs = await recentSources(db, t as Source['kind']);
+      const rs = await recentSources(db, REGISTRY[t].sourceKinds ?? []);
       if (seq !== pickSeq.current) return; // 그새 다른 유형으로 옮겨 갔다
       setSources(rs);
       if (REGISTRY[t].linkFirst) return;
@@ -281,11 +282,11 @@ export default function ComposeScreen() {
       setTagText(existing.map((t) => `#${t}`).join(' '));
       setShowTags(existing.length > 0);
       if (REGISTRY[e.type].sourced) {
-        const kind = e.type as Source['kind'];
-        const rs = await recentSources(db, kind);
+        const kinds = REGISTRY[e.type].sourceKinds ?? [];
+        const rs = await recentSources(db, kinds);
         let own = e.source_id ? await getSource(db, e.source_id) : null;
         // 출처 없이 남긴 옛 기록 — 같은 제목의 출처가 있으면 그것을 고른다
-        if (!own && e.title) own = await findSource(db, kind, e.title);
+        if (!own && e.title) own = await findSource(db, kinds, e.title);
         if (cancelled) return;
         const ownSrc = own;
         setSources(ownSrc && !rs.some((s) => s.id === ownSrc.id) ? [ownSrc, ...rs] : rs);
@@ -352,7 +353,7 @@ export default function ComposeScreen() {
     setResolving(true);
     const timer = setTimeout(async () => {
       try {
-        const existing = await findSourceByUrl(db, 'video', preview.canonicalUrl);
+        const existing = await findSourceByUrl(db, preview.canonicalUrl);
         if (seq !== resolveSeq.current) return;
         if (existing) {
           selectExistingFromLink(existing, preview);
@@ -647,7 +648,9 @@ export default function ComposeScreen() {
       // 출처: 이름을 고치는 중이면 먼저 반영하고, 새로 적었으면 찾거나 만들고, 골랐으면 그것을
       let source: Source | null = null;
       if (sourced) {
-        const kind = spec.key as Source['kind'];
+        // 링크는 재생되면 영상, 아니면 글 — 출처의 종류가 형식을 기억한다
+        const kind: SourceKind =
+          spec.key === 'book' ? 'book' : linkMeta?.video || selectedVideo ? 'video' : 'article';
         if (newSource) {
           // 링크가 먼저인 유형은 제목이 없어도 링크에서 온 제목(없으면 'YouTube · id')으로 등록한다
           const meta = linkFirst ? linkMeta : null;
@@ -1114,7 +1117,7 @@ export default function ComposeScreen() {
                 <TextInput
                   ref={bodyRef}
                   style={[
-                    entryType === 'writing' || entryType === 'verse' ? type.bodySerif : type.label,
+                    entryType === 'writing' || entryType === 'verse' ? type.body : type.label,
                     styles.bodyInput,
                     {
                       color: palette.textPrimary,
@@ -1130,7 +1133,7 @@ export default function ComposeScreen() {
                   multiline
                 />
               )}
-              {spec.key === 'video' && sourceReady && !canSave && !editingSource && !awaitingLink && !knownHint && (
+              {spec.key === 'link' && sourceReady && !canSave && !editingSource && !awaitingLink && !knownHint && (
                 <Text style={[type.caption, styles.hint, { color: palette.textTertiary }]}>
                   {selectedSource?.url ? S.compose_video_hint_memo : S.compose_video_hint}
                 </Text>

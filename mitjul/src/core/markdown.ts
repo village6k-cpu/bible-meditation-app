@@ -35,7 +35,7 @@ function entryBlock(e: ExportEntry): string {
       if (e.body) parts.push(e.body);
       break;
     }
-    case 'video': {
+    case 'link': {
       const label = e.title ?? e.url ?? '영상';
       const head = e.url ? `[${label}](${e.url})` : `**${label}**`;
       parts.push(`${head}${e.subtitle ? ` — ${e.subtitle}` : ''}`);
@@ -72,7 +72,7 @@ function entryBlock(e: ExportEntry): string {
     }
   }
   // 영상의 image_uri는 사진이 아니라 내려받아 둔 썸네일 — 링크가 이미 위에 있다
-  if (e.image_uri && e.type !== 'video') parts.push(`사진: ${e.image_uri}`);
+  if (e.image_uri && e.type !== 'link') parts.push(`사진: ${e.image_uri}`);
   if (e.tags.length > 0) parts.push(e.tags.map((t) => `#${t}`).join(' '));
   return parts.join('\n\n');
 }

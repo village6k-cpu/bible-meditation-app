@@ -23,14 +23,14 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
   const photo = imageAbs(entry.image_uri);
   // 오프라인에 저장돼 내려받은 얼굴이 없어도, 유튜브는 링크만으로 썸네일을 그릴 수 있다
   const videoThumb =
-    photo ?? (entry.type === 'video' && entry.url ? (parseVideoLink(entry.url)?.thumbnailUrl ?? null) : null);
+    photo ?? (entry.type === 'link' && entry.url ? (parseVideoLink(entry.url)?.thumbnailUrl ?? null) : null);
 
   const sourceLine =
     entry.type === 'book'
       ? [entry.subtitle, entry.title ? `『${entry.title}』` : null, entry.page ? `p.${entry.page}` : null]
           .filter(Boolean)
           .join(', ')
-      : entry.type === 'video'
+      : entry.type === 'link'
         ? [entry.title, entry.subtitle].filter(Boolean).join(' — ')
         : entry.type === 'workout'
           ? [entry.title, entry.minutes ? `${entry.minutes}분` : null].filter(Boolean).join(' · ')
@@ -63,7 +63,7 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
       ) : null}
 
       {/* 영상: 썸네일이 얼굴 — 재생은 상세에서 */}
-      {entry.type === 'video' && videoThumb ? (
+      {entry.type === 'link' && videoThumb ? (
         <View style={styles.videoThumb}>
           <Image source={{ uri: videoThumb }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           <View style={styles.playBadge}>
@@ -99,7 +99,7 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
       {/* 본문 */}
       {entry.body ? (
         <Text
-          style={[type.bodySerif, { color: palette.textPrimary, marginTop: entry.quote ? space.s : 0 }]}
+          style={[type.body, { color: palette.textPrimary, marginTop: entry.quote ? space.s : 0 }]}
           numberOfLines={entry.quote ? 2 : 4}
         >
           {entry.body}
@@ -114,7 +114,7 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
       ) : null}
 
       {/* 순간·영상이 아닌 유형의 사진은 아래 작게 */}
-      {photo && entry.type !== 'moment' && entry.type !== 'video' ? (
+      {photo && entry.type !== 'moment' && entry.type !== 'link' ? (
         <Image source={{ uri: photo }} style={[styles.photo, { backgroundColor: palette.surfaceSunken }]} />
       ) : null}
 

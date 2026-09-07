@@ -8,6 +8,9 @@ interface Migration {
   version: number;
   sql: string;
   after?: (db: SQLiteDatabase) => Promise<void>; // SQL만으로 안 되는 정리 — 같은 트랜잭션 안에서
+  // 테이블을 다시 지어야 하는 마이그레이션 (CHECK 제약 변경 등).
+  // 참조하는 테이블을 드롭하는 동안 외래 키가 켜져 있으면 자식 행이 함께 지워지므로 잠시 끈다.
+  rebuild?: boolean;
 }
 
 // 링크로 출처를 찾으려면 저장된 링크가 정규형이어야 한다. 이전 판이 남긴 원본 링크를 정규형으로 고치고,
@@ -169,6 +172,81 @@ export const MIGRATIONS: Migration[] = [
     `,
     after: canonicalizeVideoSources,
   },
+  {
+    // 영상과 글을 '링크' 하나로 합친다 — 인터넷에서 본 것은 형식이 아니라 출처의 종류로 갈린다.
+    // 그리고 filed_at: 구조가 붙었는지를 앱이 판단해 검토 큐를 만든다.
+    // CHECK 제약을 바꾸려면 테이블을 다시 지어야 한다 (SQLite).
+    version: 6,
+    rebuild: true,
+    sql: `
+      CREATE TABLE sources_new (
+        id            TEXT PRIMARY KEY,
+        kind          TEXT NOT NULL CHECK (kind IN ('book','video','article')),
+        title         TEXT NOT NULL,
+        creator       TEXT,
+        url           TEXT,
+        thumbnail_uri TEXT,
+        created_at    INTEGER NOT NULL,
+        last_used_at  INTEGER NOT NULL,
+        last_tags     TEXT NOT NULL DEFAULT '',
+        deleted_at    INTEGER
+      );
+      INSERT INTO sources_new (id, kind, title, creator, url, thumbnail_uri, created_at, last_used_at, last_tags, deleted_at)
+        SELECT id, kind, title, creator, url, thumbnail_uri, created_at, last_used_at, last_tags, deleted_at FROM sources;
+      DROP TABLE sources;
+      ALTER TABLE sources_new RENAME TO sources;
+      CREATE INDEX idx_sources_kind_used ON sources (kind, last_used_at DESC);
+      CREATE INDEX idx_sources_url ON sources (kind, url);
+
+      CREATE TABLE entries_new (
+        id                TEXT PRIMARY KEY,
+        type              TEXT NOT NULL CHECK (type IN ('book','link','verse','meal','workout','moment','writing','task')),
+        day               TEXT NOT NULL,
+        created_at        INTEGER NOT NULL,
+        updated_at        INTEGER NOT NULL,
+        deleted_at        INTEGER,
+        pinned            INTEGER NOT NULL DEFAULT 0,
+        revisit_count     INTEGER NOT NULL DEFAULT 0,
+        last_revisited_at INTEGER,
+        filed_at          INTEGER,
+        source_id         TEXT REFERENCES sources(id),
+        title             TEXT,
+        subtitle          TEXT,
+        quote             TEXT,
+        body              TEXT,
+        url               TEXT,
+        image_uri         TEXT,
+        page              INTEGER,
+        slot              TEXT CHECK (slot IN ('breakfast','lunch','dinner','snack')),
+        minutes           INTEGER,
+        practiced         INTEGER,
+        done              INTEGER,
+        due_time          TEXT
+      );
+      INSERT INTO entries_new (id, type, day, created_at, updated_at, deleted_at, pinned, revisit_count,
+                               last_revisited_at, filed_at, source_id, title, subtitle, quote, body, url,
+                               image_uri, page, slot, minutes, practiced, done, due_time)
+        SELECT id,
+               CASE WHEN type = 'video' THEN 'link' ELSE type END,
+               day, created_at, updated_at, deleted_at, pinned, revisit_count, last_revisited_at,
+               NULL, source_id, title, subtitle, quote, body, url, image_uri, page, slot, minutes,
+               practiced, done, due_time
+        FROM entries;
+      DROP TABLE entries;
+      ALTER TABLE entries_new RENAME TO entries;
+      CREATE INDEX idx_entries_day      ON entries (day DESC, created_at);
+      CREATE INDEX idx_entries_type_day ON entries (type, day DESC);
+      CREATE INDEX idx_entries_pinned   ON entries (pinned) WHERE pinned = 1;
+      CREATE INDEX idx_entries_annday   ON entries (substr(day, 6));
+      CREATE INDEX idx_entries_source   ON entries (source_id);
+      CREATE INDEX idx_entries_filed    ON entries (filed_at) WHERE filed_at IS NULL;
+
+      -- 이미 구조가 붙은(출처나 태그가 있는) 옛 기록은 검토 큐에 올리지 않는다
+      UPDATE entries SET filed_at = updated_at
+        WHERE source_id IS NOT NULL
+           OR id IN (SELECT entry_id FROM entry_tags);
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
@@ -181,10 +259,23 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
 
   for (const m of MIGRATIONS) {
     if (m.version <= current) continue;
-    await db.withTransactionAsync(async () => {
-      await db.execAsync(m.sql);
-      if (m.after) await m.after(db);
-      await db.execAsync(`PRAGMA user_version = ${m.version};`);
-    });
+    // 테이블을 다시 짓는 동안에는 외래 키를 끄고(자식 행이 딸려 지워지지 않도록),
+    // 이름 바꾸기가 다른 테이블의 참조를 손대지 않게 legacy 모드로 둔다. 둘 다 트랜잭션 밖에서.
+    if (m.rebuild) {
+      await db.execAsync('PRAGMA foreign_keys = OFF;');
+      await db.execAsync('PRAGMA legacy_alter_table = ON;');
+    }
+    try {
+      await db.withTransactionAsync(async () => {
+        await db.execAsync(m.sql);
+        if (m.after) await m.after(db);
+        await db.execAsync(`PRAGMA user_version = ${m.version};`);
+      });
+    } finally {
+      if (m.rebuild) {
+        await db.execAsync('PRAGMA legacy_alter_table = OFF;');
+        await db.execAsync('PRAGMA foreign_keys = ON;');
+      }
+    }
   }
 }

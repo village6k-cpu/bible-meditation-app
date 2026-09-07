@@ -83,3 +83,39 @@ test('v4 DB — 원본 링크로 저장된 영상 출처는 정규형이 되고,
   assert.equal(moved?.source_id, 's-new');
   assert.equal(moved?.url, 'https://youtu.be/dQw4w9WgXcQ?t=90'); // 기록의 시점은 그대로
 });
+
+test('v6 — 영상이 링크가 되고, 표를 다시 지어도 갈피·되새김은 살아남는다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 5, MIGRATIONS);
+  const base = { day: '2026-08-01', updated_at: 0, pinned: 0, revisit_count: 0 };
+  await insertEntry(db, { ...base, id: 'v1', type: 'video', created_at: 100, title: '강연', url: 'https://youtu.be/aaaaaaaaaaa' });
+  await insertEntry(db, { ...base, id: 'b1', type: 'book', created_at: 200, quote: '문장' });
+  await insertEntry(db, { ...base, id: 'm1', type: 'moment', created_at: 300, body: '구조 없는 기록' });
+  await db.runAsync("INSERT INTO tags (id,name,created_at) VALUES ('t1','독서',1)");
+  await db.runAsync("INSERT INTO entry_tags (entry_id,tag_id) VALUES ('b1','t1')");
+  await db.runAsync("INSERT INTO resurfacings (entry_id,shown_day) VALUES ('b1','2026-08-02')");
+
+  await migrate(db as unknown as AnyDb);
+
+  const types = await db.getAllAsync<{ id: string; type: string }>('SELECT id, type FROM entries ORDER BY id');
+  assert.deepEqual(types, [
+    { id: 'b1', type: 'book' },
+    { id: 'm1', type: 'moment' },
+    { id: 'v1', type: 'link' },
+  ]);
+  // 자식 행이 딸려 지워지지 않았다
+  assert.equal((await db.getAllAsync('SELECT * FROM entry_tags')).length, 1);
+  assert.equal((await db.getAllAsync('SELECT * FROM resurfacings')).length, 1);
+  // 구조가 붙은 기록만 검토 큐에서 빠진다
+  const filed = await db.getAllAsync<{ id: string; filed_at: number | null }>(
+    'SELECT id, filed_at FROM entries ORDER BY id'
+  );
+  assert.notEqual(filed[0].filed_at, null); // b1: 갈피가 있다
+  assert.equal(filed[1].filed_at, null); // m1: 아직 구조가 없다
+  // 외래 키가 다시 켜져 있고 링크 종류가 넓어졌다
+  const fk = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys');
+  assert.equal(fk?.foreign_keys, 1);
+  await db.runAsync(
+    "INSERT INTO sources (id,kind,title,created_at,last_used_at,last_tags) VALUES ('s-a','article','어느 글',1,1,'')"
+  );
+});

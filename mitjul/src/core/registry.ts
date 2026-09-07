@@ -1,4 +1,4 @@
-import { EntryType } from './types';
+import { EntryType, SourceKind } from './types';
 
 // 유형 레지스트리 — 컴포저 폼, 카드 렌더러, 마크다운 빌더가 모두 여기서 읽는다.
 // 새 유형을 추가할 때 고치는 곳은 이 파일과 마이그레이션뿐이어야 한다.
@@ -7,8 +7,10 @@ export interface TypeSpec {
   key: EntryType;
   label: string;
   icon: string; // Ionicons
-  // 출처(책·영상)에 매달리는 유형 — 제목·저자는 출처에 한 번만, 밑줄은 연속으로
+  // 출처(책·링크)에 매달리는 유형 — 제목·저자는 출처에 한 번만, 밑줄은 연속으로
   sourced?: boolean;
+  // 이 유형이 붙을 수 있는 출처 종류
+  sourceKinds?: SourceKind[];
   // 링크를 붙여넣는 것이 시작인 유형 — 제목·채널·썸네일은 링크에서 알아서 온다
   linkFirst?: boolean;
   // 컴포저에 노출할 필드와 그 문구
@@ -33,7 +35,7 @@ export interface TypeSpec {
 export const TYPE_ORDER: EntryType[] = [
   'moment',
   'book',
-  'video',
+  'link',
   'verse',
   'meal',
   'workout',
@@ -58,6 +60,7 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     label: '책',
     icon: 'book-outline',
     sourced: true,
+    sourceKinds: ['book'],
     fields: {
       // title/subtitle은 출처 등록 폼의 문구로만 쓰인다 — 밑줄마다 묻지 않는다
       title: { label: '책 제목', placeholder: '책 제목' },
@@ -70,20 +73,21 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     requiresOneOf: ['quote', 'body', 'image_uri'],
     exportHeading: '책',
   },
-  video: {
-    key: 'video',
-    label: '영상',
-    icon: 'play-outline',
+  link: {
+    key: 'link',
+    label: '링크',
+    icon: 'link-outline',
     sourced: true,
     linkFirst: true,
+    sourceKinds: ['video', 'article'],
     fields: {
-      title: { label: '영상 제목', placeholder: '영상 제목' },
-      subtitle: { label: '채널', placeholder: '채널 (선택)' },
+      title: { label: '제목', placeholder: '제목' },
+      subtitle: { label: '채널·매체', placeholder: '채널·매체 (선택)' },
       url: true,
       body: { label: '메모', placeholder: '기억하고 싶은 내용 (선택)' },
     },
     requiresOneOf: ['url', 'body'],
-    exportHeading: '영상',
+    exportHeading: '링크',
   },
   verse: {
     key: 'verse',

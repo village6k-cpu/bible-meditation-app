@@ -361,7 +361,7 @@ export default function TodayScreen() {
           ))}
           {isEmpty && (
             <View style={styles.empty}>
-              <Text style={[type.bodySerif, { color: palette.textSecondary, textAlign: 'center' }]}>
+              <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
                 {S.empty_today}
               </Text>
             </View>

@@ -13,7 +13,7 @@ async function fresh(): Promise<AnyDb> {
 }
 
 async function addEntry(db: AnyDb, id: string, sourceId: string, extra: Record<string, unknown> = {}) {
-  const row = { id, type: 'video', day: '2026-08-01', created_at: 1, updated_at: 1, pinned: 0, revisit_count: 0, source_id: sourceId, title: 't', ...extra };
+  const row = { id, type: 'link', day: '2026-08-01', created_at: 1, updated_at: 1, pinned: 0, revisit_count: 0, source_id: sourceId, title: 't', ...extra };
   const cols = Object.keys(row);
   await db.runAsync(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, cols.map((c) => row[c as keyof typeof row]) as never[]);
 }
@@ -74,5 +74,5 @@ test('renameSource — 같은 제목의 출처와 만나면 합쳐진다: 기록
   assert.equal(await getSource(db, typo.id), null); // 조용히 내려갔다
   const moved = await db.getFirstAsync<{ source_id: string; title: string; subtitle: string }>("SELECT source_id, title, subtitle FROM entries WHERE id='q1'");
   assert.deepEqual(moved, { source_id: real.id, title: '데미안', subtitle: '헤세' });
-  assert.equal((await findSourceByUrl(db, 'book', 'x')), null);
+  assert.equal((await findSourceByUrl(db, 'x')), null);
 });

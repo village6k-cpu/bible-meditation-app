@@ -76,7 +76,7 @@ export default function TagScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={[type.bodySerif, { color: palette.textSecondary, textAlign: 'center' }]}>
+            <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
               {S.empty_tag}
             </Text>
           </View>
