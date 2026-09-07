@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space, type } from '../theme/tokens';
 
@@ -17,10 +18,15 @@ interface Props {
 // 재생 전에는 썸네일 위에 흰 원 하나 — 모노톤의 유일한 버튼.
 export function VideoPlayer({ thumbnail, embedUrl, title, creator, onOpenExternal }: Props) {
   const { palette } = useTheme();
-  const [playing, setPlaying] = useState(false);
+  // 재생 상태는 눌렀던 그 주소에 속한다 — 다른 링크·다른 칩으로 바뀌면 포스터로 돌아간다
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const playing = !!embedUrl && playingUrl === embedUrl;
+  // 화면을 떠나면(고치기·연관 기록으로) 소리도 멈춘다
+  useFocusEffect(useCallback(() => () => setPlayingUrl(null), []));
 
   const playable = !!embedUrl;
-  const src = embedUrl ? `${embedUrl}${embedUrl.includes('?') ? '&' : '?'}autoplay=1` : null;
+  const src = embedUrl ? withAutoplay(embedUrl) : null;
+  const origin = embedUrl ? originOf(embedUrl) : '';
 
   return (
     <View>
@@ -34,10 +40,20 @@ export function VideoPlayer({ thumbnail, embedUrl, title, creator, onOpenExterna
             mediaPlaybackRequiresUserAction={false}
             allowsFullscreenVideo
             scrollEnabled={false}
+            // 플레이어 밖으로 나가는 항해(로고·'YouTube에서 보기')는 틀 안이 아니라 바깥 앱으로
+            onOpenWindow={(e) => {
+              Linking.openURL(e.nativeEvent.targetUrl).catch(() => {});
+            }}
+            onShouldStartLoadWithRequest={(req) => {
+              if (req.isTopFrame === false) return true;
+              if (req.url.startsWith(origin) || req.url.startsWith('about:')) return true;
+              Linking.openURL(req.url).catch(() => {});
+              return false;
+            }}
           />
         ) : (
           <Pressable
-            onPress={() => (playable ? setPlaying(true) : onOpenExternal?.())}
+            onPress={() => (playable ? setPlayingUrl(embedUrl) : onOpenExternal?.())}
             accessibilityRole="button"
             accessibilityLabel={playable ? '재생' : '링크 열기'}
             style={({ pressed }) => [styles.poster, { opacity: pressed ? 0.85 : 1 }]}
@@ -78,6 +94,25 @@ export function VideoPlayer({ thumbnail, embedUrl, title, creator, onOpenExterna
   );
 }
 
+// autoplay는 쿼리에, 비메오의 '#t=' 시점은 그 뒤에 그대로
+function withAutoplay(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('autoplay', '1');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return '';
+  }
+}
+
 const styles = StyleSheet.create({
   frame: {
     width: '100%',
@@ -107,6 +142,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
+    // 밝은 썸네일 위에서도 원이 보이도록 얇은 그림자
+    shadowColor: '#000000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   caption: {
     marginTop: space.s,

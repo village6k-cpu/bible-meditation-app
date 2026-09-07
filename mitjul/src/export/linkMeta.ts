@@ -1,7 +1,9 @@
 import {
   VideoLink,
+  canonicalLinkUrl,
   extractFirstUrl,
   isHttpUrl,
+  looksCompleteUrl,
   oembedUrl,
   parsePageMeta,
   parseVideoLink,
@@ -18,20 +20,22 @@ export interface LinkMeta {
   title: string | null;
   creator: string | null;
   thumbnailUrl: string | null;
+  embeddable: boolean; // 비공개·임베드 금지·삭제된 영상은 틀 안에서 재생되지 않는다 — 바깥으로 연다
 }
 
 // 붙여넣은 문자열에서 링크를 찾아 네트워크 없이 즉시 알 수 있는 것까지 채운다
 export function previewLink(input: string): LinkMeta | null {
   const url = extractFirstUrl(input) ?? (isHttpUrl(input) ? input.trim() : null);
-  if (!url) return null;
+  if (!url || !looksCompleteUrl(url)) return null;
   const video = parseVideoLink(url);
   return {
     url,
-    canonicalUrl: video?.canonicalUrl ?? stripTracking(url),
+    canonicalUrl: canonicalLinkUrl(url),
     video,
     title: null,
     creator: null,
     thumbnailUrl: video?.thumbnailUrl ?? null,
+    embeddable: true,
   };
 }
 
@@ -50,6 +54,8 @@ export async function resolveLink(input: string, signal?: AbortSignal): Promise<
         meta.title = j.title?.trim() || null;
         meta.creator = j.author_name?.trim() || null;
         if (!meta.thumbnailUrl && j.thumbnail_url) meta.thumbnailUrl = j.thumbnail_url;
+      } else if (res.status === 401 || res.status === 403 || res.status === 404) {
+        meta.embeddable = false;
       }
     } else {
       const res = await fetchWithTimeout(meta.url, 6000, signal);
@@ -57,7 +63,7 @@ export async function resolveLink(input: string, signal?: AbortSignal): Promise<
         const page = parsePageMeta(await res.text());
         meta.title = page.title;
         meta.creator = page.siteName;
-        meta.thumbnailUrl = page.imageUrl;
+        meta.thumbnailUrl = absolutize(page.imageUrl, res.url || meta.url);
       }
     }
   } catch {
@@ -83,19 +89,19 @@ export function fallbackTitle(meta: LinkMeta): string {
   return domainOf(meta.url);
 }
 
-function stripTracking(url: string): string {
+// og:image는 절대 주소여야 하지만 '/images/og.jpg'·'//cdn…'로 적힌 블로그가 많다 — 페이지 주소 기준으로 푼다
+function absolutize(src: string | null, base: string): string | null {
+  if (!src) return null;
   try {
-    const u = new URL(url);
-    for (const k of Array.from(u.searchParams.keys())) {
-      if (/^utm_/i.test(k) || k === 'fbclid' || k === 'gclid') u.searchParams.delete(k);
-    }
-    return u.toString();
+    const u = new URL(src, base);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
   } catch {
-    return url;
+    return null;
   }
 }
 
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<Response> {
+  if (signal?.aborted) throw new Error('aborted');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   const onAbort = () => ctrl.abort();

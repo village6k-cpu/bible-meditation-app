@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canonicalLinkUrl,
   extractFirstUrl,
+  looksCompleteUrl,
   oembedUrl,
   parsePageMeta,
   parseTimestamp,
@@ -83,4 +85,52 @@ test('일반 페이지 — og 태그와 <title>에서 제목·사이트·이미�
   assert.equal(m.imageUrl, 'https://img.example.com/og.jpg');
   assert.equal(parsePageMeta('<html><head><title> 제목만 </title></head></html>').title, '제목만');
   assert.deepEqual(parsePageMeta('<p>없음</p>'), { title: null, siteName: null, imageUrl: null });
+});
+
+test('링크에 한글·CJK 문장부호·따옴표가 붙어 와도 링크만 집는다', () => {
+  for (const s of [
+    'https://youtu.be/dQw4w9WgXcQ입니다',
+    '「https://youtu.be/dQw4w9WgXcQ」',
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ』 꼭 봐',
+    'https://youtu.be/dQw4w9WgXcQ。',
+    '“https://youtu.be/dQw4w9WgXcQ”',
+    '(https://youtu.be/dQw4w9WgXcQ）',
+  ]) {
+    assert.equal(parseVideoLink(s)?.id, 'dQw4w9WgXcQ', s);
+  }
+});
+
+test('스킴 없이 적은 링크도 알아본다', () => {
+  assert.equal(extractFirstUrl('youtu.be/dQw4w9WgXcQ'), 'https://youtu.be/dQw4w9WgXcQ');
+  assert.equal(parseVideoLink('www.youtube.com/watch?v=dQw4w9WgXcQ')?.id, 'dQw4w9WgXcQ');
+  assert.equal(extractFirstUrl('example.com/a'), null);
+});
+
+test('치는 중인 주소는 아직 링크가 아니다', () => {
+  assert.equal(looksCompleteUrl('https://y'), false);
+  assert.equal(looksCompleteUrl('https://tv.naver.c'), false);
+  assert.equal(looksCompleteUrl('https://tv.naver.com/v/1'), true);
+  assert.equal(looksCompleteUrl('not a url'), false);
+});
+
+test('정규형 — 영상은 식별자로, 그 밖은 추적 꼬리를 떼고', () => {
+  assert.equal(canonicalLinkUrl('https://youtu.be/dQw4w9WgXcQ?si=abc&t=90'), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(canonicalLinkUrl('https://blog.example.com/p/1?utm_source=x&id=2'), 'https://blog.example.com/p/1?id=2');
+});
+
+test('비메오 — 비공개 해시·채널·쇼케이스 주소', () => {
+  const unlisted = parseVideoLink('https://vimeo.com/76979871/abcdef1234');
+  assert.equal(unlisted?.canonicalUrl, 'https://vimeo.com/76979871/abcdef1234');
+  assert.ok(unlisted?.embedUrl.includes('h=abcdef1234'));
+  assert.equal(parseVideoLink('https://vimeo.com/channels/staffpicks/76979871')?.id, '76979871');
+  assert.equal(parseVideoLink('https://vimeo.com/showcase/123/video/76979871')?.id, '76979871');
+  assert.equal(parseVideoLink('https://vimeo.com/groups/foo/videos/76979871')?.id, '76979871');
+  assert.equal(parseVideoLink('https://vimeo.com/showcase/8765432'), null);
+});
+
+test('og 태그 — 값 안의 따옴표·16진 엔티티', () => {
+  assert.equal(parsePageMeta(`<meta property="og:title" content="Why We Can't Stop Recording">`).title, "Why We Can't Stop Recording");
+  assert.equal(parsePageMeta(`<meta property='og:title' content='He said "hi" today'>`).title, 'He said "hi" today');
+  assert.equal(parsePageMeta(`<meta property="og:title" content="Don&#x27;t Panic &amp; Read&nbsp;">`).title, "Don't Panic & Read");
+  assert.equal(parsePageMeta(`<meta property="og:title" content="&amp;#39;">`).title, '&#39;');
 });

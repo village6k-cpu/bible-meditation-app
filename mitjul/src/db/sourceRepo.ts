@@ -1,5 +1,6 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { newId } from '../core/ids';
+import { canonicalLinkUrl } from '../core/links';
 import { Source } from '../core/types';
 
 // 최근 사용 순으로 전부 — 컴포저는 첫 번째를 미리 골라 둔다.
@@ -107,15 +108,53 @@ export async function touchSource(db: SQLiteDatabase, id: string, tags: string[]
   ]);
 }
 
-// 제목·저자·링크를 고치면, 그 출처의 밑줄에 복사돼 있던 제목·저자(·링크)도 함께 고친다.
+export async function setSourceThumbnail(db: SQLiteDatabase, id: string, uri: string): Promise<void> {
+  await db.runAsync('UPDATE sources SET thumbnail_uri = ? WHERE id = ?', [uri, id]);
+}
+
+// 이 출처의 살아 있는 기록 중, 링크가 없거나 옛 링크(정규형 기준 — 시점·공유 꼬리가 달린 것도)를 쓰던 것에 새 링크를 단다
+async function propagateUrl(
+  db: SQLiteDatabase,
+  sourceId: string,
+  oldUrl: string | null,
+  newUrl: string
+): Promise<void> {
+  const rows = await db.getAllAsync<{ id: string; url: string | null }>(
+    'SELECT id, url FROM entries WHERE source_id = ? AND deleted_at IS NULL',
+    [sourceId]
+  );
+  const oldCanon = oldUrl ? canonicalLinkUrl(oldUrl) : null;
+  for (const r of rows) {
+    if (!r.url || (oldCanon !== null && canonicalLinkUrl(r.url) === oldCanon)) {
+      await db.runAsync('UPDATE entries SET url = ? WHERE id = ?', [newUrl, r.id]);
+    }
+  }
+}
+
+// 출처의 얼굴이 바뀌면, 그 얼굴을 복사해 지니던 기록들도 따라간다
+async function propagateThumbnail(
+  db: SQLiteDatabase,
+  sourceId: string,
+  oldThumb: string | null,
+  newThumb: string | null
+): Promise<void> {
+  await db.runAsync(
+    "UPDATE entries SET image_uri = ? WHERE source_id = ? AND deleted_at IS NULL AND (image_uri IS NULL OR image_uri = '' OR image_uri = ?)",
+    [newThumb, sourceId, oldThumb ?? '']
+  );
+}
+
+// 제목·저자·링크를 고치면, 그 출처의 밑줄에 복사돼 있던 제목·저자(·링크·썸네일)도 함께 고친다.
 // 같은 링크나 제목의 살아 있는 출처가 이미 있으면 그쪽으로 합친다 (오타를 고쳐 원래 책과 만나는 경우):
 // 밑줄은 그 출처로 옮기고, 이 출처는 조용히 내린다. 돌려주는 값이 앞으로 쓸 출처다.
+// thumbnail: undefined면 그대로, null이면 지운다, 문자열이면 바꾼다 (링크가 바뀔 때만 넘긴다)
 export async function renameSource(
   db: SQLiteDatabase,
   id: string,
   title: string,
   creator: string | null,
-  url: string | null
+  url: string | null,
+  thumbnail?: string | null
 ): Promise<Source> {
   const before = await getSource(db, id);
   if (!before) throw new Error('source not found');
@@ -129,7 +168,7 @@ export async function renameSource(
       ...target,
       creator: target.creator ?? creator,
       url: target.url ?? url,
-      thumbnail_uri: target.thumbnail_uri ?? before.thumbnail_uri,
+      thumbnail_uri: target.thumbnail_uri ?? thumbnail ?? before.thumbnail_uri,
       last_used_at: now,
     };
     await db.withTransactionAsync(async () => {
@@ -141,37 +180,33 @@ export async function renameSource(
         'UPDATE entries SET source_id = ?, title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
         [target.id, merged.title, merged.creator, now, id]
       );
-      if (merged.url) {
-        await db.runAsync(
-          "UPDATE entries SET url = ? WHERE source_id = ? AND deleted_at IS NULL AND (url IS NULL OR url = '')",
-          [merged.url, target.id]
-        );
+      if (merged.url) await propagateUrl(db, target.id, before.url, merged.url);
+      if (merged.thumbnail_uri && merged.thumbnail_uri !== before.thumbnail_uri) {
+        await propagateThumbnail(db, target.id, before.thumbnail_uri, merged.thumbnail_uri);
       }
       await db.runAsync('UPDATE sources SET deleted_at = ? WHERE id = ?', [now, id]);
     });
     return merged;
   }
 
+  const urlChanged = url !== before.url;
+  const nextThumb = thumbnail === undefined ? before.thumbnail_uri : thumbnail;
   await db.withTransactionAsync(async () => {
-    await db.runAsync('UPDATE sources SET title = ?, creator = ?, url = ? WHERE id = ?', [
-      t,
-      creator,
-      url,
-      id,
-    ]);
+    await db.runAsync(
+      'UPDATE sources SET title = ?, creator = ?, url = ?, thumbnail_uri = ? WHERE id = ?',
+      [t, creator, url, nextThumb, id]
+    );
     await db.runAsync(
       'UPDATE entries SET title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
       [t, creator, now, id]
     );
-    // 링크를 새로 달거나 바꾸면, 링크가 없던 밑줄과 옛 링크를 그대로 쓰던 밑줄이 따라간다
-    if (url && before.url !== url) {
-      await db.runAsync(
-        "UPDATE entries SET url = ? WHERE source_id = ? AND deleted_at IS NULL AND (url IS NULL OR url = '' OR url = ?)",
-        [url, id, before.url ?? '']
-      );
+    // 링크를 새로 달거나 바꾸면, 링크가 없던 밑줄과 옛 링크를 그대로 쓰던 밑줄이 따라간다 — 얼굴도 함께
+    if (url && urlChanged) await propagateUrl(db, id, before.url, url);
+    if (thumbnail !== undefined && nextThumb !== before.thumbnail_uri) {
+      await propagateThumbnail(db, id, before.thumbnail_uri, nextThumb);
     }
   });
-  return { ...before, title: t, creator, url };
+  return { ...before, title: t, creator, url, thumbnail_uri: nextThumb };
 }
 
 // 출처만 조용히 내린다 — 밑줄은 복사된 제목을 지닌 채 그대로 남는다

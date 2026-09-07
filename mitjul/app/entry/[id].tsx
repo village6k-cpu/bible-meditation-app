@@ -31,6 +31,7 @@ import {
   togglePinned,
 } from '../../src/db/entryRepo';
 import { imageAbs } from '../../src/export/files';
+import { domainOf } from '../../src/export/linkMeta';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { radius, space, type } from '../../src/theme/tokens';
 
@@ -163,7 +164,7 @@ export default function EntryDetailScreen() {
         {entry.type === 'video' && (photo || video) ? (
           <View style={{ marginTop: space.l }}>
             <VideoPlayer
-              thumbnail={photo}
+              thumbnail={photo ?? video?.thumbnailUrl ?? null}
               embedUrl={video?.embedUrl ?? null}
               onOpenExternal={() => entry.url && Linking.openURL(entry.url).catch(() => {})}
             />
@@ -229,7 +230,7 @@ export default function EntryDetailScreen() {
               ]}
               numberOfLines={1}
             >
-              {entry.url}
+              {entry.type === 'video' ? `${S.video_open_external} · ${domainOf(entry.url)}` : entry.url}
             </Text>
           </Pressable>
         ) : null}

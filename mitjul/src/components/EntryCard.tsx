@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { parseVideoLink } from '../core/links';
 import { Entry, MEAL_SLOT_LABELS } from '../core/types';
 import { specOf } from '../core/registry';
 import { imageAbs } from '../export/files';
@@ -20,6 +21,9 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
   const { palette } = useTheme();
   const spec = specOf(entry.type);
   const photo = imageAbs(entry.image_uri);
+  // 오프라인에 저장돼 내려받은 얼굴이 없어도, 유튜브는 링크만으로 썸네일을 그릴 수 있다
+  const videoThumb =
+    photo ?? (entry.type === 'video' && entry.url ? (parseVideoLink(entry.url)?.thumbnailUrl ?? null) : null);
 
   const sourceLine =
     entry.type === 'book'
@@ -59,9 +63,9 @@ export function EntryCard({ entry, tags, meta, onPress }: Props) {
       ) : null}
 
       {/* 영상: 썸네일이 얼굴 — 재생은 상세에서 */}
-      {entry.type === 'video' && photo ? (
+      {entry.type === 'video' && videoThumb ? (
         <View style={styles.videoThumb}>
-          <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image source={{ uri: videoThumb }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           <View style={styles.playBadge}>
             <Ionicons name="play" size={13} color="#111111" style={{ marginLeft: 2 }} />
           </View>

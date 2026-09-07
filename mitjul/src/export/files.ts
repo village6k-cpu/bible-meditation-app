@@ -28,17 +28,40 @@ export async function cacheRemoteImage(remoteUrl: string | null): Promise<string
   const FileSystem = fs();
   const dir = `${FileSystem.documentDirectory}images`;
   const name = `thumb-${newId()}.jpg`;
+  const dest = `${dir}/${name}`;
+  const discard = () => FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => {});
+  let dl: { downloadAsync: () => Promise<any>; cancelAsync?: () => Promise<void> } | null = null;
   try {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
-    const result = await FileSystem.downloadAsync(remoteUrl, `${dir}/${name}`);
-    if (result.status !== 200) {
-      await FileSystem.deleteAsync(`${dir}/${name}`, { idempotent: true }).catch(() => {});
+    // 포그라운드 세션 + 8초 제한 — 저장이 끊긴 연결에 매달리지 않게
+    dl = FileSystem.createDownloadResumable(remoteUrl, dest, {
+      sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const result = await Promise.race([
+      dl!.downloadAsync(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), 8000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    if (!result || result.status !== 200 || !looksLikeImage(result)) {
+      await discard();
       return null;
     }
     return `images/${name}`;
   } catch {
+    await dl?.cancelAsync?.().catch(() => {});
+    await discard();
     return null;
   }
+}
+
+// 핫링크 차단 페이지(HTML)를 이미지로 저장하지 않는다. 타입이 비어 있거나 octet-stream이면 믿어 준다.
+function looksLikeImage(result: { mimeType?: string | null; headers?: Record<string, string> }): boolean {
+  const headers = result.headers ?? {};
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+  const type = (result.mimeType ?? (key ? headers[key] : '') ?? '').toLowerCase();
+  return !/^(text\/|application\/(json|xml|xhtml))/.test(type);
 }
 
 export function imageAbs(rel: string | null): string | null {
