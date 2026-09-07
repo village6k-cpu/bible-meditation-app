@@ -31,6 +31,7 @@ import {
   getEntry,
   recordShown,
   resurfaceCandidates,
+  unfiledCount,
   setReaction,
   setTaskDone,
   tagsOf,
@@ -58,6 +59,7 @@ export default function TodayScreen() {
 
   const [today, setToday] = useState(todayKey());
   const [deck, setDeck] = useState<DeckItem[]>([]);
+  const [unfiled, setUnfiled] = useState(0);
   const [tasks, setTasks] = useState<Entry[]>([]);
   const [carriedTasks, setCarriedTasks] = useState<Entry[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -102,6 +104,7 @@ export default function TodayScreen() {
       if (entry) loaded.push({ entry, slot: c.slot });
     }
     setDeck(loaded);
+    setUnfiled(await unfiledCount(db));
   }, [db]);
 
   useFocusEffect(
@@ -208,8 +211,27 @@ export default function TodayScreen() {
       >
         {/* 남기기 칩 바 — 한 번의 탭으로 유형별 폼까지 */}
         <View style={styles.chipBar}>
-          <TypePicker compact onSelect={(t) => router.push(`/compose?type=${t}`)} />
+          <TypePicker compact onSelect={(t) => router.push(`/new?type=${t}`)} />
         </View>
+
+        {/* 정리해야 할 양 — 숫자 하나와 검토로 가는 줄 */}
+        {unfiled > 0 && (
+          <Pressable
+            onPress={() => router.push('/review')}
+            style={({ pressed }) => [
+              styles.reviewRow,
+              { borderColor: palette.divider, opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Text style={[type.micro, { color: palette.textSecondary }]}>
+              {S.review_unfiled.toUpperCase()}
+            </Text>
+            <Text style={[type.mono, { color: palette.textPrimary, flex: 1, textAlign: 'right' }]}>
+              {unfiled}
+            </Text>
+            <Ionicons name="chevron-forward" size={13} color={palette.textTertiary} />
+          </Pressable>
+        )}
 
         {/* 다시 만나는 밑줄 */}
         {deck.length > 0 && (
@@ -384,6 +406,17 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   gear: { paddingBottom: space.m },
   scroll: { paddingHorizontal: space.gutter },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.m,
+    marginHorizontal: space.gutter,
+    marginBottom: space.xl,
+    paddingHorizontal: space.m,
+    height: 38,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.card,
+  },
   chipBar: { marginBottom: space.xl },
   section: { marginBottom: space.xxl },
   sectionLabel: {

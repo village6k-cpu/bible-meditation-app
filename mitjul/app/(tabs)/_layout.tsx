@@ -7,7 +7,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { fonts } from '../../src/theme/tokens';
 import { S } from '../../src/core/strings.ko';
 
-// 활성 탭은 아이콘 아래 짧은 먹색 획 — 탭바에서도 밑줄을 긋는다.
+// 활성 탭은 아이콘 아래 짧은 먹색 획. 색이 아니라 획으로 상태를 말한다.
 function TabIcon({ name, color, focused, accent }: {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -32,7 +32,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: palette.textPrimary,
         tabBarInactiveTintColor: palette.textTertiary,
-        tabBarLabelStyle: { fontFamily: fonts.sans, fontSize: 10 },
+        tabBarLabelStyle: { fontFamily: fonts.sansMedium, fontSize: 10, letterSpacing: -0.2 },
         tabBarStyle: {
           backgroundColor: palette.surface,
           borderTopWidth: StyleSheet.hairlineWidth,
@@ -46,7 +46,7 @@ export default function TabLayout() {
         options={{
           title: S.tab_today,
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="today-outline" color={color} focused={focused} accent={palette.accent} />
+            <TabIcon name="download-outline" color={color} focused={focused} accent={palette.accent} />
           ),
         }}
       />
@@ -55,7 +55,7 @@ export default function TabLayout() {
         options={{
           title: S.tab_library,
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="library-outline" color={color} focused={focused} accent={palette.accent} />
+            <TabIcon name="list-outline" color={color} focused={focused} accent={palette.accent} />
           ),
         }}
       />
@@ -69,7 +69,7 @@ export default function TabLayout() {
               accessibilityLabel={S.tab_capture}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/compose');
+                router.push('/new');
               }}
               style={({ pressed }) => [
                 styles.captureButton,
@@ -91,11 +91,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="review"
+        options={{
+          title: S.tab_review,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="albums-outline" color={color} focused={focused} accent={palette.accent} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="trends"
         options={{
           title: S.tab_trends,
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="pulse-outline" color={color} focused={focused} accent={palette.accent} />
+            <TabIcon name="stats-chart-outline" color={color} focused={focused} accent={palette.accent} />
           ),
         }}
       />
@@ -109,14 +118,13 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   stroke: {
-    width: 12,
+    width: 14,
     height: 2,
-    borderRadius: 1,
   },
   captureButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 46,
+    height: 46,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',

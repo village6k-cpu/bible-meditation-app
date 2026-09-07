@@ -37,6 +37,7 @@ function Shell() {
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
         <Stack.Screen name="entry/[id]" />
         <Stack.Screen name="tag/[name]" />
