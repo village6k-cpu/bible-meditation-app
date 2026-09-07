@@ -208,7 +208,13 @@ export default function EntryDetailScreen() {
             style={styles.linkRow}
           >
             <Ionicons name="link-outline" size={14} color={palette.secondary} />
-            <Text style={[type.caption, { color: palette.secondary, flex: 1 }]} numberOfLines={1}>
+            <Text
+              style={[
+                type.caption,
+                { color: palette.secondary, flex: 1, textDecorationLine: 'underline' },
+              ]}
+              numberOfLines={1}
+            >
               {entry.url}
             </Text>
           </Pressable>

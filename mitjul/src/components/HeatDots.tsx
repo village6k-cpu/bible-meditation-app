@@ -51,6 +51,8 @@ export function HeatDots({ days, today, rows, columns = 28 }: Props) {
                   <View
                     style={[
                       styles.dot,
+                      // 링과 점이 같은 먹이라, 사이에 종이색 틈이 있어야 농도가 진해도 링이 보인다
+                      isToday && styles.dotToday,
                       { backgroundColor: palette.dotInk, opacity: OPACITY[level] },
                     ]}
                   />
@@ -93,5 +95,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  dotToday: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
 });

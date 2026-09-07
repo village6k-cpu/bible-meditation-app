@@ -10,7 +10,7 @@ export interface Palette {
   textTertiary: string;
   accent: string; // 먹 — 모든 밑줄과 활성 상태
   accentSoft: string; // 선택 워시
-  accentInk: string; // pressed
+  accentInk: string; // 남기기 버튼 그림자 (눌림은 색이 아니라 투명도로)
   secondary: string; // 링크·본문 주소 (회색 톤, 밑줄로 구분)
   divider: string;
   dotInk: string; // 흐름 탭 먹점

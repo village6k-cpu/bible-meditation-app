@@ -74,7 +74,8 @@ export default function TabLayout() {
               style={({ pressed }) => [
                 styles.captureButton,
                 {
-                  backgroundColor: pressed ? palette.accentInk : palette.accent,
+                  backgroundColor: palette.accent,
+                  opacity: pressed ? 0.7 : 1,
                   shadowColor: palette.accentInk,
                 },
               ]}

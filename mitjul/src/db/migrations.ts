@@ -86,6 +86,42 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_entries_source ON entries (source_id);
     `,
   },
+  {
+    // 영상 출처는 링크를 지닌다. 출처 없이 남긴 옛 책·영상 기록은 같은 제목의 출처에 잇고,
+    // 없으면 (유형, 제목)마다 출처를 하나 만든다 — 업그레이드 뒤 서가가 비어 있지 않도록.
+    version: 3,
+    sql: `
+      ALTER TABLE sources ADD COLUMN url TEXT;
+
+      UPDATE entries SET source_id = (
+        SELECT s.id FROM sources s
+        WHERE s.kind = entries.type AND s.title = entries.title AND s.deleted_at IS NULL
+        ORDER BY s.last_used_at DESC LIMIT 1
+      )
+      WHERE source_id IS NULL AND type IN ('book','video') AND title IS NOT NULL AND title != '';
+
+      INSERT INTO sources (id, kind, title, creator, created_at, last_used_at, last_tags)
+        SELECT lower(hex(randomblob(8))), type, title, MAX(subtitle), MIN(created_at), MAX(created_at), ''
+        FROM entries
+        WHERE source_id IS NULL AND type IN ('book','video')
+          AND title IS NOT NULL AND title != '' AND deleted_at IS NULL
+        GROUP BY type, title;
+
+      UPDATE entries SET source_id = (
+        SELECT s.id FROM sources s
+        WHERE s.kind = entries.type AND s.title = entries.title AND s.deleted_at IS NULL
+        ORDER BY s.last_used_at DESC LIMIT 1
+      )
+      WHERE source_id IS NULL AND type IN ('book','video') AND title IS NOT NULL AND title != '';
+
+      UPDATE sources SET url = (
+        SELECT e.url FROM entries e
+        WHERE e.source_id = sources.id AND e.url IS NOT NULL AND e.url != ''
+        ORDER BY e.created_at DESC LIMIT 1
+      )
+      WHERE kind = 'video' AND url IS NULL;
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

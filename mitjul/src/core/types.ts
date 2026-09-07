@@ -19,6 +19,7 @@ export interface Source {
   kind: 'book' | 'video';
   title: string;
   creator: string | null; // 저자 / 채널
+  url: string | null; // 영상 링크 — 같은 영상의 메모마다 링크를 다시 붙이지 않도록 출처가 지닌다
   created_at: number;
   last_used_at: number; // 최근 사용 순 — 컴포저는 이 순서로 칩을 늘어놓고 첫 것을 미리 고른다
   last_tags: string; // 이 출처에 마지막으로 붙인 태그 (공백 구분) — 다음 밑줄의 기본값
