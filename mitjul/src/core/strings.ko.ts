@@ -120,7 +120,7 @@ export const S = {
   capture_save: '저장',
   capture_done: '완료',
   capture_placeholder: '무엇이든 붙여넣거나 적으세요',
-  capture_hint: '링크 · p.57 · 시편 23:1 · #갈피 · 30분 · 14:00 을 알아서 읽습니다',
+  capture_hint: '링크 · p.57 · 시편 23:1 · #갈피 · 30분 · 14:00 자동 인식',
   capture_source_label: '출처',
   capture_source_auto: '링크에서 자동',
   capture_source_none: '없음',
