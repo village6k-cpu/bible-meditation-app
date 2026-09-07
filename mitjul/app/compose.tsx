@@ -47,7 +47,7 @@ import {
   touchSource,
 } from '../src/db/sourceRepo';
 import { cacheRemoteImage, imageAbs, persistImage } from '../src/export/files';
-import { LinkMeta, domainOf, previewLink, resolveLink } from '../src/export/linkMeta';
+import { LinkMeta, fallbackTitle, previewLink, resolveLink } from '../src/export/linkMeta';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { radius, space, type } from '../src/theme/tokens';
 
@@ -122,6 +122,8 @@ export default function ComposeScreen() {
   const bodyRef = useRef<TextInput>(null);
   const linkRef = useRef<TextInput>(null);
   const pickSeq = useRef(0);
+  // 출처 없이(또는 출처가 지워진 채) 남은 옛 기록을 고칠 때, 기록이 지닌 제목·저자를 잃지 않도록
+  const loadedRef = useRef<{ title: string; subtitle: string }>({ title: '', subtitle: '' });
   const navigation = useNavigation();
 
   const spec = entryType ? specOf(entryType) : null;
@@ -177,6 +179,8 @@ export default function ComposeScreen() {
       setTagText('');
       setShowTags(false);
       setShowMemo(false);
+      setMemoAutoFocus(false);
+      setTagsAutoFocus(false);
       setSources([]);
       setSourceId(null);
       setNewSource(false);
@@ -247,6 +251,7 @@ export default function ComposeScreen() {
       setDay(e.day);
       setTitle(e.title ?? '');
       setSubtitle(e.subtitle ?? '');
+      loadedRef.current = { title: e.title ?? '', subtitle: e.subtitle ?? '' };
       setQuote(e.quote ?? '');
       setBody(e.body ?? '');
       setShowMemo(!!e.body);
@@ -276,11 +281,10 @@ export default function ComposeScreen() {
           setSourceId(ownSrc.id);
           setNewSource(false);
         } else {
-          // 제목·저자를 새 출처 폼에 채워 두되, 제목 없이도 저장할 수 있게 둔다
+          // 출처 없이 남았거나 출처가 지워진 기록 — 기록이 지닌 제목·저자를 그대로 두고
+          // 출처는 만들지 않는다 (칩을 누르거나 '+ 새 책'으로만 이어 붙인다)
           setLegacy(true);
-          setNewSource(true);
-          setShowTitleFields(true);
-          if (REGISTRY[e.type].linkFirst) setSourceUrl(e.url ?? '');
+          setNewSource(false);
         }
       }
     });
@@ -301,10 +305,7 @@ export default function ComposeScreen() {
   // 그 사이 사용자가 다른 칸을 눌렀다면 가로채지 않는다.
   useEffect(() => {
     if (!spec || !sourced || editingId || newSource) return;
-    const t = setTimeout(() => {
-      if (TextInput.State.currentlyFocusedInput()) return;
-      (quoteRef.current ?? bodyRef.current)?.focus();
-    }, 350);
+    const t = setTimeout(() => (quoteRef.current ?? bodyRef.current)?.focus(), 350);
     return () => clearTimeout(t);
   }, [spec, sourced, editingId, newSource]);
 
@@ -374,22 +375,26 @@ export default function ComposeScreen() {
     }
   }
 
+  // 새 출처 폼이 열려 있을 때만 그 폼의 링크가 '적은 것'으로 친다 — 닫힌 폼의 흔적이 다른 출처의 기록에 묻어가지 않도록
+  const pendingUrl = newSource && !editingSource ? sourceUrl.trim() : '';
   const filled: Record<string, boolean> = {
     title: title.trim().length > 0,
     quote: quote.trim().length > 0,
     body: body.trim().length > 0,
     image_uri: imageUri !== null,
-    // 영상은 출처가 링크를 지니므로, 메모마다 링크를 다시 붙이지 않아도 된다
-    url: url.trim().length > 0 || !!linkMeta || !!selectedSource?.url,
+    // 새 영상을 등록하는 링크는 그 자체로 기록이지만, 이미 링크를 지닌 출처에는 메모가 있어야 한다 — 빈 기록이 쌓이지 않도록
+    url: url.trim().length > 0 || (newSource && !editingSource && (pendingUrl.length > 0 || !!linkMeta)),
     minutes: minutes !== null,
   };
   const sourceReady =
     !sourced ||
     legacy ||
     (newSource ? title.trim().length > 0 || (linkFirst && !!linkMeta) : sourceId !== null);
+  // 이름을 고치는 중에는 저장하지 않는다 — 고치기 완료나 취소로 먼저 마무리
   const canSave =
     spec !== null &&
     sourceReady &&
+    !editingSource &&
     (spec.requiresOneOf.some((f) => filled[f]) || (legacy && filled.title));
 
   // 태그를 손대지 않았으면(비었거나 이전 출처의 기본값 그대로면) 새 출처의 기본 태그로 바꾼다
@@ -399,6 +404,12 @@ export default function ComposeScreen() {
     if (editingSource) cancelRename();
     setSourceId(s.id);
     setNewSource(false);
+    // 새 출처 폼에 적다 만 것과, 링크를 지닌 출처에서는 보이지 않는 기록 링크는 따라가지 않는다
+    setTitle('');
+    setSubtitle('');
+    setSourceUrl('');
+    setLinkMeta(null);
+    if (s.url) setUrl('');
     if (untouched) setTagText(s.last_tags);
   }
 
@@ -465,10 +476,14 @@ export default function ComposeScreen() {
     if (!t) return editingSource;
     const creator = subtitle.trim() || null;
     const u = sourceUrl.trim() ? (previewLink(sourceUrl)?.canonicalUrl ?? sourceUrl.trim()) : null;
-    await renameSource(db, editingSource.id, t, creator, u);
-    const updated: Source = { ...editingSource, title: t, creator, url: u };
-    setSources((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-    setSourceId(updated.id);
+    // 같은 제목·링크의 출처가 이미 있으면 그쪽으로 합쳐진다 (오타를 고쳐 원래 책과 만나는 경우)
+    const updated = await renameSource(db, editingSource.id, t, creator, u);
+    const renamedId = editingSource.id;
+    setSources((prev) => [updated, ...prev.filter((s) => s.id !== renamedId && s.id !== updated.id)]);
+    if (sourceId === renamedId) {
+      setSourceId(updated.id);
+      if (!tagText.trim()) setTagText(updated.last_tags);
+    }
     setEditingSource(null);
     setNewSource(false);
     setTitle('');
@@ -495,13 +510,17 @@ export default function ComposeScreen() {
     setSources(rest);
     if (editingSource?.id === s.id) cancelRename();
     if (sourceId === s.id) {
-      if (rest.length > 0) {
+      if (rest.length > 0 && !editingId) {
         setSourceId(rest[0].id);
         setTagText(rest[0].last_tags);
+      } else if (editingId) {
+        // 고치던 기록의 출처를 지웠다 — 기록은 자기 제목·저자·태그를 지닌 채 출처 없이 남는다
+        setSourceId(null);
+        setNewSource(false);
+        setLegacy(true);
       } else {
         setSourceId(null);
         setNewSource(true);
-        if (editingId) setLegacy(true);
       }
     }
   }
@@ -531,31 +550,35 @@ export default function ComposeScreen() {
       let storedImage = imageUri;
       if (imageUri && imageIsNew) storedImage = await persistImage(imageUri);
 
-      const tags = parseTagInput(tagText);
+      let tags = parseTagInput(tagText);
 
       // 출처: 이름을 고치는 중이면 먼저 반영하고, 새로 적었으면 찾거나 만들고, 골랐으면 그것을
       let source: Source | null = null;
       if (sourced) {
         const kind = spec.key as Source['kind'];
-        if (editingSource) {
-          source = await applyRename();
-        } else if (newSource) {
-          // 링크가 먼저인 유형은 제목이 없어도 링크에서 온 제목(없으면 도메인)으로 등록한다
+        if (newSource) {
+          // 링크가 먼저인 유형은 제목이 없어도 링크에서 온 제목(없으면 'YouTube · id')으로 등록한다
           const meta = linkFirst ? linkMeta : null;
-          const name = title.trim() || meta?.title || (meta ? domainOf(meta.url) : '');
+          const name = title.trim() || meta?.title || (meta ? fallbackTitle(meta) : '');
           if (name) {
             const thumb = meta?.thumbnailUrl ? await cacheRemoteImage(meta.thumbnailUrl) : null;
             const created = await createSource(db, kind, name, subtitle.trim() || meta?.creator || null, {
-              url: meta?.canonicalUrl ?? (sourceUrl.trim() || null),
+              url: meta?.canonicalUrl ?? (pendingUrl || null),
               thumbnail_uri: thumb,
             });
             source = created;
-            setSources((prev) =>
-              prev.some((s) => s.id === created.id) ? prev : [created, ...prev]
-            );
+            // 이미 있던 출처로 합쳐졌고 태그를 비워 뒀다면, 그 출처의 기본 태그를 따른다
+            if (tags.length === 0 && created.last_tags) {
+              tags = parseTagInput(created.last_tags);
+              setTagText(created.last_tags);
+            }
+            setSources((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
             setSourceId(created.id);
             setNewSource(false);
             setLegacy(false);
+            setTitle('');
+            setSubtitle('');
+            setSourceUrl('');
           }
         } else if (sourceId) {
           source = sources.find((s) => s.id === sourceId) ?? (await getSource(db, sourceId));
@@ -577,16 +600,25 @@ export default function ComposeScreen() {
         type: spec.key,
         day,
         source_id: src?.id ?? null,
-        title: src ? src.title : spec.fields.title && title.trim() ? title.trim() : null,
+        // 출처 없이 남는 옛 기록은 자기 제목·저자를 지킨다 (폼에서 비웠어도)
+        title: src
+          ? src.title
+          : sourced && legacy
+            ? loadedRef.current.title || null
+            : spec.fields.title && title.trim()
+              ? title.trim()
+              : null,
         subtitle: src
           ? src.creator
-          : spec.fields.subtitle && subtitle.trim()
-            ? subtitle.trim()
-            : null,
+          : sourced && legacy
+            ? loadedRef.current.subtitle || null
+            : spec.fields.subtitle && subtitle.trim()
+              ? subtitle.trim()
+              : null,
         quote: spec.fields.quote && quote.trim() ? quote.trim() : null,
         body: spec.fields.body && body.trim() ? body.trim() : null,
         url: spec.fields.url
-          ? url.trim() || linkMeta?.url || sourceUrl.trim() || src?.url || null
+          ? url.trim() || (newSource ? linkMeta?.url : null) || pendingUrl || src?.url || null
           : null,
         // 영상은 사진 대신 출처의 썸네일을 지닌다 — 카드와 상세에 얼굴이 있도록
         image_uri: spec.fields.image ? storedImage : (src?.thumbnail_uri ?? null),
@@ -791,7 +823,7 @@ export default function ComposeScreen() {
                                 title={
                                   title.trim() ||
                                   linkMeta.title ||
-                                  (resolving ? S.compose_link_reading : domainOf(linkMeta.url))
+                                  (resolving ? S.compose_link_reading : fallbackTitle(linkMeta))
                                 }
                                 creator={subtitle.trim() || linkMeta.creator}
                                 onOpenExternal={() => Linking.openURL(linkMeta.url).catch(() => {})}
@@ -877,6 +909,11 @@ export default function ComposeScreen() {
                         </View>
                       )}
                     </View>
+                  )}
+                  {legacy && !newSource && !sourceId && (
+                    <Text style={[type.caption, { color: palette.textTertiary, marginBottom: space.m }]}>
+                      {S.compose_legacy_source(loadedRef.current.title)}
+                    </Text>
                   )}
                   {/* 고른 영상 — 얼굴이 있고, 누르면 그 자리에서 재생된다 */}
                   {linkFirst && selectedSource && (selectedSource.thumbnail_uri || selectedVideo) && (
@@ -995,7 +1032,7 @@ export default function ComposeScreen() {
                   multiline
                 />
               )}
-              {spec.key === 'video' && sourceReady && !canSave && (
+              {spec.key === 'video' && sourceReady && !canSave && !editingSource && (
                 <Text style={[type.caption, styles.hint, { color: palette.textTertiary }]}>
                   {S.compose_video_hint}
                 </Text>

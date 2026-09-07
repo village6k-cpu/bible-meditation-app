@@ -22,6 +22,8 @@ export const S = {
   compose_clipboard_empty: '클립보드에 링크가 없어요.',
   compose_link_reading: '링크를 읽는 중…',
   compose_link_known: '이미 담아둔 영상이에요 — 메모를 이어서 남겨요.',
+  compose_legacy_source: (title: string) =>
+    `${title ? `${title} · ` : ''}출처에 이어지지 않은 기록 — 칩을 누르면 이어 붙여요.`,
   compose_edit_title: '제목 고치기',
   compose_no_link: '링크 없이 적기',
   video_open_external: '브라우저에서 열기',

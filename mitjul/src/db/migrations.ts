@@ -116,7 +116,8 @@ const MIGRATIONS: Migration[] = [
 
       UPDATE sources SET url = (
         SELECT e.url FROM entries e
-        WHERE e.source_id = sources.id AND e.url IS NOT NULL AND e.url != ''
+        WHERE e.source_id = sources.id AND e.deleted_at IS NULL
+          AND e.url IS NOT NULL AND e.url != ''
         ORDER BY e.created_at DESC LIMIT 1
       )
       WHERE kind = 'video' AND url IS NULL;

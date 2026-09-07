@@ -44,7 +44,8 @@ export interface SourceExtra {
   thumbnail_uri?: string | null;
 }
 
-// 없으면 만들고, 있으면 그것을 돌려준다 (링크로 먼저, 제목으로 다음; 비어 있던 저자·링크·썸네일은 이번 입력으로 채운다)
+// 없으면 만들고, 있으면 그것을 돌려준다 (비어 있던 저자·링크·썸네일은 이번 입력으로 채운다).
+// 링크가 있으면 링크로만 찾는다 — 제목이 같아도(제목을 못 얻어 'YouTube · id'로 남긴 두 영상) 다른 영상이다.
 export async function createSource(
   db: SQLiteDatabase,
   kind: Source['kind'],
@@ -55,7 +56,7 @@ export async function createSource(
   const t = title.trim();
   const url = extra.url ?? null;
   const thumbnail = extra.thumbnail_uri ?? null;
-  const existing = (url && (await findSourceByUrl(db, kind, url))) || (await findSource(db, kind, t));
+  const existing = url ? await findSourceByUrl(db, kind, url) : await findSource(db, kind, t);
   if (existing) {
     const merged: Source = {
       ...existing,
@@ -106,35 +107,71 @@ export async function touchSource(db: SQLiteDatabase, id: string, tags: string[]
   ]);
 }
 
-// 제목·저자·링크를 고치면, 그 출처의 밑줄에 복사돼 있던 제목·저자(·링크)도 함께 고친다
+// 제목·저자·링크를 고치면, 그 출처의 밑줄에 복사돼 있던 제목·저자(·링크)도 함께 고친다.
+// 같은 링크나 제목의 살아 있는 출처가 이미 있으면 그쪽으로 합친다 (오타를 고쳐 원래 책과 만나는 경우):
+// 밑줄은 그 출처로 옮기고, 이 출처는 조용히 내린다. 돌려주는 값이 앞으로 쓸 출처다.
 export async function renameSource(
   db: SQLiteDatabase,
   id: string,
   title: string,
   creator: string | null,
   url: string | null
-): Promise<void> {
+): Promise<Source> {
   const before = await getSource(db, id);
+  if (!before) throw new Error('source not found');
+  const t = title.trim();
   const now = Date.now();
+  const target =
+    (url && (await findSourceByUrl(db, before.kind, url))) || (await findSource(db, before.kind, t));
+
+  if (target && target.id !== id) {
+    const merged: Source = {
+      ...target,
+      creator: target.creator ?? creator,
+      url: target.url ?? url,
+      thumbnail_uri: target.thumbnail_uri ?? before.thumbnail_uri,
+      last_used_at: now,
+    };
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ? WHERE id = ?',
+        [merged.creator, merged.url, merged.thumbnail_uri, now, target.id]
+      );
+      await db.runAsync(
+        'UPDATE entries SET source_id = ?, title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
+        [target.id, merged.title, merged.creator, now, id]
+      );
+      if (merged.url) {
+        await db.runAsync(
+          "UPDATE entries SET url = ? WHERE source_id = ? AND deleted_at IS NULL AND (url IS NULL OR url = '')",
+          [merged.url, target.id]
+        );
+      }
+      await db.runAsync('UPDATE sources SET deleted_at = ? WHERE id = ?', [now, id]);
+    });
+    return merged;
+  }
+
   await db.withTransactionAsync(async () => {
     await db.runAsync('UPDATE sources SET title = ?, creator = ?, url = ? WHERE id = ?', [
-      title,
+      t,
       creator,
       url,
       id,
     ]);
     await db.runAsync(
       'UPDATE entries SET title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
-      [title, creator, now, id]
+      [t, creator, now, id]
     );
-    if (before?.url && url && before.url !== url) {
-      await db.runAsync('UPDATE entries SET url = ? WHERE source_id = ? AND url = ?', [
-        url,
-        id,
-        before.url,
-      ]);
+    // 링크를 새로 달거나 바꾸면, 링크가 없던 밑줄과 옛 링크를 그대로 쓰던 밑줄이 따라간다
+    if (url && before.url !== url) {
+      await db.runAsync(
+        "UPDATE entries SET url = ? WHERE source_id = ? AND deleted_at IS NULL AND (url IS NULL OR url = '' OR url = ?)",
+        [url, id, before.url ?? '']
+      );
     }
   });
+  return { ...before, title: t, creator, url };
 }
 
 // 출처만 조용히 내린다 — 밑줄은 복사된 제목을 지닌 채 그대로 남는다

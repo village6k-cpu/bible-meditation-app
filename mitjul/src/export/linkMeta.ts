@@ -74,6 +74,15 @@ export function domainOf(url: string): string {
   }
 }
 
+// 제목을 못 얻었을 때의 이름 — 영상은 식별자를 붙여 서로 다른 영상이 같은 이름이 되지 않게
+export function fallbackTitle(meta: LinkMeta): string {
+  if (meta.video) {
+    const label = meta.video.provider === 'youtube' ? 'YouTube' : 'Vimeo';
+    return `${label} · ${meta.video.id}`;
+  }
+  return domainOf(meta.url);
+}
+
 function stripTracking(url: string): string {
   try {
     const u = new URL(url);
