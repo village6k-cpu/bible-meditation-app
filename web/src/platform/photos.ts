@@ -20,29 +20,41 @@ export const isPhotoRef = (uri: string | null): uri is string =>
 
 // ── 고르기 ──
 // input은 클릭할 때마다 새로 만든다. 같은 사진을 두 번 고를 때 change가 안 오는 문제를 피한다.
-export function pickPhotos(multiple = false): Promise<File[]> {
+//
+// 빈손으로 돌아오는 경우가 둘이라서 결과를 구분해 돌려준다.
+// 하나는 사용자가 취소한 것이고, 다른 하나는 선택기가 조용히 실패한 것이다.
+// WebKit 318572(미해결): 사진 선택기가 '준비 중' 단계에서 만든 임시 파일이 영구히 남아,
+// 기기 여유 공간이 바닥나면 그때부터 선택기가 change 대신 cancel을 쏜다. 앱에서 둘은 똑같아 보인다.
+// 그래서 이벤트로는 못 가르고, 연달아 빈손인지를 부르는 쪽이 센다.
+export type Picked = { files: File[]; empty: boolean };
+
+export function pickPhotos(multiple = false): Promise<Picked> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = multiple;
+    // 화면 밖으로 밀지 않는다 — 일부 판에서 보이지 않는 입력은 선택기를 열지 않는다
     input.style.position = 'fixed';
-    input.style.left = '-9999px';
+    input.style.opacity = '0';
+    input.style.pointerEvents = 'none';
+    input.style.left = '0';
+    input.style.top = '0';
     document.body.appendChild(input);
+
     let settled = false;
-    const done = (files: File[]) => {
+    const done = () => {
       if (settled) return;
       settled = true;
+      const files = Array.from(input.files ?? []);
       input.remove();
-      resolve(files);
+      resolve({ files, empty: files.length === 0 });
     };
-    input.addEventListener('change', () => done(Array.from(input.files ?? [])));
-    // 취소는 이벤트가 없다 — 창이 돌아오면 한 번 확인하고 놓아 준다
-    window.addEventListener(
-      'focus',
-      () => setTimeout(() => done(Array.from(input.files ?? [])), 800),
-      { once: true }
-    );
+
+    input.addEventListener('change', done);
+    // Safari 16.4+는 취소할 때 cancel을 쏜다. 없는 판을 위해 포커스 복귀도 함께 본다.
+    input.addEventListener('cancel', done);
+    window.addEventListener('focus', () => setTimeout(done, 1000), { once: true });
     input.click();
   });
 }

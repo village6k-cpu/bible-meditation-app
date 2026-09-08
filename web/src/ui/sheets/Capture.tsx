@@ -74,6 +74,8 @@ export function CaptureSheet({
   // 붙인 사진은 저장 전에도 이미 OPFS의 파일이다 — 버리면 파일도 함께 지운다
   const [photo, setPhoto] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
+  // 사진 선택기가 빈손으로 돌아온 횟수. 한 번은 취소, 연달아면 선택기가 죽은 것이다.
+  const emptyPicks = useRef(0);
   const [saving, setSaving] = useState(false);
   const [count, setCount] = useState(0);
 
@@ -191,8 +193,21 @@ export function CaptureSheet({
   async function attachPhoto(): Promise<void> {
     setAttaching(true);
     try {
-      const [file] = await pickPhotos(false);
-      if (!file) return;
+      const picked = await pickPhotos(false);
+      const file = picked.files[0];
+      if (!file) {
+        // 두 번 연달아 빈손이면 취소가 아니다. iOS 사진 선택기가 여유 공간이 바닥나면
+        // 아무 말 없이 실패한다(WebKit 318572) — 사용자가 영문을 모르게 두지 않는다.
+        emptyPicks.current += 1;
+        if (emptyPicks.current >= 2) {
+          emptyPicks.current = 0;
+          toast(
+            '사진 선택기가 응답하지 않습니다. 앱을 완전히 닫았다 열거나 기기 저장 공간을 확인해 주세요'
+          );
+        }
+        return;
+      }
+      emptyPicks.current = 0;
       const ref = await savePhoto(handle, file);
       if (photo) await deletePhoto(handle, photo); // 갈아 끼우면 옛 파일은 남기지 않는다
       setPhoto(ref);
