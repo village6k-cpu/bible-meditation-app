@@ -1,7 +1,7 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { newId } from '../core/ids';
 import { extractHashtags, normalizeTags } from '../core/tags';
-import { Entry, EntryInput, EntryType, Reaction, TrendRow } from '../core/types';
+import { Entry, EntryInput, EntryType, Reaction, SourceKind, TrendRow } from '../core/types';
 import { ResurfaceCandidate } from '../core/resurface';
 import { setEntryTags, tagsForEntries } from './tagRepo';
 
@@ -126,6 +126,8 @@ export async function entriesInRange(db: SQLiteDatabase, from: string, to: strin
 
 export interface LibraryQuery {
   type?: EntryType | null;
+  // 형식(책/영상/글) — 유형이 아니라 출처의 종류가 기억한다
+  sourceKind?: SourceKind | null;
   tag?: string | null;
   q?: string;
   sort: 'recent' | 'dusty';
@@ -140,6 +142,10 @@ export async function queryLibrary(db: SQLiteDatabase, opts: LibraryQuery): Prom
   if (opts.type) {
     where.push('type = ?');
     params.push(opts.type);
+  }
+  if (opts.sourceKind) {
+    where.push('source_id IN (SELECT id FROM sources WHERE kind = ? AND deleted_at IS NULL)');
+    params.push(opts.sourceKind);
   }
   if (opts.pinnedOnly) where.push('pinned = 1');
   if (opts.tag) {

@@ -11,9 +11,9 @@ export interface WebDb {
   runAsync(sql: string, params?: unknown[]): Promise<void>;
   withTransactionAsync(fn: () => Promise<void>): Promise<void>;
   /** 지금 상태를 SQLite 파일 바이트로 — 백업 */
-  serialize(): Promise<Uint8Array>;
+  serialize(): Promise<Uint8Array<ArrayBuffer>>;
   /** 백업 파일로 통째로 되돌린다 */
-  restore(bytes: Uint8Array): Promise<void>;
+  restore(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
   flush(): Promise<void>;
   engine: Engine;
   opfsError: string | null;
@@ -22,10 +22,19 @@ export interface WebDb {
 let seq = 0;
 
 export async function openDb(): Promise<WebDb> {
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./worker.ts', import.meta.url), {
+    type: 'module',
+  });
   const waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void }>();
 
-  worker.onmessage = (ev: MessageEvent<{ id: number; ok: boolean; result?: unknown; error?: string }>) => {
+  worker.onmessage = (
+    ev: MessageEvent<{
+      id: number;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+    }>
+  ) => {
     const w = waiting.get(ev.data.id);
     if (!w) return;
     waiting.delete(ev.data.id);
@@ -33,7 +42,12 @@ export async function openDb(): Promise<WebDb> {
     else w.fail(new Error(ev.data.error ?? '알 수 없는 오류'));
   };
 
-  const send = (op: string, sql?: string, params?: unknown[], bytes?: Uint8Array): Promise<unknown> =>
+  const send = (
+    op: string,
+    sql?: string,
+    params?: unknown[],
+    bytes?: Uint8Array<ArrayBuffer>
+  ): Promise<unknown> =>
     new Promise((ok, fail) => {
       const id = ++seq;
       waiting.set(id, { ok, fail });
@@ -42,7 +56,12 @@ export async function openDb(): Promise<WebDb> {
 
   // 모든 호출을 한 줄로 세운다 — 트랜잭션 사이에 다른 질의가 끼어들지 않도록
   let chain: Promise<unknown> = Promise.resolve();
-  const call = (op: string, sql?: string, params?: unknown[], bytes?: Uint8Array): Promise<unknown> => {
+  const call = (
+    op: string,
+    sql?: string,
+    params?: unknown[],
+    bytes?: Uint8Array<ArrayBuffer>
+  ): Promise<unknown> => {
     const next = chain.then(
       () => send(op, sql, params, bytes),
       () => send(op, sql, params, bytes)
@@ -51,7 +70,10 @@ export async function openDb(): Promise<WebDb> {
     return next;
   };
 
-  const opened = (await send('open')) as { engine: Engine; opfsError: string | null };
+  const opened = (await send('open')) as {
+    engine: Engine;
+    opfsError: string | null;
+  };
 
   return {
     engine: opened.engine,
@@ -80,7 +102,7 @@ export async function openDb(): Promise<WebDb> {
       await call('commit');
     },
     async serialize() {
-      return (await call('serialize')) as Uint8Array;
+      return (await call('serialize')) as Uint8Array<ArrayBuffer>;
     },
     async restore(bytes) {
       await call('restore', undefined, undefined, bytes);

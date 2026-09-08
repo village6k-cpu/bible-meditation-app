@@ -69,6 +69,14 @@
 하루 한 문서(`YYYY-MM-DD`), YAML 프런트매터(date/types/tags), 유형별 H2 섹션,
 blockquote 인용 관례. 설정에서 이번 주/이번 달/전체를 공유 시트로 내보냅니다.
 
+## 웹으로도 같은 앱
+
+혼자 쓰는 기록함이라 앱 스토어를 거칠 이유가 없어, 같은 로직 위에 웹 껍데기를 하나 더
+얹었습니다 (`../web`). `src/core`는 expo·react-native를 하나도 부르지 않고, `src/db`는
+expo-sqlite의 메서드 다섯 개만 씁니다 — 그 다섯 개를 브라우저에서 구현하면 마이그레이션과
+리포지토리가 한 줄도 안 고치고 돕니다. 브라우저 쪽은 전용 워커 안의 SQLite와 OPFS SAHPool을
+씁니다. 자세한 것은 `web/README.md`.
+
 ## 기술
 
 - Expo SDK 54 · TypeScript strict · expo-router · expo-sqlite (오프라인 전용, 서버 없음)

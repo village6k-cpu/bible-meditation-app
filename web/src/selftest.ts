@@ -12,7 +12,10 @@ const lines: string[] = [];
 const say = (ok: boolean, msg: string) => {
   lines.push(`${ok ? '  OK  ' : ' FAIL '} ${msg}`);
   out.innerHTML = lines
-    .map((l) => `<span class="${l.startsWith('  OK') ? 'ok' : l.startsWith(' FAIL') ? 'bad' : ''}">${l}</span>`)
+    .map(
+      (l) =>
+        `<span class="${l.startsWith('  OK') ? 'ok' : l.startsWith(' FAIL') ? 'bad' : ''}">${l}</span>`
+    )
     .join('\n');
 };
 const note = (msg: string) => {
@@ -26,11 +29,16 @@ async function run() {
   note(`저장 엔진: ${d.engine === 'opfs' ? 'OPFS (기기 안 파일)' : '메모리 + IndexedDB 스냅숏'}`);
   note(`열기 ${Math.round(performance.now() - t0)}ms`);
   if (d.opfsError) note(`OPFS 실패 사유: ${d.opfsError}`);
-  note(`crossOriginIsolated=${crossOriginIsolated} · getDirectory=${typeof navigator.storage?.getDirectory}`);
+  note(
+    `crossOriginIsolated=${crossOriginIsolated} · getDirectory=${typeof navigator.storage?.getDirectory}`
+  );
 
   const sq = asSqlite(d);
   const v = await d.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  say(v?.user_version === MIGRATIONS[MIGRATIONS.length - 1].version, `마이그레이션 v${v?.user_version} 까지 올라감`);
+  say(
+    v?.user_version === MIGRATIONS[MIGRATIONS.length - 1].version,
+    `마이그레이션 v${v?.user_version} 까지 올라감`
+  );
 
   const tables = await d.getAllAsync<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -39,7 +47,10 @@ async function run() {
 
   // 파서 → 저장 → 조회 한 바퀴
   const cap = parseCapture('시간은 삶이며 삶은 마음속에 깃들여 있다 p.57 #자체점검');
-  say(cap.type === 'book' && cap.page === 57, `파서: ${cap.type} p.${cap.page} #${cap.tags.join(' #')}`);
+  say(
+    cap.type === 'book' && cap.page === 57,
+    `파서: ${cap.type} p.${cap.page} #${cap.tags.join(' #')}`
+  );
 
   const src = await createSource(sq, 'book', '모모', '미하엘 엔데');
   const id = await createEntry(sq, {
@@ -54,7 +65,11 @@ async function run() {
   });
   say(!!id, `기록 저장 ${id}`);
 
-  const rows = await queryLibrary(sq, { sort: 'recent', q: '마음속', limit: 10 });
+  const rows = await queryLibrary(sq, {
+    sort: 'recent',
+    q: '마음속',
+    limit: 10,
+  });
   say(rows.length === 1, `검색(LIKE ESCAPE) ${rows.length}건`);
 
   const tags = await tagsOf(sq, [id]);
@@ -84,7 +99,10 @@ async function run() {
 
   // 백업 왕복
   const bytes = await d.serialize();
-  say(bytes.byteLength > 0 && String.fromCharCode(...bytes.slice(0, 6)) === 'SQLite', `백업 ${(bytes.byteLength / 1024).toFixed(1)}KB`);
+  say(
+    bytes.byteLength > 0 && String.fromCharCode(...bytes.slice(0, 6)) === 'SQLite',
+    `백업 ${(bytes.byteLength / 1024).toFixed(1)}KB`
+  );
 
   await d.flush();
   note(`\n총 ${Math.round(performance.now() - t0)}ms`);

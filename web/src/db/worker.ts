@@ -84,9 +84,15 @@ function deserializeInto(target: Any, bytes: Uint8Array): void {
 let opfsError: string | null = null;
 
 async function open(): Promise<{ engine: string; opfsError: string | null }> {
-  s3 = await (sqlite3InitModule as (o?: unknown) => Promise<Any>)({ print: () => {}, printErr: () => {} });
+  s3 = await (sqlite3InitModule as (o?: unknown) => Promise<Any>)({
+    print: () => {},
+    printErr: () => {},
+  });
   try {
-    pool = await s3.installOpfsSAHPoolVfs({ name: 'mitjul-vfs', initialCapacity: 4 });
+    pool = await s3.installOpfsSAHPoolVfs({
+      name: 'mitjul-vfs',
+      initialCapacity: 4,
+    });
     raw = new pool.OpfsSAHPoolDb(`/${DB_NAME}`);
     engine = 'opfs';
   } catch (e) {
@@ -125,7 +131,13 @@ function assertOurDb(bytes: Uint8Array): void {
   }
 }
 
-type Req = { id: number; op: string; sql?: string; params?: unknown[]; bytes?: Uint8Array };
+type Req = {
+  id: number;
+  op: string;
+  sql?: string;
+  params?: unknown[];
+  bytes?: Uint8Array;
+};
 
 self.onmessage = async (ev: MessageEvent<Req>) => {
   const { id, op, sql, params } = ev.data;
@@ -140,7 +152,10 @@ self.onmessage = async (ev: MessageEvent<Req>) => {
         touch();
         break;
       case 'run':
-        raw.exec({ sql: sql!, bind: params && params.length ? (params as never[]) : undefined });
+        raw.exec({
+          sql: sql!,
+          bind: params && params.length ? (params as never[]) : undefined,
+        });
         touch();
         break;
       case 'all':

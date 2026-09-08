@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       '@core': r('../mitjul/src/core'),
       '@db': r('../mitjul/src/db'),
+      '@ex': r('../mitjul/src/export'),
     },
   },
   server: { fs: { allow: ['..'] } },

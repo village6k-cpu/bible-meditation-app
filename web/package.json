@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/make-icons.mjs",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" index.html public/sw.js scripts/*.mjs vite.config.ts"
   },
   "dependencies": {
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",

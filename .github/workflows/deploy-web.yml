@@ -1,0 +1,58 @@
+name: 밑줄 웹 배포
+
+# GitHub Pages로 껍데기만 올린다. 기록은 기기의 OPFS에 있고 서버로 가지 않으므로
+# 사이트가 공개여도 일기가 공개되는 것은 아니다.
+# 저장소 설정 → Pages → Source를 'GitHub Actions'로 한 번 바꿔 두어야 동작한다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'mitjul/src/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 한 번에 하나만. 진행 중인 것을 끊지는 않는다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: 의존성
+        working-directory: web
+        run: npm ci
+      - name: 타입 검사와 빌드
+        working-directory: web
+        run: npm run build
+      - name: 코어 테스트 (네이티브와 공유하는 로직)
+        working-directory: mitjul
+        run: npm ci && npm test
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
