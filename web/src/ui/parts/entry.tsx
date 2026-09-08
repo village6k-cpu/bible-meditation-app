@@ -29,9 +29,12 @@ export function firstLine(e: Entry): string {
   return e.quote || e.body || e.title || '';
 }
 
+// 유튜브는 주소만으로 썸네일이 나오지만 비메오는 oEmbed를 거쳐야 나온다 —
+// 저장해 둔 값이 있으면 그것이 먼저다.
 export function thumbOf(e: Entry): string | null {
-  if (e.type !== 'link' || !e.url) return null;
-  return previewLink(e.url)?.thumbnailUrl ?? null;
+  if (e.type !== 'link') return null;
+  if (e.image_uri && /^https?:/.test(e.image_uri)) return e.image_uri;
+  return e.url ? (previewLink(e.url)?.thumbnailUrl ?? null) : null;
 }
 
 export function Thumb({ src, style }: { src: string; style?: string }): JSX.Element {

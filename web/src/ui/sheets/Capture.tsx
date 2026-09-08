@@ -45,12 +45,15 @@ export function CaptureSheet({
   presetType,
   presetText,
   onClose,
+  setGuard,
   toast,
 }: {
   handle: WebDb;
   presetType: EntryType | null;
   presetText: string;
   onClose: () => void;
+  /** 닫아도 되는지 대답하는 함수를 앱에 맡긴다 — 뒤로가기 스와이프도 이 대답을 거친다 */
+  setGuard: (fn: null | (() => boolean)) => void;
   toast: (m: string) => void;
 }): JSX.Element {
   const db = asSqlite(handle);
@@ -87,6 +90,13 @@ export function CaptureSheet({
     if (el) el.setSelectionRange(el.value.length, el.value.length);
   }, []);
 
+  // 쓰던 글이 있는데 닫히면 그대로 사라진다. 버튼이든 뒤로가기 스와이프든 한 번 묻는다.
+  const dirty = text.trim().length > 0;
+  useEffect(() => {
+    setGuard(dirty ? () => confirm('쓰던 기록이 있습니다. 닫으면 사라집니다. 닫을까요?') : null);
+    return () => setGuard(null);
+  }, [dirty, setGuard]);
+
   // 출처가 붙는 유형이면 최근 순으로 불러 첫 것을 미리 고른다
   const kindKey = sourceKinds.join(',');
   useEffect(() => {
@@ -109,7 +119,7 @@ export function CaptureSheet({
 
   // 링크를 적으면 제목·채널·썸네일을 읽어 온다. 이미 담아둔 링크면 그 출처를 고른다.
   useEffect(() => {
-    const preview = live.url ? previewLink(live.url) : null;
+    const preview = entryType === 'link' && live.url ? previewLink(live.url) : null;
     if (!preview) {
       setLinkMeta(null);
       return;
@@ -141,7 +151,7 @@ export function CaptureSheet({
       resolveSeq.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live.url, handle]);
+  }, [live.url, entryType, handle]);
 
   async function paste(): Promise<void> {
     const r = await readClipboard();
@@ -181,7 +191,9 @@ export function CaptureSheet({
     if (!canSave) return;
     setSaving(true);
     try {
-      let source: Source | null = sourced ? selectedSource : null;
+      // 링크는 아래에서 자기 링크로만 출처를 만든다. 여기서 고른 출처(다른 영상)를
+      // 물려받으면 제목·채널·썸네일·주소가 통째로 남의 것이 된다.
+      let source: Source | null = sourced && entryType !== 'link' ? selectedSource : null;
 
       // 링크는 출처를 스스로 만든다 — 제목·채널·얼굴까지.
       // 웹에서는 썸네일을 내려받지 않고 주소 그대로 둔다. 유튜브 주소는 영상 식별자에서 나오므로
@@ -208,7 +220,11 @@ export function CaptureSheet({
         title: source ? source.title : (live.title ?? null),
         subtitle: source ? source.creator : (live.subtitle ?? null),
         quote: spec.fields.quote ? live.quote : null,
-        body: live.body ?? (spec.fields.quote ? null : live.rest || null),
+        // 밑줄 칸이 없는 유형(순간·식사·할 일…)에서 따옴표를 그냥 버리면 적은 글이 사라진다.
+        // 칸이 없으면 본문에 접어 넣는다.
+        body: spec.fields.quote
+          ? (live.body ?? null)
+          : [live.quote, live.body ?? (live.rest || null)].filter(Boolean).join('\n') || null,
         url: spec.fields.url ? (live.url ?? source?.url ?? null) : null,
         image_uri: source?.thumbnail_uri ?? null,
         page: spec.fields.page ? live.page : null,

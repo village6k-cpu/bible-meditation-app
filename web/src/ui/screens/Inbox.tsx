@@ -45,7 +45,7 @@ export function Inbox({
 }): JSX.Element {
   const [draft, setDraft] = useState('');
 
-  const { data } = useLoad<InboxData>(
+  const { data, loading } = useLoad<InboxData>(
     handle,
     async (d) => {
       const db = asSqlite(d);
@@ -172,7 +172,7 @@ export function Inbox({
         data.entries.map((e) => (
           <EntryRow key={e.id} entry={e} tags={data.tags.get(e.id)} onOpen={onOpen} />
         ))
-      ) : (
+      ) : loading ? null : (
         <div class="empty">오늘 기록 없음</div>
       )}
       <div class="gap" />

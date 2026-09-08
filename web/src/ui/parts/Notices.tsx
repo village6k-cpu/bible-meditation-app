@@ -160,9 +160,11 @@ export function Notices({
                 backupNow(handle)
                   .then(({ how, bytes }) =>
                     toast(
-                      how === 'shared'
-                        ? '백업 파일을 공유했습니다'
-                        : `백업 파일을 내려받았습니다 (${Math.round(bytes / 1024)}KB)`
+                      how === 'cancelled'
+                        ? '백업을 취소했습니다 — 파일은 만들어지지 않았습니다'
+                        : how === 'shared'
+                          ? '백업 파일을 공유했습니다'
+                          : `백업 파일을 내려받았습니다 (${Math.round(bytes / 1024)}KB)`
                     )
                   )
                   .catch(() => toast('백업하지 못했습니다'))

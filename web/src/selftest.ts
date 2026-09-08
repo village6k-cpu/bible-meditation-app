@@ -4,7 +4,7 @@ import { createSource, recentSources } from '@db/sourceRepo';
 import { parseCapture } from '@core/parse';
 import { buildDailyNote } from '@core/markdown';
 import { todayKey } from '@core/dates';
-import { db, asSqlite } from './db';
+import { openScratchDb, asSqlite } from './db';
 
 // 이 브라우저에서 정말 돌아가는지 — 저장 엔진, 마이그레이션, 리포지토리, 파서, 내보내기까지.
 const out = document.getElementById('out')!;
@@ -25,7 +25,8 @@ const note = (msg: string) => {
 
 async function run() {
   const t0 = performance.now();
-  const d = await db();
+  // 점검은 진짜 기록함을 만지지 않는다 — 따로 둔 파일 위에서 돈다
+  const d = await openScratchDb('mitjul-selftest.db');
   note(`저장 엔진: ${d.engine === 'opfs' ? 'OPFS (기기 안 파일)' : '메모리 + IndexedDB 스냅숏'}`);
   note(`열기 ${Math.round(performance.now() - t0)}ms`);
   if (d.opfsError) note(`OPFS 실패 사유: ${d.opfsError}`);
@@ -104,6 +105,10 @@ async function run() {
     `백업 ${(bytes.byteLength / 1024).toFixed(1)}KB`
   );
 
+  // 점검이 남긴 줄은 점검이 치운다 — 다음 실행에 쌓이지 않게
+  await d.execAsync(
+    'DELETE FROM entry_tags; DELETE FROM resurfacings; DELETE FROM entries; DELETE FROM tags; DELETE FROM sources;'
+  );
   await d.flush();
   note(`\n총 ${Math.round(performance.now() - t0)}ms`);
   note(lines.some((l) => l.startsWith(' FAIL')) ? '\n실패 있음' : '\n전부 통과');

@@ -1,12 +1,49 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import preact from '@preact/preset-vite';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // 로직은 네이티브 앱과 한 벌을 쓴다 — core는 손대지 않고, db는 브라우저용 껍데기만 갈아 끼운다.
 const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
+// 서비스 워커가 캐시할 자산 목록을 빌드가 박아 준다.
+// HTML만 새로 캐시하고 그것이 부르는 해시 붙은 자산을 빠뜨리면, 다음 오프라인 실행에서 빈 화면이 된다.
+function precache(): Plugin {
+  return {
+    name: 'mitjul-precache',
+    apply: 'build',
+    closeBundle() {
+      const out = r('./dist');
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const name of readdirSync(dir)) {
+          const full = join(dir, name);
+          if (statSync(full).isDirectory()) walk(full);
+          else files.push('./' + relative(out, full).split('\\').join('/'));
+        }
+      };
+      walk(out);
+      const assets = files.filter(
+        (f) => !f.endsWith('.map') && !f.endsWith('/sw.js') && !f.endsWith('index.html')
+      );
+      const swPath = join(out, 'sw.js');
+      const src = readFileSync(swPath, 'utf8');
+      const build = createHash('sha256').update(assets.sort().join('|')).digest('hex').slice(0, 12);
+      writeFileSync(
+        swPath,
+        src.replace('__PRECACHE__', JSON.stringify(assets.sort())).replace('__BUILD_ID__', build),
+        'utf8'
+      );
+      this.info?.(`precache: ${assets.length} files · build ${build}`);
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
+  plugins: [preact(), precache()],
   resolve: {
     alias: {
       '@core': r('../mitjul/src/core'),

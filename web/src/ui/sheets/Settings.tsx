@@ -74,7 +74,7 @@ export function SettingsSheet({
         <span style="width:44px" />
       </div>
 
-      <div class="sheet-body" style="padding:0">
+      <div class="sheet-body" style="padding:0 0 var(--safe-b)">
         <SectionRow label="백업" first />
         <button
           class="row"
@@ -84,9 +84,11 @@ export function SettingsSheet({
               const { how, bytes } = await backupNow(handle);
               bump();
               toast(
-                how === 'shared'
-                  ? '백업 파일을 공유했습니다'
-                  : `백업 파일을 내려받았습니다 (${formatBytes(bytes)})`
+                how === 'cancelled'
+                  ? '백업을 취소했습니다 — 파일은 만들어지지 않았습니다'
+                  : how === 'shared'
+                    ? '백업 파일을 공유했습니다'
+                    : `백업 파일을 내려받았습니다 (${formatBytes(bytes)})`
               );
             })
           }
@@ -139,7 +141,9 @@ export function SettingsSheet({
                 toast(
                   res.result === 'empty'
                     ? '내보낼 기록이 없습니다'
-                    : `${res.days}일치 마크다운을 ${res.how === 'shared' ? '공유했습니다' : '내려받았습니다'}`
+                    : res.how === 'cancelled'
+                      ? '내보내기를 취소했습니다'
+                      : `${res.days}일치 마크다운을 ${res.how === 'shared' ? '공유했습니다' : '내려받았습니다'}`
                 );
               })
             }

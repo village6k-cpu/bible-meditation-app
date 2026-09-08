@@ -79,7 +79,7 @@ export function DetailSheet({
     void recordRevisit(asSqlite(handle), id);
   }, [handle, id]);
 
-  const { data } = useLoad<Detail>(
+  const { data, loading } = useLoad<Detail>(
     handle,
     async (d) => {
       const db = asSqlite(d);
@@ -190,7 +190,9 @@ export function DetailSheet({
 
       <div class="sheet-body">
         {!e ? (
-          <div class="empty">기록을 찾을 수 없습니다</div>
+          loading ? null : (
+            <div class="empty">기록을 찾을 수 없습니다</div>
+          )
         ) : draft && spec ? (
           <div class="stack">
             {spec.fields.title && !e.source_id && (

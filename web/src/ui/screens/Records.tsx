@@ -24,6 +24,7 @@ interface Filters {
   type: EntryType | null;
   format: SourceKind | null;
   tag: string | null;
+  pinned: boolean;
   sort: 'recent' | 'dusty';
 }
 
@@ -50,6 +51,7 @@ export function Records({
     type: null,
     format: null,
     tag: null,
+    pinned: false,
     sort: 'recent',
   });
   const [q, setQ] = useState('');
@@ -60,7 +62,7 @@ export function Records({
     return () => clearTimeout(t);
   }, [q]);
 
-  const { data } = useLoad<Data>(
+  const { data, loading } = useLoad<Data>(
     handle,
     async (d) => {
       const db = asSqlite(d);
@@ -69,6 +71,7 @@ export function Records({
         sourceKind: f.format,
         tag: f.tag,
         q: f.q,
+        pinnedOnly: f.pinned,
         sort: f.sort,
       });
       const tags = await tagsOf(
@@ -81,7 +84,7 @@ export function Records({
       );
       return { rows, tags, allTags, total: total?.n ?? 0 };
     },
-    [f.q, f.type, f.format, f.tag, f.sort],
+    [f.q, f.type, f.format, f.tag, f.pinned, f.sort],
     EMPTY
   );
 
@@ -116,7 +119,9 @@ export function Records({
       <div class="chips scroll">
         <button
           class={!f.type && !f.format ? 'chip on' : 'chip'}
-          onClick={() => setF((p) => ({ ...p, type: null, format: null, tag: null }))}
+          onClick={() =>
+            setF((p) => ({ ...p, type: null, format: null, tag: null, pinned: false }))
+          }
         >
           전체
         </button>
@@ -167,6 +172,13 @@ export function Records({
       )}
 
       <div class="chips scroll tight">
+        {/* 검토에서 '유지'를 누른 밑줄은 여기로 돌아올 수 있어야 한다 */}
+        <button
+          class={f.pinned ? 'chip on' : 'chip'}
+          onClick={() => setF((p) => ({ ...p, pinned: !p.pinned }))}
+        >
+          표시함
+        </button>
         {(['recent', 'dusty'] as const).map((s) => (
           <button
             key={s}
@@ -189,7 +201,7 @@ export function Records({
             onOpen={onOpen}
           />
         ))
-      ) : (
+      ) : loading ? null : (
         <div class="empty">결과 없음</div>
       )}
       <div class="gap" />

@@ -27,24 +27,37 @@ function pick(params: URLSearchParams): string | null {
   return null;
 }
 
-// 주소에 실려 온 글을 한 번만 읽고 주소에서 지운다 — 새로고침해도 두 번 들어오지 않게
-export function takeFromUrl(): Intake | null {
+// 주소에 실려 온 글을 읽는다. 여기서는 절대 지우지 않는다 —
+// 받을 수 없는 창이라고 판단해 놓고 주소부터 비우면 사용자가 공유한 글이 그대로 없어진다.
+export function peekFromUrl(): Intake | null {
   const url = new URL(window.location.href);
   const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
-  const fromHash = pick(new URLSearchParams(hash));
-  const fromQuery = pick(url.searchParams);
-  const text = fromHash ?? fromQuery;
-  if (!text) return null;
+  const text = pick(new URLSearchParams(hash)) ?? pick(url.searchParams);
+  return text ? { text, fromUrl: true } : null;
+}
+
+// 실제로 받아 넣은 뒤에만 주소를 비운다 — 새로고침해도 두 번 들어오지 않게
+export function consumeFromUrl(): void {
+  const url = new URL(window.location.href);
   for (const k of KEYS) url.searchParams.delete(k);
   url.hash = '';
   window.history.replaceState(null, '', url.pathname + url.search);
-  return { text, fromUrl: true };
 }
 
 // 주소로 들어온 글을 이 창에서 저장해도 되는가.
 // 설치한 앱 안이면 그렇다. Safari 탭이면 — 저장은 되지만 설치한 앱에서는 보이지 않는다.
 export function canIntakeSafely(): boolean {
   return isStandalone();
+}
+
+// 클립보드에 '쓰는' 것은 읽기와 달리 사용자 제스처 안이면 조용히 된다
+export async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type ClipboardResult =

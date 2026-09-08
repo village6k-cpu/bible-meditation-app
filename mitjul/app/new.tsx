@@ -198,7 +198,11 @@ export default function NewEntryScreen() {
         title: source ? source.title : (live.title ?? null),
         subtitle: source ? source.creator : (live.subtitle ?? null),
         quote: spec.fields.quote ? live.quote : null,
-        body: live.body ?? (spec.fields.quote ? null : live.rest || null),
+        // 밑줄 칸이 없는 유형(순간·식사·할 일…)에서 따옴표를 그냥 버리면 적은 글이 사라진다.
+        // 칸이 없으면 본문에 접어 넣는다.
+        body: spec.fields.quote
+          ? (live.body ?? null)
+          : [live.quote, live.body ?? (live.rest || null)].filter(Boolean).join('\n') || null,
         url: spec.fields.url ? (live.url ?? source?.url ?? null) : null,
         image_uri: source?.thumbnail_uri ?? null,
         page: spec.fields.page ? live.page : null,

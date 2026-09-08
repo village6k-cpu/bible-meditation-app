@@ -55,7 +55,7 @@ export function Metrics({
   const monday = mondayOf(today);
   const week = rangeOfDays(monday, addDays(monday, 6));
 
-  const { data } = useLoad<Data>(
+  const { data, loading } = useLoad<Data>(
     handle,
     async (d) => {
       const db = asSqlite(d);
@@ -146,7 +146,7 @@ export function Metrics({
             <span class="mono">{f.count}</span>
           </div>
         ))
-      ) : (
+      ) : loading ? null : (
         <div class="empty">아직 기록이 없습니다</div>
       )}
 

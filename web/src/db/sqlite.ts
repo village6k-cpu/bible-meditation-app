@@ -2,7 +2,7 @@
 // 바깥으로는 네이티브 앱의 db 레이어가 쓰던 다섯 개의 메서드를 그대로 내민다 —
 // 그래야 마이그레이션과 리포지토리 950줄이 한 줄도 안 고치고 돌아간다.
 
-export type Engine = 'opfs' | 'memory';
+export type Engine = 'opfs' | 'memory' | 'blocked';
 
 export interface WebDb {
   execAsync(sql: string): Promise<void>;
@@ -21,7 +21,7 @@ export interface WebDb {
 
 let seq = 0;
 
-export async function openDb(): Promise<WebDb> {
+export async function openDb(name?: string): Promise<WebDb> {
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {
     type: 'module',
   });
@@ -46,12 +46,13 @@ export async function openDb(): Promise<WebDb> {
     op: string,
     sql?: string,
     params?: unknown[],
-    bytes?: Uint8Array<ArrayBuffer>
+    bytes?: Uint8Array<ArrayBuffer>,
+    opts?: { name?: string }
   ): Promise<unknown> =>
     new Promise((ok, fail) => {
       const id = ++seq;
       waiting.set(id, { ok, fail });
-      worker.postMessage({ id, op, sql, params, bytes });
+      worker.postMessage({ id, op, sql, params, bytes, opts });
     });
 
   // 모든 호출을 한 줄로 세운다 — 트랜잭션 사이에 다른 질의가 끼어들지 않도록

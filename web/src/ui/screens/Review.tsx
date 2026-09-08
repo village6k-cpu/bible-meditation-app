@@ -11,7 +11,7 @@ import type { WebDb } from '../../db/sqlite';
 import { Icon } from '../icons';
 import { firstLine, srcLine, SectionRow } from '../parts/entry';
 import { bump, useLoad } from '../store';
-import { loadDeck, type DeckItem } from '../deck';
+import { dropFromDeck, loadDeck, type DeckItem } from '../deck';
 
 // 정리는 사용자가 기억해야 할 일이 아니라 앱이 내미는 줄이다.
 // 이 화면이 하는 일은 세 개의 줄을 세우는 것뿐 — 다시 읽을 것, 구조가 없는 것, 오래 안 읽은 것.
@@ -36,7 +36,7 @@ export function Review({
   const [tagging, setTagging] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
-  const { data } = useLoad<Data>(
+  const { data, loading } = useLoad<Data>(
     handle,
     async (d) => {
       const db = asSqlite(d);
@@ -75,6 +75,8 @@ export function Review({
     const db = asSqlite(handle);
     await setReaction(db, id, today, reaction);
     if (reaction === 'kept') await markFiled(db, id);
+    // 제외한 카드는 얼려 둔 오늘의 덱에서도 뺀다 — 다시 뽑지 않고 그 자리만 비운다
+    else await dropFromDeck(handle, today, id);
     await handle.flush();
     bump();
   }
@@ -134,7 +136,9 @@ export function Review({
         first={data.deck.length === 0}
       />
       {data.unfiled.length === 0 ? (
-        <div class="empty">검토할 기록 없음</div>
+        loading ? null : (
+          <div class="empty">검토할 기록 없음</div>
+        )
       ) : (
         <>
           <div class="cap dim" style="padding:8px 16px 0">

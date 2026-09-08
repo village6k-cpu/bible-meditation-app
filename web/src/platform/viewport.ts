@@ -3,6 +3,7 @@
 //
 // --vv-h   : 지금 실제로 보이는 높이 (키보드가 덮은 만큼 줄어든 값)
 // --vv-top : 시각 뷰포트가 레이아웃 뷰포트에서 밀려난 양
+// 이 둘은 styles.css의 .app이 height와 transform으로 그대로 쓴다.
 //
 // iOS 26에는 키보드가 닫혀도 offsetTop이 0으로 돌아오지 않는 경우가 있어,
 // focusout 뒤에 한 번 더 읽어 바로잡는다.
@@ -19,9 +20,6 @@ function apply(): void {
   }
   root.style.setProperty('--vv-h', `${Math.round(vv.height)}px`);
   root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
-  // 키보드가 덮은 높이 — 고정 바의 아래 여백에 쓴다
-  const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-  root.style.setProperty('--kb', `${covered}px`);
 }
 
 export function trackViewport(): void {
