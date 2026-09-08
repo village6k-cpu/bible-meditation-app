@@ -18,6 +18,8 @@ import { domainOf } from '@ex/linkMeta';
 import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { Icon, PlayIcon } from '../icons';
+import { deletePhoto, isPhotoRef } from '../../platform/photos';
+import { Photo } from '../parts/photo';
 import { EntryRow, SectionRow, srcLine, thumbOf } from '../parts/entry';
 import { bump, useLoad } from '../store';
 
@@ -106,6 +108,8 @@ export function DetailSheet({
     if (!e) return;
     if (!confirm('이 기록을 삭제할까요?')) return;
     await deleteEntry(asSqlite(handle), e.id);
+    // 기록이 물고 있던 사진도 함께 — 파일만 남으면 아무도 찾지 않는 용량이 된다
+    if (isPhotoRef(e.image_uri)) await deletePhoto(handle, e.image_uri);
     await handle.flush();
     bump();
     onClose();
@@ -302,6 +306,14 @@ export function DetailSheet({
               {formatDayKo(e.day)}
             </div>
 
+            {isPhotoRef(e.image_uri) && (
+              <Photo
+                photo={e.image_uri}
+                class="photo full"
+                style="margin-top:14px"
+                alt="기록에 붙인 사진"
+              />
+            )}
             {e.type === 'link' && (thumb || video) && (
               <div class="vid" style="margin-top:14px">
                 {playing && video ? (

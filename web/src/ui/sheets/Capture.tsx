@@ -12,6 +12,8 @@ import type { WebDb } from '../../db/sqlite';
 import { previewLink, resolveLink, type LinkMeta } from '../../link/resolve';
 import { domainOf } from '@ex/linkMeta';
 import { readClipboard } from '../../platform/intake';
+import { deletePhoto, pickPhotos, savePhoto } from '../../platform/photos';
+import { Photo } from '../parts/photo';
 import { Icon, PlayIcon } from '../icons';
 import { bump } from '../store';
 
@@ -69,6 +71,9 @@ export function CaptureSheet({
     creator: string;
   } | null>(null);
   const [linkMeta, setLinkMeta] = useState<LinkMeta | null>(null);
+  // 붙인 사진은 저장 전에도 이미 OPFS의 파일이다 — 버리면 파일도 함께 지운다
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [attaching, setAttaching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [count, setCount] = useState(0);
 
@@ -82,7 +87,7 @@ export function CaptureSheet({
   const sourceKinds = spec.sourceKinds ?? [];
   const sourced = sourceKinds.length > 0;
   const selectedSource = sourceId ? (sources.find((s) => s.id === sourceId) ?? null) : null;
-  const canSave = !saving && (live.rest.length > 0 || !!live.url || !!live.quote);
+  const canSave = !saving && (live.rest.length > 0 || !!live.url || !!live.quote || !!photo);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -91,7 +96,7 @@ export function CaptureSheet({
   }, []);
 
   // 쓰던 글이 있는데 닫히면 그대로 사라진다. 버튼이든 뒤로가기 스와이프든 한 번 묻는다.
-  const dirty = text.trim().length > 0;
+  const dirty = text.trim().length > 0 || photo !== null;
   useEffect(() => {
     setGuard(dirty ? () => confirm('쓰던 기록이 있습니다. 닫으면 사라집니다. 닫을까요?') : null);
     return () => setGuard(null);
@@ -183,6 +188,30 @@ export function CaptureSheet({
     }
   }
 
+  async function attachPhoto(): Promise<void> {
+    setAttaching(true);
+    try {
+      const [file] = await pickPhotos(false);
+      if (!file) return;
+      const ref = await savePhoto(handle, file);
+      if (photo) await deletePhoto(handle, photo); // 갈아 끼우면 옛 파일은 남기지 않는다
+      setPhoto(ref);
+    } catch (e) {
+      toast(
+        e instanceof Error ? `사진을 붙이지 못했습니다 — ${e.message}` : '사진을 붙이지 못했습니다'
+      );
+    } finally {
+      setAttaching(false);
+    }
+  }
+
+  async function dropPhoto(): Promise<void> {
+    if (!photo) return;
+    const ref = photo;
+    setPhoto(null);
+    await deletePhoto(handle, ref);
+  }
+
   function toggleSignal(kind: SignalKind): void {
     setDropped((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
   }
@@ -226,7 +255,7 @@ export function CaptureSheet({
           ? (live.body ?? null)
           : [live.quote, live.body ?? (live.rest || null)].filter(Boolean).join('\n') || null,
         url: spec.fields.url ? (live.url ?? source?.url ?? null) : null,
-        image_uri: source?.thumbnail_uri ?? null,
+        image_uri: photo ?? source?.thumbnail_uri ?? null,
         page: spec.fields.page ? live.page : null,
         slot: spec.fields.slot ? live.slot : null,
         minutes: spec.fields.minutes ? live.minutes : null,
@@ -245,6 +274,7 @@ export function CaptureSheet({
       setTypeOverride(presetType);
       setDropped([]);
       setLinkMeta(null);
+      setPhoto(null); // 파일은 방금 저장한 기록이 물고 갔다 — 지우지 않는다
       setShowTypes(false);
       inputRef.current?.focus();
     } catch (e) {
@@ -269,7 +299,7 @@ export function CaptureSheet({
         </button>
       </div>
 
-      <div class="sheet-body">
+      <div class={photo || linkMeta ? 'sheet-body has-attach' : 'sheet-body'}>
         <textarea
           ref={inputRef}
           class="cap-in"
@@ -279,6 +309,14 @@ export function CaptureSheet({
           autocapitalize="sentences"
           onInput={(ev) => setText((ev.target as HTMLTextAreaElement).value)}
         />
+        {photo && (
+          <div class="photo-drop" style="margin-top:12px">
+            <Photo photo={photo} alt="붙인 사진" />
+            <button class="rm" aria-label="사진 떼기" onClick={() => void dropPhoto()}>
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
         {entryType === 'link' && linkMeta && (
           <div style="margin-top:12px">
             <div class="vid">
@@ -318,7 +356,13 @@ export function CaptureSheet({
               {s.label}
             </button>
           ))}
-          {text.trim().length === 0 && (
+          {!photo && (
+            <button class="chip" disabled={attaching} onClick={() => void attachPhoto()}>
+              <Icon name="camera" />
+              {attaching ? '사진 넣는 중' : '사진'}
+            </button>
+          )}
+          {text.trim().length === 0 && !photo && (
             <button class="chip" onClick={() => void paste()}>
               <Icon name="clipboard" />
               붙여넣기

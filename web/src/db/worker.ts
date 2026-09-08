@@ -162,12 +162,53 @@ function assertOurDb(bytes: Uint8Array): void {
   }
 }
 
+// ── 사진 ──
+// SAHPool VFS는 자기 디렉터리('.mitjul-vfs')를 독점한다. 사진은 그 바깥의 별도 디렉터리에 둔다.
+// 쓰기는 동기 접근 핸들로 — 이 길만이 OPFS가 열리는 모든 판에서 함께 열린다.
+const PHOTO_DIR = 'photos';
+
+async function photoDir(): Promise<Any> {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(PHOTO_DIR, { create: true });
+}
+
+async function writePhoto(name: string, bytes: Uint8Array): Promise<void> {
+  const dir = await photoDir();
+  const file = await dir.getFileHandle(name, { create: true });
+  const access = await file.createSyncAccessHandle();
+  try {
+    access.truncate(0);
+    access.write(bytes, { at: 0 });
+    access.flush();
+  } finally {
+    access.close();
+  }
+}
+
+async function deletePhoto(name: string): Promise<void> {
+  const dir = await photoDir();
+  await dir.removeEntry(name).catch(() => {});
+}
+
+async function listPhotos(): Promise<{ name: string; size: number }[]> {
+  const dir = await photoDir();
+  const out: { name: string; size: number }[] = [];
+  for await (const [name, handle] of dir.entries() as AsyncIterable<[string, Any]>) {
+    if (handle.kind !== 'file') continue;
+    const f = await handle.getFile();
+    out.push({ name, size: f.size });
+  }
+  out.sort((a, b) => (a.name < b.name ? -1 : 1));
+  return out;
+}
+
 type Req = {
   id: number;
   op: string;
   sql?: string;
   params?: unknown[];
   bytes?: Uint8Array;
+  name?: string;
   opts?: { name?: string };
 };
 
@@ -212,6 +253,15 @@ self.onmessage = async (ev: MessageEvent<Req>) => {
         break;
       case 'flush':
         await flush();
+        break;
+      case 'photoWrite':
+        await writePhoto(ev.data.name!, ev.data.bytes!);
+        break;
+      case 'photoDelete':
+        await deletePhoto(ev.data.name!);
+        break;
+      case 'photoList':
+        result = await listPhotos();
         break;
       case 'serialize':
         result = serialize();

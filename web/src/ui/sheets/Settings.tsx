@@ -11,6 +11,7 @@ import {
   storageUsed,
 } from '../../platform/install';
 import { exportRange, RANGE_LABEL, type ExportRange } from '../../export/obsidian';
+import { photoStat, sharePhotoBatch, sweepOrphans, type PhotoStat } from '../../export/photos';
 import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
 import { bump } from '../store';
@@ -41,12 +42,16 @@ export function SettingsSheet({
   const [last, setLast] = useState<number | null>(null);
   const [used, setUsed] = useState<number | null>(null);
   const [keeps, setKeeps] = useState(false);
+  const [photos, setPhotos] = useState<PhotoStat>({ count: 0, bytes: 0, orphans: 0 });
+  // 사진은 묶음으로 나가므로, 어디까지 보냈는지 기억한다
+  const [cursor, setCursor] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = (): void => {
     void lastBackupAt(handle).then(setLast);
     void storageUsed().then(setUsed);
     void persisted().then(setKeeps);
+    void photoStat(handle).then(setPhotos);
   };
   useEffect(refresh, [handle]);
 
@@ -152,6 +157,59 @@ export function SettingsSheet({
             <span class="mono dim">.md</span>
           </button>
         ))}
+
+        <SectionRow label="사진" />
+        <button
+          class="row"
+          disabled={busy !== null || photos.count === 0}
+          onClick={() =>
+            void guard('photos', async () => {
+              const res = await sharePhotoBatch(handle, cursor);
+              if (res.result === 'empty') {
+                setCursor(null);
+                toast('내보낼 사진이 없습니다');
+                return;
+              }
+              if (res.how === 'cancelled') {
+                toast('사진 내보내기를 취소했습니다');
+                return;
+              }
+              setCursor(res.next);
+              toast(
+                res.remaining > 0
+                  ? `${res.count}장 내보냈습니다 — ${res.remaining}장 남았습니다. 한 번 더 누르세요`
+                  : `${res.count}장 내보냈습니다. 전부 끝났습니다`
+              );
+            })
+          }
+        >
+          <span style="width:16px;flex:none">
+            <Icon name="camera" />
+          </span>
+          <span class="grow label">{cursor === null ? '사진 내보내기' : '이어서 내보내기'}</span>
+          <span class="mono dim">
+            {photos.count}장 · {formatBytes(photos.bytes)}
+          </span>
+        </button>
+        {photos.orphans > 0 && (
+          <button
+            class="row"
+            disabled={busy !== null}
+            onClick={() =>
+              void guard('sweep', async () => {
+                const gone = await sweepOrphans(handle);
+                toast(`기록 없는 사진 ${gone}장을 지웠습니다`);
+              })
+            }
+          >
+            <span class="grow label">기록 없는 사진 정리</span>
+            <span class="mono dim">{photos.orphans}장</span>
+          </button>
+        )}
+        <div class="cap dim" style="padding:10px 16px 14px">
+          사진은 .sqlite3 백업에 들어가지 않습니다. 아이폰에서는 큰 파일 하나를 내보내다 앱이 죽기
+          때문에, 40MB씩 묶어 공유 시트로 내보냅니다. 남으면 한 번 더 누르면 됩니다.
+        </div>
 
         <SectionRow label="저장소" />
         <div class="row">

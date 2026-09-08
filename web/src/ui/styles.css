@@ -496,6 +496,7 @@ nav.tabbar svg {
 .cap-in {
   width: 100%;
   flex: 1;
+  min-width: 0;
   border: 0;
   outline: 0;
   background: none;
@@ -648,6 +649,69 @@ nav.tabbar svg {
 .vid .play svg {
   width: 18px;
   height: 18px;
+}
+
+/* 무언가 붙어 있으면 글 칸은 제 높이만 차지한다 — 사진이 화면 밑으로 밀려나지 않게 */
+.sheet-body.has-attach .cap-in {
+  flex: none;
+}
+
+/* ── 사진 ── */
+.photo {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: var(--sunken);
+  overflow: hidden;
+  border-radius: 6px;
+}
+.photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* 상세에서는 잘라내지 않고 사진 전체를 보여준다 */
+.photo.full {
+  aspect-ratio: auto;
+  background: none;
+}
+.photo.full img {
+  position: static;
+  height: auto;
+  object-fit: contain;
+}
+.photo-strip {
+  display: flex;
+  gap: 8px;
+  padding: 0;
+}
+.photo-strip .photo {
+  width: 96px;
+  flex: none;
+  aspect-ratio: 1;
+}
+.photo-drop {
+  position: relative;
+}
+.photo-drop .rm {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(14, 17, 22, 0.72);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-drop .rm svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* ── 알림 줄 ── */

@@ -15,6 +15,10 @@ export interface WebDb {
   /** 백업 파일로 통째로 되돌린다 */
   restore(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
   flush(): Promise<void>;
+  /** 사진 한 장을 OPFS에 쓴다 (DB 바깥의 별도 파일) */
+  writePhoto(name: string, bytes: Uint8Array<ArrayBuffer>): Promise<void>;
+  deletePhoto(name: string): Promise<void>;
+  listPhotos(): Promise<{ name: string; size: number }[]>;
   engine: Engine;
   opfsError: string | null;
 }
@@ -47,12 +51,13 @@ export async function openDb(name?: string): Promise<WebDb> {
     sql?: string,
     params?: unknown[],
     bytes?: Uint8Array<ArrayBuffer>,
-    opts?: { name?: string }
+    opts?: { name?: string },
+    name?: string
   ): Promise<unknown> =>
     new Promise((ok, fail) => {
       const id = ++seq;
       waiting.set(id, { ok, fail });
-      worker.postMessage({ id, op, sql, params, bytes, opts });
+      worker.postMessage({ id, op, sql, params, bytes, opts, name });
     });
 
   // 모든 호출을 한 줄로 세운다 — 트랜잭션 사이에 다른 질의가 끼어들지 않도록
@@ -61,11 +66,12 @@ export async function openDb(name?: string): Promise<WebDb> {
     op: string,
     sql?: string,
     params?: unknown[],
-    bytes?: Uint8Array<ArrayBuffer>
+    bytes?: Uint8Array<ArrayBuffer>,
+    name?: string
   ): Promise<unknown> => {
     const next = chain.then(
-      () => send(op, sql, params, bytes),
-      () => send(op, sql, params, bytes)
+      () => send(op, sql, params, bytes, undefined, name),
+      () => send(op, sql, params, bytes, undefined, name)
     );
     chain = next.catch(() => {});
     return next;
@@ -110,6 +116,15 @@ export async function openDb(name?: string): Promise<WebDb> {
     },
     async flush() {
       await call('flush');
+    },
+    async writePhoto(name, bytes) {
+      await call('photoWrite', undefined, undefined, bytes, name);
+    },
+    async deletePhoto(name) {
+      await call('photoDelete', undefined, undefined, undefined, name);
+    },
+    async listPhotos() {
+      return (await call('photoList')) as { name: string; size: number }[];
     },
   };
 }

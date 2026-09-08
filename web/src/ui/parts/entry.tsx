@@ -4,6 +4,8 @@ import { MEAL_SLOT_LABELS, type Entry } from '@core/types';
 import { formatDayShortKo } from '@core/dates';
 import { previewLink } from '../../link/resolve';
 import { PlayIcon } from '../icons';
+import { isPhotoRef } from '../../platform/photos';
+import { Photo } from './photo';
 
 // 한 줄로 요약되는 출처. 유형마다 무엇이 '어디서 왔는지'가 다르다.
 export function srcLine(e: Entry): string {
@@ -68,6 +70,8 @@ export function EntryRow({
 }): JSX.Element {
   const line = srcLine(entry);
   const thumb = thumbOf(entry);
+  // 내가 찍은 사진은 영상 썸네일과 다르다 — 잘라내되 원래 비율에 가깝게 보여준다
+  const photo = isPhotoRef(entry.image_uri) ? entry.image_uri : null;
   return (
     <button class="entry-row" onClick={() => onOpen(entry.id)}>
       <div class="entry-head">
@@ -80,7 +84,8 @@ export function EntryRow({
           </span>
         )}
       </div>
-      {thumb && <Thumb src={thumb} style="margin:6px 0 8px" />}
+      {photo && <Photo photo={photo} style="margin:6px 0 8px" />}
+      {!photo && thumb && <Thumb src={thumb} style="margin:6px 0 8px" />}
       {entry.quote && (
         <div class="quoted">
           <span class="rule" />

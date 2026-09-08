@@ -26,6 +26,8 @@ const PATHS = {
   play: 'M8 5v14l11-7z',
   check: 'M4 12l5 5L20 6',
   square: 'M5 5h14v14H5z',
+  camera:
+    'M4 8a2 2 0 012-2h1.5l1.2-2h6.6l1.2 2H20a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2z M12 10.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z',
   clipboard: 'M9 4h6v3H9z M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2',
   download: 'M12 4v11 M8 11l4 4 4-4 M5 20h14',
   upload: 'M12 20V9 M8 13l4-4 4 4 M5 4h14',
