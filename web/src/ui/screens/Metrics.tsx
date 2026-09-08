@@ -51,7 +51,9 @@ export function Metrics({
   onSettings: () => void;
 }): JSX.Element {
   const days = rangeOfDays(addDays(today, -13), today);
-  const week = rangeOfDays(mondayOf(today), today);
+  // 월요일부터 일요일까지 일곱 칸을 늘 세운다 — 주 초에 막대가 하나만 서면 고장처럼 보인다
+  const monday = mondayOf(today);
+  const week = rangeOfDays(monday, addDays(monday, 6));
 
   const { data } = useLoad<Data>(
     handle,

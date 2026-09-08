@@ -18,5 +18,10 @@ export default defineConfig({
   // sqlite-wasm은 자기 옆의 .wasm을 스스로 찾는다 — 사전 번들링에서 빼 둔다
   optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
   worker: { format: 'es' },
-  build: { target: 'es2022', sourcemap: true },
+  build: {
+    target: 'es2022',
+    sourcemap: true,
+    // 자체 점검 페이지도 함께 빌드한다 — 기기에서 정말 도는지 확인하는 건 배포된 판이어야 한다
+    rollupOptions: { input: { main: r('./index.html'), selftest: r('./selftest.html') } },
+  },
 });
