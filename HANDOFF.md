@@ -280,23 +280,27 @@ Google Cloud 콘솔 계정은 `village.6k@gmail.com`, 전용 프로젝트는 `le
 Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger Web`은 만들었고 Supabase의
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_STATE_SECRET`,
 `GOOGLE_TOKEN_ENCRYPTION_KEY`도 설정했다. 승인된 리디렉션 URI는 다음과 같다.
-   `https://tedffwpijiylklfuzkua.supabase.co/functions/v1/ledger-photos?callback=1`
+
+- 사진: `https://tedffwpijiylklfuzkua.supabase.co/functions/v1/ledger-photos?callback=1`
+- 로그인: `https://tedffwpijiylklfuzkua.supabase.co/auth/v1/callback`
 
 배포 전에 남은 설정과 검증:
 
 1. 테스트 사용자 `village.6k@gmail.com`과 요청 범위 등록은 완료했다. 범위는
    `photoslibrary.appendonly`, `photoslibrary.readonly.appcreateddata`,
    `photoslibrary.edit.appcreateddata` 세 개다. 2025년 이후 API 규칙상 Ledger가 만든 사진만 읽는다.
-2. **Supabase Auth의 Google 공급자는 아직 꺼져 있다.** 아래 로그인 설정을 먼저 완료해야 한다.
-   - 공유 프로젝트의 기존 Site URL/다른 로그인 방식을 보존하고 Google 공급자를 추가한다.
-   - Google의 `Ledger Web` 클라이언트에 기존 Photos 콜백을 유지한 채
-     `https://tedffwpijiylklfuzkua.supabase.co/auth/v1/callback`을 추가한다.
+2. **2026-09-10 사용자 승인 후 Supabase Auth의 Google 공급자를 활성화했다.**
+   - 공개 `/auth/v1/settings`에서 `external.google=true`, 기존 `email=true`, 익명 로그인 꺼짐을 확인했다.
+   - Google `Ledger Web`에는 기존 Photos 콜백과 로그인 콜백을 함께 등록했다.
    - Supabase Auth → URL Configuration의 허용 반환 주소에
      `https://village6k-cpu.github.io/bible-meditation-app/?sync=1`과 로컬 검증용
-     `http://127.0.0.1:5174/?sync=1`을 추가한다. 기존 Site URL은 `http://localhost:3000`,
-     허용 반환 주소는 비어 있는 상태를 확인했다. 공유 서버 접근 설정 변경은 사용자 확인 요청 중이다.
-   - 기존 Google client secret은 콘솔에서 다시 볼 수 없다. 기존 Photos용 secret을 없애지 말고
-     Auth용 추가 secret을 생성해 공급자 설정에 넣는다. 비밀값을 저장소·로그에 남기지 않는다.
+     `http://127.0.0.1:5174/?sync=1`을 추가했다. 기존 Site URL `http://localhost:3000`은 변경하지 않았다.
+   - 기존 Photos용 secret을 보존하고 같은 클라이언트의 추가 secret을 Auth 공급자에 넣었다.
+     현재 secret 두 개는 각각 Photos와 Auth에서 사용한다. 하나를 없애면 해당 연결이 끊어진다.
+     비밀값은 저장소·로그에 남기지 않는다.
+   - 기본 계정 범위 `openid`, `userinfo.email`, `userinfo.profile`도 등록했다.
+   - 실제 로컬 Ledger 버튼 → Google 계정 선택 화면까지 확인했다. 여기에는 저장 서버 주소
+     `tedffwpijiylklfuzkua.supabase.co`가 표시된다. 여러 계정 중 사용할 계정은 사용자 선택을 기다린다.
 3. Ledger의 보관 → 기기 간 동기화에서 「Google로 연결」을 누르고 Google Photos를 별도로 연결한다.
    연결 뒤 데스크톱/390px 모바일에서 글 1건과 사진 1장을 왕복해 직접 확인한다.
 4. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
@@ -318,7 +322,8 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 커지지 않도록 Google Photos에 둔다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
 `supabase/`가 구현이다. 설정 화면은 Google 계정 선택으로만 연결한다. 이메일/비밀번호 폼은 제거했다.
 
-남은 것은 위 (A)의 Google 로그인 공급자 설정·운영 모드 정리, PR #10의 최종 CI, 그리고 **실제 계정으로 로그인해 두 기기에서
+Google 로그인 공급자 설정과 코드 커밋 `a7b5165`의 CI는 통과했다(run `34416303702`).
+남은 것은 위 (A)의 운영 모드 정리와 **실제 계정으로 로그인해 두 기기에서
 글 1건과 사진 1장을 왕복하는 것**이다. 390px와 1280px 설정 화면은 로컬 브라우저에서 직접 확인했다.
 본문 동기화는 Supabase에 이미 적용됐지만 `main`에 웹 코드가 아직 배포되지 않았다. 실계정 왕복까지
 끝내기 전에는 “라이브 동기화 완료”라고 말하지 말 것.
