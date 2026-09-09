@@ -1120,6 +1120,7 @@ ol.recipe code {
   gap: 3px;
 }
 .hc {
+  position: relative;
   width: var(--hc, 15px);
   height: var(--hc, 15px);
   border-radius: 2px;
@@ -1129,7 +1130,19 @@ ol.recipe code {
   background: none;
 }
 .hc.l1 {
-  background: repeating-linear-gradient(135deg, var(--soft) 0 3px, var(--ink3) 3px 4px);
+  background: var(--soft);
+}
+/* 어긴 날은 얼마나 채웠든 빗금이 보인다 — 농도만으로는 '지키고 어긴 날'이 사라진다 */
+.hc.broke::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--ink3) 3px 4px);
+}
+.hc.l3.broke::after,
+.hc.l2.broke::after {
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--bg) 3px 4px);
 }
 .hc.l2 {
   background: var(--ink3);

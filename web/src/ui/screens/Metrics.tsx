@@ -9,11 +9,12 @@ import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
 import {
   layoutDays,
-  mealLevel,
+  mealMark,
   slotTally,
   weeksOf,
-  workoutLevel,
+  workoutMark,
   type DayCells,
+  type Mark,
 } from '../parts/practice';
 import { useLoad } from '../store';
 
@@ -95,9 +96,9 @@ export function Metrics({
   const weekMinutes = week.reduce((n, d) => n + (data.rows.get(d)?.workoutMinutes ?? 0), 0);
   const weeks = weeksOf(data.grid, today, WEEKS);
   const tally = slotTally(data.grid);
-  const keptMeals = data.grid.filter((d) => mealLevel(d) >= 2).length;
-  const loggedDays = data.grid.filter((d) => mealLevel(d) > 0).length;
-  const workoutDays = data.grid.filter((d) => workoutLevel(d) === 3).length;
+  const keptMeals = data.grid.filter((d) => mealMark(d).level >= 2).length;
+  const loggedDays = data.grid.filter((d) => mealMark(d).level > 0).length;
+  const workoutDays = data.grid.filter((d) => workoutMark(d).level === 3).length;
   const totalMinutes = data.grid.reduce(
     (n, d) => n + (data.rows.get(d.day)?.workoutMinutes ?? 0),
     0
@@ -154,10 +155,10 @@ export function Metrics({
       <div class="heat-wrap">
         {(
           [
-            ['식사', mealLevel],
-            ['운동', workoutLevel],
-          ] as [string, (d: DayCells) => number][]
-        ).map(([name, level]) => (
+            ['식사', mealMark],
+            ['운동', workoutMark],
+          ] as [string, (d: DayCells) => Mark][]
+        ).map(([name, mark]) => (
           <div class="heat" key={name}>
             <div class="heat-top">
               <span class="micro">{name}</span>
@@ -184,8 +185,10 @@ export function Metrics({
                       ) : (
                         <span
                           key={di}
-                          class={`hc l${level(day)}${day.day === today ? ' now' : ''}`}
-                          title={`${formatDayShortKo(day.day)}`}
+                          class={`hc l${mark(day).level}${mark(day).broke ? ' broke' : ''}${
+                            day.day === today ? ' now' : ''
+                          }`}
+                          title={formatDayShortKo(day.day)}
                         />
                       )
                     )}
