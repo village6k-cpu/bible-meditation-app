@@ -1,6 +1,6 @@
 // 목소리 — 도구의 말투. 일어난 일만 짧게 적고, 위로하거나 감탄하지 않는다.
 export const S = {
-  appName: '밑줄',
+  appName: 'Ledger',
   tagline: '적기만 하는 기록 말고, 구조가 붙는 기록',
 
   tab_today: '수집함',
@@ -100,7 +100,7 @@ export const S = {
   settings_export_week: '이번 주',
   settings_export_month: '이번 달',
   settings_export_all: '전체',
-  settings_about: '밑줄에 대해',
+  settings_about: 'Ledger에 대해',
 
   export_action: '옵시디언으로 내보내기',
   export_done: '내보낼 파일이 준비됨',
@@ -109,7 +109,7 @@ export const S = {
   tag_bookend_first: '처음',
   tag_bookend_latest: '최근',
 
-  onboarding_title: '밑줄',
+  onboarding_title: 'Ledger',
   onboarding_body:
     '한 칸에 적으면 구조가 붙습니다.\n링크·쪽수·본문 주소·갈피를 앱이 읽어\n유형과 항목을 채웁니다.\n\n정리는 당신이 기억할 일이 아니라\n앱이 내미는 줄입니다.',
   onboarding_start: '시작',

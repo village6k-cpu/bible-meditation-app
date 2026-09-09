@@ -156,7 +156,7 @@ function assertOurDb(bytes: Uint8Array): void {
       rowMode: 0,
       returnValue: 'resultRows',
     }) as number[];
-    if (!n[0]) throw new Error('밑줄의 백업 파일이 아닙니다 (entries 표 없음).');
+    if (!n[0]) throw new Error('Ledger의 백업 파일이 아닙니다 (entries 표 없음).');
   } finally {
     probe.close();
   }

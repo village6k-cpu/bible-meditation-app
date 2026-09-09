@@ -45,10 +45,12 @@ export function Metrics({
   handle,
   today,
   onSettings,
+  onSources,
 }: {
   handle: WebDb;
   today: string;
   onSettings: () => void;
+  onSources: () => void;
 }): JSX.Element {
   const days = rangeOfDays(addDays(today, -13), today);
   // 월요일부터 일요일까지 일곱 칸을 늘 세운다 — 주 초에 막대가 하나만 서면 고장처럼 보인다
@@ -66,7 +68,7 @@ export function Metrics({
         count: number;
       }>(
         `SELECT s.kind AS kind, COUNT(*) AS count
-         FROM entries e LEFT JOIN sources s ON s.id = e.source_id
+         FROM entries e LEFT JOIN sources s ON s.id = e.source_id AND s.deleted_at IS NULL
          WHERE e.deleted_at IS NULL AND e.type != 'task'
          GROUP BY s.kind ORDER BY count DESC`
       );
@@ -151,6 +153,14 @@ export function Metrics({
       )}
 
       <SectionRow label="보관" />
+      {/* 형식 줄이 바로 위에 있다 — 그 형식을 정하는 것이 출처이므로 손보는 길도 여기 둔다 */}
+      <button class="row" onClick={onSources}>
+        <span style="width:16px;flex:none">
+          <Icon name="book" />
+        </span>
+        <span class="grow label">출처 고치기 · 합치기 · 지우기</span>
+        <Icon name="chevronRight" />
+      </button>
       <button class="row" onClick={onSettings}>
         <span style="width:16px;flex:none">
           <Icon name="gear" />

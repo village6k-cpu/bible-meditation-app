@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migrate } from '../src/db/migrations';
-import { createSource, findSourceByUrl, getSource, renameSource, touchSource } from '../src/db/sourceRepo';
+import { unfiledCount } from '../src/db/entryRepo';
+import { allSources, createSource, deleteSource, findMergeTarget, findSourceByUrl, getSource, mergeSources, renameSource, touchSource } from '../src/db/sourceRepo';
 import { FakeDb } from './sqliteShim';
 
 type AnyDb = Parameters<typeof migrate>[0];
@@ -75,4 +76,87 @@ test('renameSource — 같은 제목의 출처와 만나면 합쳐진다: 기록
   const moved = await db.getFirstAsync<{ source_id: string; title: string; subtitle: string }>("SELECT source_id, title, subtitle FROM entries WHERE id='q1'");
   assert.deepEqual(moved, { source_id: real.id, title: '데미안', subtitle: '헤세' });
   assert.equal((await findSourceByUrl(db, 'x')), null);
+});
+
+test('deleteSource — 출처는 내려가고 밑줄은 남되 출처에서 떨어진다', async () => {
+  const db = await fresh();
+  const s = await createSource(db, 'book', '데미안', '헤세');
+  await addEntry(db, 'q1', s.id, { type: 'book', title: '데미안', subtitle: '헤세', quote: '새는 알에서' });
+  await addEntry(db, 'q2', s.id, { type: 'book', title: '데미안', deleted_at: 1 }); // 이미 지운 기록
+  await deleteSource(db, s.id);
+  assert.equal(await getSource(db, s.id), null);
+  const rows = await db.getAllAsync<{ id: string; source_id: string | null; title: string; quote: string | null }>('SELECT id, source_id, title, quote FROM entries ORDER BY id');
+  // 기록은 남고, 무엇을 읽었는지도 남는다 — 출처와의 끈만 끊긴다
+  assert.deepEqual(rows.map((r) => r.source_id), [null, null]);
+  assert.equal(rows[0].title, '데미안');
+  assert.equal(rows[0].quote, '새는 알에서');
+  // 검토 큐의 진짜 조건으로 센다 — filed_at까지 봐야 한다.
+  // 출처가 있는 기록은 만들 때 filed_at이 찍히므로, 그걸 안 지우면 출처도 없고 검토에도 없는 미아가 된다.
+  assert.equal(await unfiledCount(db), 1);
+});
+
+test('mergeSources — 사용자가 지목한 대로 합친다: 비어 있던 칸만 채우고 기록을 옮긴다', async () => {
+  const db = await fresh();
+  const keep = await createSource(db, 'book', '데미안', null);
+  const drop = await createSource(db, 'book', '데미인', '헤세');
+  await addEntry(db, 'q1', drop.id, { type: 'book', title: '데미인', subtitle: '헤세' });
+  await addEntry(db, 'q2', drop.id, { type: 'book', title: '데미인', deleted_at: 1 });
+  const merged = await mergeSources(db, drop.id, keep.id);
+  assert.equal(merged.id, keep.id);
+  assert.equal(merged.title, '데미안'); // 남는 쪽 제목이 이긴다
+  assert.equal(merged.creator, '헤세'); // 비어 있던 저자는 사라지는 쪽에서 채운다
+  assert.equal(await getSource(db, drop.id), null);
+  const rows = await db.getAllAsync<{ id: string; source_id: string; title: string }>('SELECT id, source_id, title FROM entries ORDER BY id');
+  // 지운 기록까지 옮긴다 — 죽은 출처를 가리키는 참조를 남기지 않는다
+  assert.deepEqual(rows.map((r) => r.source_id), [keep.id, keep.id]);
+  assert.equal(rows[0].title, '데미안'); // 살아 있는 기록만 얼굴을 새로 받는다
+  assert.equal(rows[1].title, '데미인');
+});
+
+test('mergeSources — 같은 출처끼리는 거부한다', async () => {
+  const db = await fresh();
+  const s = await createSource(db, 'book', '데미안', null);
+  await assert.rejects(() => mergeSources(db, s.id, s.id));
+});
+
+test('findMergeTarget — 화면이 미리 물어볼 수 있게, 합쳐질 상대를 먼저 알려준다', async () => {
+  const db = await fresh();
+  const real = await createSource(db, 'book', '데미안', '헤세');
+  const typo = await createSource(db, 'book', '데미인', null);
+  // 제목을 '데미안'으로 고치면 real과 합쳐진다 — 고치기 전에 알 수 있다
+  assert.equal((await findMergeTarget(db, typo.id, 'book', '데미안', null))?.id, real.id);
+  // 안 겹치는 제목이면 상대가 없다
+  assert.equal(await findMergeTarget(db, typo.id, 'book', '데미안2', null), null);
+  // 자기 자신은 상대가 아니다
+  assert.equal(await findMergeTarget(db, real.id, 'book', '데미안', null), null);
+});
+
+test('allSources — 출처마다 매달린 살아 있는 밑줄 수를 함께 센다', async () => {
+  const db = await fresh();
+  const a = await createSource(db, 'book', '데미안', null);
+  const b = await createSource(db, 'book', '월든', null);
+  await addEntry(db, 'q1', a.id, { type: 'book' });
+  await addEntry(db, 'q2', a.id, { type: 'book' });
+  await addEntry(db, 'q3', a.id, { type: 'book', deleted_at: 1 }); // 지운 것은 안 센다
+  const rows = await allSources(db);
+  const byId = new Map(rows.map((r) => [r.id, r.entry_count]));
+  assert.equal(byId.get(a.id), 2);
+  assert.equal(byId.get(b.id), 0); // 등록만 하고 안 쓴 출처도 목록에 나온다
+  await deleteSource(db, b.id);
+  assert.equal((await allSources(db)).length, 1); // 내려간 출처는 빠진다
+});
+
+test('deleteSource — 갈피가 붙은 기록은 검토로 다시 부르지 않는다: 갈피가 곧 구조다', async () => {
+  const db = await fresh();
+  const s = await createSource(db, 'book', '월든', null);
+  await addEntry(db, 'q1', s.id, { type: 'book', filed_at: 100 });
+  await addEntry(db, 'q2', s.id, { type: 'book', filed_at: 100 });
+  await db.runAsync("INSERT INTO tags (id, name, created_at) VALUES ('t1', '단순함', 1)");
+  await db.runAsync("INSERT INTO entry_tags (entry_id, tag_id) VALUES ('q2', 't1')");
+  await deleteSource(db, s.id);
+  // 갈피 없는 q1만 돌아온다. q2는 갈피가 있으니 이미 정리된 기록이다.
+  assert.equal(await unfiledCount(db), 1);
+  const rows = await db.getAllAsync<{ id: string; filed_at: number | null }>('SELECT id, filed_at FROM entries ORDER BY id');
+  assert.equal(rows[0].filed_at, null);
+  assert.equal(rows[1].filed_at, 100);
 });

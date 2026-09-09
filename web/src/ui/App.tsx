@@ -9,6 +9,7 @@ import { Metrics } from './screens/Metrics';
 import { CaptureSheet } from './sheets/Capture';
 import { DetailSheet } from './sheets/Detail';
 import { SettingsSheet } from './sheets/Settings';
+import { SourcesSheet } from './sheets/Sources';
 import { useBoot, useToast, useToday } from './store';
 import { canIntakeSafely, consumeFromUrl, peekFromUrl, writeClipboard } from '../platform/intake';
 import { requestPersistence } from '../platform/install';
@@ -18,7 +19,8 @@ type Tab = 'inbox' | 'records' | 'review' | 'metrics';
 type View =
   | { kind: 'capture'; type: EntryType | null; text: string }
   | { kind: 'detail'; id: string }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'sources' };
 
 const TABS: [Tab, string, IconName][] = [
   ['inbox', '수집함', 'inbox'],
@@ -137,7 +139,7 @@ export function App(): JSX.Element {
                     void writeClipboard(stranded).then((ok) =>
                       showToast(
                         ok
-                          ? '복사했습니다 — 홈 화면의 밑줄에서 붙여넣으세요'
+                          ? '복사했습니다 — 홈 화면의 Ledger에서 붙여넣으세요'
                           : '복사하지 못했습니다'
                       )
                     );
@@ -176,7 +178,12 @@ export function App(): JSX.Element {
         {tab === 'records' && <Records handle={handle} today={today} onOpen={openDetail} />}
         {tab === 'review' && <Review handle={handle} today={today} onOpen={openDetail} />}
         {tab === 'metrics' && (
-          <Metrics handle={handle} today={today} onSettings={() => push({ kind: 'settings' })} />
+          <Metrics
+            handle={handle}
+            today={today}
+            onSettings={() => push({ kind: 'settings' })}
+            onSources={() => push({ kind: 'sources' })}
+          />
         )}
       </main>
 
@@ -222,6 +229,9 @@ export function App(): JSX.Element {
         )}
         {view?.kind === 'settings' && (
           <SettingsSheet handle={handle} onClose={close} toast={showToast} />
+        )}
+        {view?.kind === 'sources' && (
+          <SourcesSheet handle={handle} onClose={close} toast={showToast} />
         )}
       </div>
     </div>

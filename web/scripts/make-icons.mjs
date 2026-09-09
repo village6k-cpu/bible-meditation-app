@@ -1,5 +1,6 @@
 // 아이콘은 그림 파일이 아니라 코드다 — 색을 바꾸면 여기서 바꾸고 다시 돌린다.
-// 표식: 검은 지면 위 두 줄의 글, 그 아래 그어진 흰 밑줄.
+// 표식: 검은 지면 위 세로 괘선 하나와 그 오른쪽에 줄지어 그어진 기입선들.
+// 원장(ledger)이 그렇게 생겼다 — 선이 먼저 있고, 적히는 것은 그 옆에 쌓인다.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -52,12 +53,13 @@ function png(size, pixel) {
   ]);
 }
 
-// u, v는 0..1. 글 두 줄과 그 아래 밑줄 하나.
+// u, v는 0..1. 세로 괘선 하나 + 기입선 셋. 맨 아래 것만 흰색 — 오늘 적은 줄이다.
 const bar = (u, v, x0, x1, y0, y1) => u >= x0 && u < x1 && v >= y0 && v < y1;
 function mark(u, v) {
-  if (bar(u, v, 0.24, 0.7, 0.34, 0.4)) return MUTED;
-  if (bar(u, v, 0.24, 0.58, 0.46, 0.52)) return MUTED;
-  if (bar(u, v, 0.24, 0.76, 0.62, 0.68)) return PAPER;
+  if (bar(u, v, 0.3, 0.345, 0.22, 0.78)) return PAPER;
+  if (bar(u, v, 0.43, 0.76, 0.3, 0.35)) return MUTED;
+  if (bar(u, v, 0.43, 0.67, 0.475, 0.525)) return MUTED;
+  if (bar(u, v, 0.43, 0.72, 0.65, 0.7)) return PAPER;
   return INK;
 }
 

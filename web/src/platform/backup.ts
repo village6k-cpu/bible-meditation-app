@@ -64,7 +64,7 @@ export async function deliverFile(
 export async function backupNow(d: WebDb): Promise<{ how: Delivered; bytes: number }> {
   const data = await d.serialize();
   // 워커에서 건너온 배열은 이 문맥의 ArrayBuffer 위에 있다 — 그대로 Blob에 넘긴다
-  const how = await deliverFile(data, `밑줄-${stamp()}.sqlite3`, 'application/x-sqlite3');
+  const how = await deliverFile(data, `ledger-${stamp()}.sqlite3`, 'application/x-sqlite3');
   // 파일이 실제로 사용자 손에 넘어갔을 때만 도장을 찍는다
   if (how !== 'cancelled') await setSetting(asSqlite(d), LAST_BACKUP, String(Date.now()));
   return { how, bytes: data.byteLength };
