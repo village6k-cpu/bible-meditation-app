@@ -106,6 +106,11 @@ svg {
   transform: translateY(var(--vv-top, 0px));
   background: var(--bg);
   position: relative;
+  /* 폰 앱이다. 넓은 화면에서는 폰 폭으로 가운데 서고, 양옆은 비운다.
+     이 줄이 없으면 flex:1 칸들이 모니터 폭으로 늘어나 화면을 통째로 먹는다 — 실제로 그랬다. */
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
   overflow: hidden;
 }
 .screen {
@@ -797,6 +802,17 @@ ol.recipe code {
   }
 }
 
+@media (min-width: 480px) {
+  html,
+  body {
+    background: var(--sunken);
+  }
+  .app {
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+}
+
 /* ── 실천 격자 ──
    식사·운동은 줄이 아니라 격자다. 칸은 사진이거나 점이고, 지킴은 먹, 어김은 빗금, 비움은 테두리만. */
 .pstrip {
@@ -831,6 +847,15 @@ ol.recipe code {
 .pcell.strip {
   width: 100%;
   aspect-ratio: 1;
+  max-width: 52px;
+}
+.pstrip .pcol {
+  flex: 0 0 auto;
+  width: 52px;
+}
+.pstrip {
+  justify-content: flex-start;
+  gap: 14px;
 }
 .pcell.grid {
   width: 34px;

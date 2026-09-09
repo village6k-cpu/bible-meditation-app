@@ -76,7 +76,7 @@ export function Cell({
   const photo = cell.entry?.image_uri ?? null;
   return (
     <button class={cls} onClick={onClick} aria-label={label}>
-      {photo ? <Photo photo={photo} class="pcell-photo" /> : <span class="pcell-dot" />}
+      {photo ? <Photo photo={photo} class="photo pcell-photo" /> : <span class="pcell-dot" />}
       {cell.state === 'broken' && <span class="pcell-x" />}
     </button>
   );
