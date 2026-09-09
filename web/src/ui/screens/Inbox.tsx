@@ -154,49 +154,56 @@ export function Inbox({
         </button>
       )}
 
-      {data.tasks.length > 0 && <SectionRow label="할 일" right={open} />}
-      {data.tasks.map((t) => (
-        <button key={t.id} class="row" onClick={() => void toggle(t)}>
-          <span style={`width:16px;flex:none;color:${t.done === 1 ? 'var(--ink)' : 'var(--ink3)'}`}>
-            <Icon name={t.done === 1 ? 'check' : 'square'} />
-          </span>
-          <span
-            class="grow label"
-            style={t.done === 1 ? 'color:var(--ink3);text-decoration:line-through' : undefined}
-          >
-            {t.title ?? ''}
-          </span>
-          {t.due_time && <span class="mono dim">{t.due_time}</span>}
-        </button>
-      ))}
-      <div class="row" style="color:var(--ink3)">
-        <span style="width:16px;flex:none">
-          <Icon name="plus" />
-        </span>
-        <input
-          class="grow"
-          value={draft}
-          placeholder="할 일 추가"
-          enterkeyhint="done"
-          style="border:0;background:none;outline:0;font-size:14px;color:var(--ink)"
-          onInput={(ev) => setDraft((ev.target as HTMLInputElement).value)}
-          onKeyDown={(ev) => {
-            if (isEnter(ev)) {
-              ev.preventDefault();
-              void addTask();
-            }
-          }}
-        />
+      <div class="cols">
+        <div class="col">
+          {data.tasks.length > 0 && <SectionRow label="할 일" right={open} />}
+          {data.tasks.map((t) => (
+            <button key={t.id} class="row" onClick={() => void toggle(t)}>
+              <span
+                style={`width:16px;flex:none;color:${t.done === 1 ? 'var(--ink)' : 'var(--ink3)'}`}
+              >
+                <Icon name={t.done === 1 ? 'check' : 'square'} />
+              </span>
+              <span
+                class="grow label"
+                style={t.done === 1 ? 'color:var(--ink3);text-decoration:line-through' : undefined}
+              >
+                {t.title ?? ''}
+              </span>
+              {t.due_time && <span class="mono dim">{t.due_time}</span>}
+            </button>
+          ))}
+          <div class="row" style="color:var(--ink3)">
+            <span style="width:16px;flex:none">
+              <Icon name="plus" />
+            </span>
+            <input
+              class="grow"
+              value={draft}
+              placeholder="할 일 추가"
+              enterkeyhint="done"
+              style="border:0;background:none;outline:0;font-size:14px;color:var(--ink)"
+              onInput={(ev) => setDraft((ev.target as HTMLInputElement).value)}
+              onKeyDown={(ev) => {
+                if (isEnter(ev)) {
+                  ev.preventDefault();
+                  void addTask();
+                }
+              }}
+            />
+          </div>
+        </div>
+        <div class="col">
+          <SectionRow label="오늘" right={data.entries.length} />
+          {data.entries.length > 0 ? (
+            data.entries.map((e) => (
+              <EntryRow key={e.id} entry={e} tags={data.tags.get(e.id)} onOpen={onOpen} />
+            ))
+          ) : loading ? null : (
+            <div class="empty">오늘 기록 없음</div>
+          )}
+        </div>
       </div>
-
-      <SectionRow label="오늘" right={data.entries.length} />
-      {data.entries.length > 0 ? (
-        data.entries.map((e) => (
-          <EntryRow key={e.id} entry={e} tags={data.tags.get(e.id)} onOpen={onOpen} />
-        ))
-      ) : loading ? null : (
-        <div class="empty">오늘 기록 없음</div>
-      )}
       <div class="gap" />
     </>
   );

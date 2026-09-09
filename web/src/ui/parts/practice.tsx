@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { addDays, mondayOf } from '@core/dates';
 import type { MealSlot } from '@core/types';
 import type { PracticeCell } from '@db/entryRepo';
 import { Photo } from './photo';
@@ -91,3 +92,61 @@ export const SLOT_WORD: Record<Column['key'], string> = {
 
 export type SlotKey = Column['key'];
 export type { MealSlot };
+
+// ── 한눈에 보는 자리 ──
+// 28줄짜리 격자는 아래로 끝없이 길어져서 '요즘 어떤가'를 답하지 못했다. 스크롤해야 보이는 추이는 추이가 아니다.
+// 대신 주를 열로, 요일을 줄로 세운다. 12주가 폭 안에 들어오고, 빈 구간이 세로 띠로 즉시 보인다.
+
+/** 하루를 0..3 농도로. 3=전부 지킴, 2=일부, 1=기록은 있으나 못 지킴, 0=기록 없음 */
+export function mealLevel(day: DayCells): 0 | 1 | 2 | 3 {
+  const slots = (['breakfast', 'lunch', 'dinner'] as const).map((k) => day.cells[k].state);
+  const logged = slots.filter((s) => s !== 'none').length;
+  if (logged === 0) return 0;
+  const kept = slots.filter((s) => s === 'kept').length;
+  if (kept === 0) return 1;
+  return kept === logged && logged >= 2 ? 3 : 2;
+}
+
+export function workoutLevel(day: DayCells): 0 | 1 | 3 {
+  const s = day.cells.workout.state;
+  return s === 'kept' ? 3 : s === 'broken' ? 1 : 0;
+}
+
+/** 12주치를 주 단위로 자른다. 각 주는 월요일부터 일곱 칸. 오늘 이후는 null. */
+export function weeksOf(days: DayCells[], today: string, weeks: number): (DayCells | null)[][] {
+  const byDay = new Map(days.map((d) => [d.day, d]));
+  const out: (DayCells | null)[][] = [];
+  // 이번 주 월요일에서 (weeks-1)주 뒤로
+  const start = addDays(mondayOf(today), -(weeks - 1) * 7);
+  for (let w = 0; w < weeks; w += 1) {
+    const col: (DayCells | null)[] = [];
+    for (let i = 0; i < 7; i += 1) {
+      const day = addDays(start, w * 7 + i);
+      col.push(day > today ? null : (byDay.get(day) ?? { day, cells: emptyCells(), snacks: 0 }));
+    }
+    out.push(col);
+  }
+  return out;
+}
+
+function emptyCells(): DayCells['cells'] {
+  const cells = {} as DayCells['cells'];
+  for (const c of COLUMNS) cells[c.key] = { state: 'none', entry: null };
+  return cells;
+}
+
+/** 끼니별 준수 — 아침·점심·저녁 각각 {지킨 날, 기록한 날} */
+export function slotTally(
+  days: DayCells[]
+): { key: SlotKey; label: string; kept: number; logged: number }[] {
+  return COLUMNS.slice(0, 3).map((c) => {
+    let kept = 0;
+    let logged = 0;
+    for (const d of days) {
+      const st = d.cells[c.key].state;
+      if (st !== 'none') logged += 1;
+      if (st === 'kept') kept += 1;
+    }
+    return { key: c.key, label: c.label, kept, logged };
+  });
+}
