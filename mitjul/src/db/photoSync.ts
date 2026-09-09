@@ -33,7 +33,7 @@ export async function processPhotoJobs(
 ): Promise<PhotoSyncResult> {
   const jobs = await db.getAllAsync<Job>(
     `SELECT photo_uri, action, attempts FROM photo_jobs
-     WHERE state IN ('pending', 'failed') AND attempts < 5
+     WHERE state IN ('pending', 'failed', 'running') AND attempts < 5
      ORDER BY updated_at, photo_uri LIMIT ?`,
     [limit]
   );
@@ -55,6 +55,9 @@ export async function processPhotoJobs(
         );
         const month = entry?.day.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
         const uploaded = await remote.upload({ photoRef: job.photo_uri, month, bytes });
+        // 업로드를 기다리는 동안 사용자가 사진을 뺐으면 연결을 되살리지 않는다.
+        // Google Photos에 올라간 원본은 사용자가 고른 보존 규칙대로 남긴다.
+        if (!(await db.getFirstAsync('SELECT 1 FROM photo_jobs WHERE photo_uri=?', [job.photo_uri]))) continue;
         const now = Date.now();
         await db.runAsync(
           `INSERT INTO photo_links (photo_uri, media_item_id, album_id, created_at, updated_at)

@@ -153,7 +153,7 @@ async function upsertRemote(db: SQLiteDatabase, record: RemoteRecord): Promise<v
   const update = updateColumns.map((column) => `${column} = excluded.${column}`).join(', ');
   const conflict = keys.join(', ');
   const sql = `INSERT INTO ${record.entity_type} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`
-    + ` ON CONFLICT (${conflict}) DO UPDATE SET ${update}`;
+    + ` ON CONFLICT (${conflict}) ${update ? `DO UPDATE SET ${update}` : 'DO NOTHING'}`;
   await db.runAsync(sql, columns.map((column) => payload[column]) as never[]);
 
   if (record.entity_type === 'photo_links') {

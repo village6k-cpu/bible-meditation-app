@@ -4,7 +4,7 @@
 
 - 저장소: `village6k-cpu/bible-meditation-app`
 - 작업 브랜치: `claude/personal-daily-log-app-raeet6` (**이 브랜치에만** 커밋·푸시할 것)
-- 현재 작업: 기기 간 동기화 구현. 새 PR을 만들어 검증 뒤 `main`에 합칠 것.
+- 현재 작업: 기기 간 동기화. PR #10은 초안이며 실제 로그인·사진 왕복 검증 뒤 `main`에 합칠 것.
 - 이 저장소에는 원래 다른 앱(성경 묵상 앱)이 있다. 그 코드는 `main`과 동일하게 두고 건드리지 않는다.
   Ledger는 `mitjul/`과 `web/` 두 디렉터리에만 있다.
 - 앱 이름은 **Ledger**다. 다만 코드와 UI 문구의 「밑줄」은 대부분 *책에 긋는 하이라이트*라는
@@ -55,7 +55,7 @@ mitjul/          Expo SDK 54 네이티브 앱 (남겨둔 것. 주력 아님)
   src/db/        SQLite 리포지토리 — expo-sqlite 메서드 5개만 쓴다      ← 웹과 공유
   src/export/    마크다운 내보내기
   app/           expo-router 화면
-  tests/         node:test 유닛 테스트 (102개)
+  tests/         node:test 유닛 테스트 (108개)
 
 web/             Vite 7 + Preact 10 웹앱 (주력)
   src/db/        worker.ts(SQLite 워커) · sqlite.ts(expo-sqlite 인터페이스 구현) · index.ts
@@ -72,7 +72,7 @@ supabase/
 ```
 
 `web/tsconfig.json`의 경로 별칭: `@core` → `../mitjul/src/core`, `@db` → `../mitjul/src/db`,
-`@ex` → `../mitjul/src/export`. **웹이 공유 코어를 그대로 가져다 쓴다.** 마이그레이션 v1–v7과
+`@ex` → `../mitjul/src/export`. **웹이 공유 코어를 그대로 가져다 쓴다.** 마이그레이션 v1–v8과
 리포지토리 전부가 한 줄도 안 고치고 브라우저에서 돈다.
 
 ### 명령
@@ -80,7 +80,7 @@ supabase/
 ```bash
 cd web    && npm install && npm run dev        # 웹 개발 서버
 cd web    && npm test && npm run build          # 웹 어댑터 테스트 + tsc + Vite
-cd mitjul && npm install && npm test           # 공유 코어/DB 테스트 102개
+cd mitjul && npm install && npm test           # 공유 코어/DB 테스트 108개
 cd mitjul && npm run typecheck                 # 네이티브 타입 검사
 ```
 
@@ -173,6 +173,8 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 - `worker.ts`의 `open()`은 SAHPool을 한 번 재시도한 뒤, 실패하면 OPFS에 `.mitjul-vfs`가 있는지 본다.
   **있는데 못 열었으면 `engine='blocked'`로 두고 DB를 아예 열지 않는다.** 빈 기록함을 새로 열어 주는 건
   물러서기가 아니라 조용한 데이터 분실이기 때문이다. 이 분기를 없애지 말 것.
+- 자체점검의 `openDb(name)`은 그 이름을 워커의 `open` 요청 `opts.name`으로 반드시 넘긴다.
+  빠져 있던 전달을 고치고 회귀 테스트를 넣었다. 기본 기록함에서 자체점검의 정리 SQL이 돌면 안 된다.
 
 ### 사진
 
@@ -240,20 +242,24 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
   앱 열기·온라인 복귀·화면 복귀·30초 주기 자동 맞춤. 첫 연결 전 로컬 기록도 전부 올린다
 - 충돌은 행 단위 마지막 서버 반영 우선이다. 아직 보내지 않은 로컬 변경은 수신 값으로 덮지 않고,
   참조 데이터 순서와 500건 페이지 경계도 처리한다. 다른 계정에 같은 로컬 기록함을 섞지 않는다
-- 사진 동기화 큐: 실패해도 기록은 남고 최대 5번 재시도한다. Google Photos에는 월별 앨범으로 올리고
+- 사진 동기화 큐: 실패해도 기록은 남고 최대 5번 재시도한다. 수동 「지금 맞추기」로 다시 시도할 수 있다.
+  앱 종료로 남은 running 작업도 재개하며, 업로드 중 사진을 뺐다면 연결을 되살리지 않는다.
+  Google Photos에는 월별 앨범으로 올리고
   다른 기기의 OPFS 캐시를 내려받아 만든다
-- Supabase `village-ai`(`tedffwpijiylklfuzkua`)에 Ledger 표 마이그레이션 3개와
+- Supabase `village-ai`(`tedffwpijiylklfuzkua`)에 Ledger 표 마이그레이션 5개와
   `ledger-photos` Edge Function v1이 적용됐다. 본문 표는 RLS 사용자별 4개 정책, 토큰 표는
   `anon`/`authenticated` 권한 없음 + service role 전용이다
 - Supabase 대시보드에는 조직의 사용량 유예 기간이 끝났고 할당량 소진 시 서비스가 멈춘다는 경고가
   떠 있다. Ledger 코드와 별개인 운영 위험이므로 배포 전에 결제/사용량을 확인할 것
-- 보안 Advisor의 기존 경고 중 `public.notice_cleanup_work_sources_v2`는 Ledger와 무관한 표지만 RLS가
-  꺼져 있다. 기존 호출자를 확인하지 않고 자동 수정하지 않았다. 비공개 표라면
-  `ALTER TABLE public.notice_cleanup_work_sources_v2 ENABLE ROW LEVEL SECURITY;` 뒤 필요한 정책을 만들 것
+- 최신 Security Advisor 조회에서 Ledger 관련 ERROR/WARN은 없었다. 잠긴 Google 토큰·앨범 표의
+  「RLS enabled, no policy」 INFO는 service role 전용 설계다. 다른 서비스의 기존 함수·Auth 경고는
+  작업 범위 밖이라 자동 수정하지 않았다.
 - 전용 Google Cloud 프로젝트 `ledger-village6k-2026`에 Ledger OAuth 앱과 `Ledger Web` 클라이언트를
   만들고 Google Photos Library API를 활성화했다. Supabase의 OAuth client ID/secret도 이 전용
-  자격증명으로 교체했다
-- 마이그레이션 v1–v7, 코어/DB 테스트 102개와 웹 동기화 테스트 4개 통과, 양쪽 strict 타입 클린
+  자격증명으로 교체했다. 테스트 사용자 `village.6k@gmail.com`과 사진 권한 세 개 등록도 완료했다
+- 마이그레이션 v1–v8, 코어/DB 테스트 108개와 웹 테스트 5개 통과, 양쪽 strict 타입 클린
+- 390px·1280px 설정 화면을 브라우저 스크린샷으로 확인했고, 별도 localhost 기록함에서 태그가 붙은
+  기록의 저장·새로고침 유지·삭제를 확인했다. 이 검증은 실계정 기기 간 왕복 검증을 대신하지 않는다
 - 적대적 리뷰 여러 차례(웹앱만 114 에이전트 → 확인 31건 전건 수정)
 
 ---
@@ -273,11 +279,14 @@ Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger W
 
 배포 전에 남은 설정과 검증:
 
-1. 동의 화면이 테스트 모드이므로 사용할 Google 계정을 테스트 사용자로 넣는다. 요청 범위는
+1. 테스트 사용자 `village.6k@gmail.com`과 요청 범위 등록은 완료했다. 범위는
    `photoslibrary.appendonly`, `photoslibrary.readonly.appcreateddata`,
    `photoslibrary.edit.appcreateddata` 세 개다. 2025년 이후 API 규칙상 Ledger가 만든 사진만 읽는다.
 2. Ledger의 보관 → 기기 간 동기화에서 HeyBilly 계정으로 로그인하고 Google Photos를 연결한다.
    연결 뒤 데스크톱/390px 모바일에서 글 1건과 사진 1장을 왕복해 직접 확인한다.
+3. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
+   운영 모드·브랜딩 검증 상태를 정리하고 다시 연결해야 한다. 테스트 연결만 하고 장기 사용 준비가
+   끝났다고 하지 말 것. [Google 공식 만료 규칙](https://developers.google.com/identity/protocols/oauth2#expiration)
 
 기존 `savvy-range-417607`은 `book-ocr` OAuth 브랜딩을 쓰므로 건드리지 않았다. 그 프로젝트에 처음
 잘못 만든 미사용 `Ledger` 웹 클라이언트 하나가 남아 있다. 삭제는 별도 승인 뒤 할 것.
@@ -294,7 +303,7 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 커지지 않도록 Google Photos에 둔다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
 `supabase/`가 구현이다. 설정 화면은 HeyBilly 이메일/비밀번호로 로그인한다.
 
-남은 것은 위 (A)의 테스트 사용자/범위 설정, 새 PR CI, 그리고 **실제 계정으로 로그인해 두 기기에서
+남은 것은 위 (A)의 운영 모드 정리, PR #10의 최종 CI, 그리고 **실제 계정으로 로그인해 두 기기에서
 글 1건과 사진 1장을 왕복하는 것**이다. 390px와 1280px 설정 화면은 로컬 브라우저에서 직접 확인했다.
 본문 동기화는 Supabase에 이미 적용됐지만 `main`에 웹 코드가 아직 배포되지 않았다. 실계정 왕복까지
 끝내기 전에는 “라이브 동기화 완료”라고 말하지 말 것.
@@ -303,8 +312,16 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 
 - OPFS가 로컬 원본이고 서버는 행 단위 변경 로그다. 설정(`settings`)과 사진 작업 큐는 기기 전용이다.
 - 서버는 `(owner_id, entity_type, entity_id)`당 최신 상태 한 줄을 보관한다. 삭제도 tombstone으로 남긴다.
-- 전송은 부모(`sources`, `tags`)부터, 삭제는 자식부터다. 이 순서를 시각 순으로 되돌리면 첫 대량
-  동기화가 페이지 경계에서 FK 오류로 멈춘다.
+- 전송은 부모(`sources`, `tags`)부터, 삭제는 자식부터다. 수신은 모든 페이지를 모은 뒤 관계 순서로
+  한 트랜잭션에서 적용한다. 서버는 최신 행만 남기므로 수정된 부모가 자식의 다음 페이지로 밀릴 수 있다.
+  한 번에 10,000건까지 전송하며, 남으면 수신 전에 멈추고 다음 실행에서 이어 보낸다. 수신은 50,000행
+  미만까지 모으며 한도를 넘으면 기존 커서를 보존하고 오류로 멈춘다.
+- 서버 revision은 계정별 advisory transaction lock을 잡은 뒤 발급한다. 번호 발급만 원자적이어도
+  커밋 순서가 뒤집히면 큰 커서를 받은 기기가 늦게 커밋된 작은 번호를 놓치므로 잠금을 없애지 않는다.
+- 같은 이름의 갈피는 기기마다 같아야 한다. ID는 `tag:` + 정규화된 이름의 UTF-8 hex이며 v8이 옛 ID와
+  관계를 함께 옮긴다. `entry_tags`처럼 모든 열이 기본키인 관계는 수신 시 `DO NOTHING`으로 합친다.
+- 사진 실패는 성공으로 숨기지 않는다. 본문을 먼저 저장·표시하고 사진 오류를 보여주며, 다운로드 완료
+  이벤트로 이미 화면에 있던 사진도 다시 읽는다.
 - Google Photos 업로드는 Google 계정 저장용량에 포함된다. 과거의 “무제한” 전제를 UI나 문서에 쓰지 말 것.
 - Ledger에서 사진 연결을 지워도 Google Photos 원본은 남긴다. 사용자가 명시적으로 고른 규칙이다.
 
@@ -325,7 +342,7 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 
 - 브랜치 `claude/personal-daily-log-app-raeet6`에만 커밋·푸시. 다른 브랜치로 푸시 금지.
 - 푸시는 `git push -u origin claude/personal-daily-log-app-raeet6`.
-- 푸시 후 PR을 새로 연다. 지금까지의 PR(#1~#7)은 전부 머지·종료됐다.
+- 동기화 작업은 PR #10에서 이어간다. 기존 PR #1~#9는 머지·종료됐다.
 - CI는 `pull_request`와 `main` 푸시 양쪽에서 돈다. PR이 초록이어야 머지한다.
 - 이 저장소에는 Codex PR 리뷰 봇이 붙어 있다(draft를 ready로 바꾸거나 PR을 열면 자동으로 돈다).
 - 커밋 메시지·PR 본문·코드 주석 등 **저장소에 들어가는 어떤 산출물에도 AI 모델 이름을 넣지 않는다.**

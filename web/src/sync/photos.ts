@@ -14,6 +14,7 @@ function browserPhotoStore(handle: WebDb): PhotoStore {
     async write(ref, bytes) {
       if (!isPhotoRef(ref)) throw new Error('잘못된 사진 경로입니다.');
       await handle.writePhoto(ref.slice('photos/'.length), bytes);
+      window.dispatchEvent(new CustomEvent('ledger:photo-stored', { detail: ref }));
     },
   };
 }
@@ -34,5 +35,11 @@ export async function disconnectGooglePhotos(): Promise<void> {
 
 export async function processPendingPhotos(handle: WebDb): Promise<PhotoSyncResult | null> {
   if (!(await googlePhotosStatus())) return null;
-  return processPhotoJobs(asSqlite(handle), browserPhotoStore(handle), createGooglePhotosRemote(supabase));
+  const sqlite = asSqlite(handle);
+  const result = await processPhotoJobs(sqlite, browserPhotoStore(handle), createGooglePhotosRemote(supabase));
+  const failed = await sqlite.getFirstAsync<{last_error:string}>(
+    "SELECT last_error FROM photo_jobs WHERE state='failed' ORDER BY updated_at DESC LIMIT 1"
+  );
+  if (failed) throw new Error(`기록은 맞췄지만 사진 전송에 실패했습니다: ${failed.last_error}`);
+  return result;
 }

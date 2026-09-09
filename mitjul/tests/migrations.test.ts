@@ -5,6 +5,21 @@ import { FakeDb, schemaUpTo } from './sqliteShim';
 
 type AnyDb = Parameters<typeof migrate>[0];
 
+test('v8 — 기존 갈피의 ID를 바꿔도 연결과 외래 키가 보존된다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 7, MIGRATIONS);
+  await db.execAsync(`
+    INSERT INTO tags (id,name,created_at) VALUES ('old','기쁨',1);
+    INSERT INTO entries (id,type,day,created_at,updated_at) VALUES ('e','moment','2026-09-10',1,1);
+    INSERT INTO entry_tags (entry_id,tag_id) VALUES ('e','old');
+  `);
+  await migrate(db as unknown as AnyDb);
+  assert.deepEqual(await db.getAllAsync('PRAGMA foreign_key_check'),[]);
+  assert.deepEqual(await db.getAllAsync('SELECT t.name,et.entry_id FROM entry_tags et JOIN tags t ON t.id=et.tag_id'),[{name:'기쁨',entry_id:'e'}]);
+  assert.equal((await db.getFirstAsync<{operation:string}>("SELECT operation FROM sync_changes WHERE entity_type='tags' AND entity_id='old'"))?.operation,'delete');
+  assert.equal((await db.getFirstAsync<{foreign_keys:number}>('PRAGMA foreign_keys'))?.foreign_keys,1);
+});
+
 function insertEntry(db: FakeDb, e: Record<string, unknown>) {
   const cols = Object.keys(e);
   return db.runAsync(
@@ -142,9 +157,11 @@ test('v7 — 기존 기록을 첫 동기화 큐에 넣고, 같은 대상의 변�
   );
   assert.deepEqual(queued, [
     { entity_type: 'entries', operation: 'upsert' },
+    { entity_type: 'entry_tags', operation: 'delete' },
     { entity_type: 'entry_tags', operation: 'upsert' },
     { entity_type: 'resurfacings', operation: 'upsert' },
     { entity_type: 'sources', operation: 'upsert' },
+    { entity_type: 'tags', operation: 'delete' },
     { entity_type: 'tags', operation: 'upsert' },
   ]);
 
@@ -155,9 +172,10 @@ test('v7 — 기존 기록을 첫 동기화 큐에 넣고, 같은 대상의 변�
     1
   );
 
-  await db.runAsync("DELETE FROM entry_tags WHERE entry_id='e1' AND tag_id='t1'");
+  const tagId = (await db.getFirstAsync<{id:string}>("SELECT id FROM tags WHERE name='독서'"))!.id;
+  await db.runAsync("DELETE FROM entry_tags WHERE entry_id='e1' AND tag_id=?", [tagId]);
   const removed = await db.getFirstAsync<{ operation: string }>(
-    "SELECT operation FROM sync_changes WHERE entity_type='entry_tags'"
+    "SELECT operation FROM sync_changes WHERE entity_type='entry_tags' AND entity_id=?", [`e1${String.fromCharCode(31)}${tagId}`]
   );
   assert.equal(removed?.operation, 'delete');
 });

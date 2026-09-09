@@ -1,5 +1,4 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
-import { newId } from '../core/ids';
 import { Tag } from '../core/types';
 
 export async function upsertTag(db: SQLiteDatabase, name: string): Promise<string> {
@@ -7,7 +6,9 @@ export async function upsertTag(db: SQLiteDatabase, name: string): Promise<strin
     name,
   ]);
   if (existing) return existing.id;
-  const id = newId();
+  // 같은 갈피를 오프라인의 두 기기에서 만들어도 식별자가 같아야 UNIQUE(name) 충돌이 없다.
+  // UTF-8의 16진수는 SQLite 마이그레이션과 같으며 관계 식별자의 구분 문자도 섞이지 않는다.
+  const id = `tag:${Array.from(new TextEncoder().encode(name), byte => byte.toString(16).padStart(2, '0')).join('')}`;
   await db.runAsync('INSERT OR IGNORE INTO tags (id, name, created_at) VALUES (?, ?, ?)', [
     id,
     name,

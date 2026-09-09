@@ -116,9 +116,8 @@ export function SettingsSheet({
               ev.preventDefault();
               void guard('login', async () => {
                 await signInForSync(email, password);
-                const result = await syncNow(handle);
                 setPassword('');
-                bump();
+                const result = await syncNow(handle).finally(bump);
                 toast(`연결했습니다 · ${result.pushed + result.pulled}건 맞춤`);
               });
             }}
@@ -160,8 +159,7 @@ export function SettingsSheet({
               disabled={busy !== null || syncState.phase === 'syncing'}
               onClick={() =>
                 void guard('sync', async () => {
-                  const result = await syncNow(handle);
-                  bump();
+                  const result = await syncNow(handle, true).finally(bump);
                   toast(`${result.pushed + result.pulled}건 맞췄습니다`);
                 })
               }

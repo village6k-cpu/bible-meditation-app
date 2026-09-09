@@ -443,6 +443,31 @@ export const MIGRATIONS: Migration[] = [
         WHERE deleted_at IS NULL AND image_uri LIKE 'photos/%';
     `,
   },
+  {
+    version: 8,
+    rebuild: true,
+    // 기기마다 달랐던 갈피 ID를 이름의 UTF-8로 맞춘다. 참조도 같은 트랜잭션에서 옮긴다.
+    // 이미 서버에 갔을 수 있는 옛 ID는 삭제 기록으로 남겨 다른 기기에서 되살아나지 않게 한다.
+    sql: `
+      UPDATE sync_control SET applying_remote = 1 WHERE id = 1;
+      INSERT INTO sync_changes
+        SELECT 'entry_tags', entry_id || char(31) || tag_id, 'delete', unixepoch('subsec') * 1000
+        FROM entry_tags WHERE tag_id != (SELECT 'tag:' || lower(hex(name)) FROM tags WHERE id = tag_id)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='delete', changed_at=sync_changes.changed_at+1;
+      INSERT INTO sync_changes
+        SELECT 'tags', id, 'delete', unixepoch('subsec') * 1000 FROM tags WHERE id != 'tag:' || lower(hex(name))
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='delete', changed_at=sync_changes.changed_at+1;
+      UPDATE entry_tags SET tag_id = (SELECT 'tag:' || lower(hex(name)) FROM tags WHERE id = tag_id);
+      UPDATE tags SET id = 'tag:' || lower(hex(name));
+      INSERT INTO sync_changes
+        SELECT 'tags', id, 'upsert', unixepoch('subsec') * 1000 FROM tags WHERE true
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='upsert', changed_at=sync_changes.changed_at+1;
+      INSERT INTO sync_changes
+        SELECT 'entry_tags', entry_id || char(31) || tag_id, 'upsert', unixepoch('subsec') * 1000 FROM entry_tags WHERE true
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='upsert', changed_at=sync_changes.changed_at+1;
+      UPDATE sync_control SET applying_remote = 0 WHERE id = 1;
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

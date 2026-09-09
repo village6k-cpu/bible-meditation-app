@@ -7,6 +7,23 @@ import { FakeDb } from './sqliteShim';
 
 type AnyDb = Parameters<typeof migrate>[0];
 
+test('앱 종료로 running에 남은 사진 작업도 재개한다', async () => {
+  const db=new FakeDb();
+  await migrate(db as unknown as AnyDb);
+  await db.execAsync("INSERT INTO entries (id,type,day,created_at,updated_at,image_uri) VALUES ('e','meal','2026-09-10',1,1,'photos/retry.jpg')");
+  await db.runAsync("UPDATE photo_jobs SET state='running'");
+  const result=await processPhotoJobs(db as unknown as AnyDb,{async read(){return new Uint8Array([1]);},async write(){}},{async upload(){return {mediaItemId:'m',albumId:'a'};},async download(){throw new Error('unexpected');}});
+  assert.equal(result.completed,1);
+});
+
+test('사진을 올리는 사이 기록에서 빼면 원격 연결을 되살리지 않는다', async () => {
+  const db=new FakeDb();
+  await migrate(db as unknown as AnyDb);
+  await db.execAsync("INSERT INTO entries (id,type,day,created_at,updated_at,image_uri) VALUES ('e','meal','2026-09-10',1,1,'photos/deleted.jpg')");
+  await processPhotoJobs(db as unknown as AnyDb,{async read(){return new Uint8Array([1]);},async write(){}},{async upload(){await db.runAsync("UPDATE entries SET image_uri=NULL WHERE id='e'");return {mediaItemId:'m',albumId:'a'};},async download(){throw new Error('unexpected');}});
+  assert.equal(await db.getFirstAsync('SELECT * FROM photo_links'),null);
+});
+
 test('로컬 사진을 기록 날짜의 월 앨범에 올리고 media item ID만 DB에 남긴다', async () => {
   const db = new FakeDb();
   await migrate(db as unknown as AnyDb);

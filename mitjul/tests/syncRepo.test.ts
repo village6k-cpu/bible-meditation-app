@@ -6,6 +6,20 @@ import { FakeDb } from './sqliteShim';
 
 type AnyDb = Parameters<typeof migrate>[0];
 
+test('태그가 붙은 기록을 두 기기 사이에서 반복 수신해도 관계가 보존된다', async () => {
+  const sender = await readyDb();
+  const receiver = await readyDb();
+  await sender.execAsync(`
+    INSERT INTO entries (id,type,day,created_at,updated_at) VALUES ('tagged','moment','2026-09-10',1,1);
+    INSERT INTO tags (id,name,created_at) VALUES ('t1','기쁨',1);
+    INSERT INTO entry_tags (entry_id,tag_id) VALUES ('tagged','t1');
+  `);
+  const records = (await preparePushBatch(sender as unknown as AnyDb)).map((row, index) => ({ ...row, revision: index + 1 }));
+  await applyRemoteRecords(receiver as unknown as AnyDb, records);
+  await applyRemoteRecords(receiver as unknown as AnyDb, records);
+  assert.deepEqual(await receiver.getAllAsync('SELECT entry_id,tag_id FROM entry_tags'), [{entry_id:'tagged',tag_id:'t1'}]);
+});
+
 async function readyDb(): Promise<FakeDb> {
   const db = new FakeDb();
   await migrate(db as unknown as AnyDb);

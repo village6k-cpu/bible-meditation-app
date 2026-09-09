@@ -43,7 +43,7 @@ export async function signOutFromSync(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function syncNow(handle: WebDb): Promise<SyncResult> {
+export async function syncNow(handle: WebDb, retryPhotos = false): Promise<SyncResult> {
   if (active) return active;
   active = (async () => {
     const { data, error } = await supabase.auth.getSession();
@@ -55,10 +55,16 @@ export async function syncNow(handle: WebDb): Promise<SyncResult> {
     try {
       const sqlite = asSqlite(handle);
       await bindSyncAccount(sqlite, session.user.id);
-      // 사진 실패는 photo_jobs에 남고 본문 동기화는 계속 간다.
-      await processPendingPhotos(handle).catch(() => null);
+      if (retryPhotos) await sqlite.runAsync("UPDATE photo_jobs SET state='pending', attempts=0 WHERE state='failed'");
       const result = await syncOnce(sqlite, createSupabaseSyncApi(supabase, session.user.id));
-      await processPendingPhotos(handle).catch(() => null);
+      await handle.flush();
+      // 본문을 먼저 맞춘 뒤 사진을 처리한다. 사진 오류도 화면에 보여줘야 연결 실패를 알 수 있다.
+      const photos = await processPendingPhotos(handle);
+      if (photos?.completed) {
+        const afterPhotos = await syncOnce(sqlite, createSupabaseSyncApi(supabase, session.user.id));
+        result.pushed += afterPhotos.pushed;
+        result.pulled += afterPhotos.pulled;
+      }
       await handle.flush();
       publish({ phase: 'idle', email, lastSyncedAt: Date.now(), error: null });
       return result;
@@ -77,7 +83,8 @@ export function startAutoSync(handle: WebDb, onApplied: () => void): () => void 
 
   const run = (): void => {
     if (stopped || !navigator.onLine) return;
-    void syncNow(handle).then(onApplied).catch(() => {});
+    // 사진이 실패해도 이미 받은 본문은 화면에 나타나야 한다.
+    void syncNow(handle).catch(() => {}).finally(() => { if (!stopped) onApplied(); });
   };
   const setSession = (session: Session | null): void => {
     if (!session) {

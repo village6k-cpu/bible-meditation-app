@@ -77,7 +77,7 @@ export async function openDb(name?: string): Promise<WebDb> {
     return next;
   };
 
-  const opened = (await send('open')) as {
+  const opened = (await send('open', undefined, undefined, undefined, name ? { name } : undefined)) as {
     engine: Engine;
     opfsError: string | null;
   };
