@@ -1,4 +1,4 @@
-/* 밑줄 — 오프라인 껍데기.
+/* Ledger — 오프라인 껍데기.
    원칙 하나: 이 워커는 기록을 절대 만지지 않는다. 기록은 OPFS의 SQLite 파일에 있고,
    여기 있는 것은 앱을 열기 위한 껍데기(HTML·JS·wasm·글꼴)뿐이다.
    그래서 캐시를 통째로 비워도 잃는 것이 없다.
@@ -109,6 +109,9 @@ self.addEventListener('fetch', (ev) => {
     );
     return;
   }
+
+  // 워커 자신은 절대 캐시에 굳히지 않는다 — 굳으면 갱신의 입구가 막힌다
+  if (url.pathname === ENTRY + 'sw.js') return;
 
   // 해시가 박힌 자산·wasm·아이콘
   if (/\.(js|css|wasm|png|svg|webmanifest|woff2?)$/.test(url.pathname)) {
