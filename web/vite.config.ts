@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import preact from '@preact/preset-vite';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,6 +16,9 @@ function precache(): Plugin {
     apply: 'build',
     closeBundle() {
       const out = r('./dist');
+      // 빌드가 실패해도 이 훅은 불린다. 그때 dist가 없다고 여기서 ENOENT를 던지면
+      // 진짜 오류가 이 오류에 가려진다 — 실제로 그렇게 한 번 속았다.
+      if (!existsSync(out)) return;
       const files: string[] = [];
       const walk = (dir: string) => {
         for (const name of readdirSync(dir)) {
@@ -52,6 +55,14 @@ export default defineConfig({
     },
   },
   server: { fs: { allow: ['..'] } },
+  // esbuild는 변환하는 파일마다 가장 가까운 tsconfig을 찾아 위로 올라간다. mitjul/src/**를 변환할 때
+  // 걸리는 mitjul/tsconfig.json은 expo/tsconfig.base를 extends 하는데, 네이티브 의존성이 없으면
+  // 거기서 빌드가 죽는다 — 저장소를 갓 받은 상태와 CI가 정확히 그렇다.
+  // 문자열로 주어야 탐색 자체를 건너뛴다. 객체로 주면 찾아 올라간 뒤 합치므로 같은 곳에서 죽는다.
+  esbuild: {
+    tsconfigRaw:
+      '{"compilerOptions":{"target":"es2022","jsx":"react-jsx","jsxImportSource":"preact","useDefineForClassFields":true}}',
+  },
   // sqlite-wasm은 자기 옆의 .wasm을 스스로 찾는다 — 사전 번들링에서 빼 둔다
   optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
   worker: { format: 'es' },

@@ -137,3 +137,55 @@ test('신호 칩은 원문 위치 순으로 돌려준다', () => {
   const kinds = c.signals.map((s) => s.kind);
   assert.deepEqual(kinds, ['tag', 'page', 'url']);
 });
+
+// 식단·운동을 어긴 날을 적을 길이 없으면 지표는 '지켰나'가 아니라 '기록했나'를 센다.
+test('식단 어김 — 치팅이라 적으면 못 지킨 식사', () => {
+  const c = parseCapture('점심 치팅 라면');
+  assert.equal(c.type, 'meal');
+  assert.equal(c.slot, 'lunch');
+  assert.equal(c.practiced, false);
+  assert.ok(c.signals.some((s) => s.kind === 'practiced'));
+});
+
+test('식단 어김 — 여러 표현', () => {
+  for (const text of ['저녁 과식했다', '아침 못 지켰음', '점심 폭식', '저녁 망했다', '아침 걸렀다']) {
+    assert.equal(parseCapture(text).practiced, false, text);
+  }
+});
+
+test('식단 지킴 — 지켰다고 적으면 지킨 식사', () => {
+  const c = parseCapture('점심 잘 챙겨 먹었다 샐러드');
+  assert.equal(c.type, 'meal');
+  assert.equal(c.practiced, true);
+});
+
+test('어김이 지킴을 이긴다 — 못 지켰다에서 지켰다를 다시 읽지 않는다', () => {
+  const c = parseCapture('저녁 못 지켰다');
+  assert.equal(c.practiced, false);
+  assert.equal(c.signals.filter((s) => s.kind === 'practiced').length, 1);
+});
+
+test('갈피로도 어김을 적는다', () => {
+  const c = parseCapture('점심 라면 #치팅');
+  assert.equal(c.practiced, false);
+  assert.deepEqual(c.tags, ['치팅']);
+});
+
+test('운동을 못 한 날도 남는다 — 운동 기록이되 실천은 아니다', () => {
+  const c = parseCapture('운동 못 했다');
+  assert.equal(c.type, 'workout');
+  assert.equal(c.practiced, false);
+});
+
+test('아무 신호도 없으면 판단하지 않는다 — null이면 지킨 것으로 본다', () => {
+  const c = parseCapture('점심 김치찌개');
+  assert.equal(c.type, 'meal');
+  assert.equal(c.practiced, null);
+});
+
+test("'치팅' 한 마디만 적어도 식사로 — 어긴 날일수록 길게 적지 않는다", () => {
+  const c = parseCapture('치팅');
+  assert.equal(c.type, 'meal');
+  assert.equal(c.practiced, false);
+  assert.equal(c.confident, false);
+});

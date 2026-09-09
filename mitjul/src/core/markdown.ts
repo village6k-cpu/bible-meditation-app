@@ -50,13 +50,14 @@ function entryBlock(e: ExportEntry): string {
     }
     case 'meal': {
       const slot = e.slot ? MEAL_SLOT_LABELS[e.slot] : '식사';
-      const check = e.practiced === 1 ? ' ✓' : '';
+      // 어긴 날도 남는다. ✓만 찍고 나머지를 비워 두면 옵시디언에서 어긴 날이 안 보인다.
+      const check = e.practiced === 0 ? ' ✗' : e.practiced === 1 ? ' ✓' : '';
       parts.push(`- ${slot} — ${e.body ?? ''}${check}`.trimEnd());
       break;
     }
     case 'workout': {
       const bits = [e.title, e.minutes ? `${e.minutes}분` : null].filter(Boolean).join(' ');
-      parts.push(bits.length > 0 ? bits : '운동');
+      parts.push((bits.length > 0 ? bits : '운동') + (e.practiced === 0 ? ' ✗' : ''));
       if (e.body) parts.push(e.body);
       break;
     }
