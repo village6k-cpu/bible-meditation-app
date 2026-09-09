@@ -44,6 +44,12 @@ export function formatDayKo(day: DayKey): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW_KO[d.getDay()]}요일`;
 }
 
+// 격자의 왼쪽 줄에 쓰는 가장 짧은 꼴 — '9.09 화'. 자릿수를 맞춰 세로로 정렬되게 한다.
+export function formatDayGridKo(day: DayKey): string {
+  const d = parseDayKey(day);
+  return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')} ${DOW_KO[d.getDay()]}`;
+}
+
 export function formatDayShortKo(day: DayKey): string {
   const d = parseDayKey(day);
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;

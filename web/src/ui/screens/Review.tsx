@@ -12,6 +12,7 @@ import { Icon } from '../icons';
 import { firstLine, srcLine, SectionRow } from '../parts/entry';
 import { bump, useLoad } from '../store';
 import { dropFromDeck, loadDeck, type DeckItem } from '../deck';
+import { isEnter } from '../keys';
 
 // 정리는 사용자가 기억해야 할 일이 아니라 앱이 내미는 줄이다.
 // 이 화면이 하는 일은 세 개의 줄을 세우는 것뿐 — 다시 읽을 것, 구조가 없는 것, 오래 안 읽은 것.
@@ -166,7 +167,7 @@ export function Review({
                     autofocus
                     onInput={(ev) => setDraft((ev.target as HTMLInputElement).value)}
                     onKeyDown={(ev) => {
-                      if (ev.key === 'Enter') {
+                      if (isEnter(ev)) {
                         ev.preventDefault();
                         void applyTags(e.id);
                       }

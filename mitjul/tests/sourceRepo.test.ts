@@ -160,3 +160,25 @@ test('deleteSource — 갈피가 붙은 기록은 검토로 다시 부르지 않
   assert.equal(rows[0].filed_at, null);
   assert.equal(rows[1].filed_at, 100);
 });
+
+test('createSource — 같은 출처를 만드는 호출이 겹쳐도 하나만 생긴다 (한글 Enter 이중 발화)', async () => {
+  const db = await fresh();
+  const [a, b] = await Promise.all([
+    createSource(db, 'book', '데미안', '헤세'),
+    createSource(db, 'book', '데미안', '헤세'),
+  ]);
+  assert.equal(a.id, b.id);
+  const rows = await db.getAllAsync<{ id: string }>("SELECT id FROM sources WHERE title = '데미안' AND deleted_at IS NULL");
+  assert.equal(rows.length, 1);
+});
+
+test('createSource — 링크 출처도 겹친 호출은 하나다', async () => {
+  const db = await fresh();
+  const url = 'https://www.youtube.com/watch?v=aaaaaaaaaaa';
+  const [a, b] = await Promise.all([
+    createSource(db, 'video', '강연', null, { url }),
+    createSource(db, 'video', '강연', null, { url }),
+  ]);
+  assert.equal(a.id, b.id);
+  assert.equal((await db.getAllAsync<{ id: string }>('SELECT id FROM sources WHERE deleted_at IS NULL')).length, 1);
+});

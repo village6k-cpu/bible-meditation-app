@@ -1,9 +1,17 @@
 import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
 import { formatDayKo, todayKey } from '@core/dates';
-import { REGISTRY, TYPE_ORDER } from '@core/registry';
+import { CONTENT_TYPES, REGISTRY, isPractice } from '@core/registry';
 import type { Entry, EntryType } from '@core/types';
-import { createEntry, entriesOfDay, setTaskDone, tagsOf, unfiledCount } from '@db/entryRepo';
+import {
+  createEntry,
+  entriesOfDay,
+  practiceEntries,
+  setTaskDone,
+  tagsOf,
+  unfiledCount,
+  type PracticeCell,
+} from '@db/entryRepo';
 import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { Icon, typeIcon } from '../icons';
@@ -11,10 +19,13 @@ import { EntryRow, SectionRow } from '../parts/entry';
 import { bump, useLoad } from '../store';
 import { loadDeck } from '../deck';
 import { Notices } from '../parts/Notices';
+import { isEnter } from '../keys';
+import { COLUMNS, Cell, SLOT_WORD, layoutDay } from '../parts/practice';
 
 interface InboxData {
-  entries: Entry[];
+  entries: Entry[]; // 콘텐츠만 — 식사·운동은 위의 실천 줄에 산다
   tasks: Entry[];
+  practice: PracticeCell[];
   tags: Map<string, string[]>;
   unfiled: number;
   deck: number;
@@ -23,6 +34,7 @@ interface InboxData {
 const EMPTY: InboxData = {
   entries: [],
   tasks: [],
+  practice: [],
   tags: new Map(),
   unfiled: 0,
   deck: 0,
@@ -39,7 +51,7 @@ export function Inbox({
   handle: WebDb;
   today: string;
   onOpen: (id: string) => void;
-  onCompose: (type: EntryType | null) => void;
+  onCompose: (type: EntryType | null, text?: string) => void;
   onReview: () => void;
   toast: (m: string) => void;
 }): JSX.Element {
@@ -50,8 +62,9 @@ export function Inbox({
     async (d) => {
       const db = asSqlite(d);
       const all = await entriesOfDay(db, today);
-      const entries = all.filter((e) => e.type !== 'task');
+      const entries = all.filter((e) => e.type !== 'task' && !isPractice(e.type));
       const tasks = all.filter((e) => e.type === 'task');
+      const practice = await practiceEntries(db, today, today);
       const tags = await tagsOf(
         db,
         entries.map((e) => e.id)
@@ -59,6 +72,7 @@ export function Inbox({
       return {
         entries,
         tasks,
+        practice,
         tags,
         unfiled: await unfiledCount(db),
         deck: (await loadDeck(d, today)).length,
@@ -108,8 +122,16 @@ export function Inbox({
 
       <Notices handle={handle} toast={toast} />
 
+      {/* 오늘의 실천 — 식사 세 끼와 운동. 매일 같은 칸이 있고, 채워졌는지가 전부다.
+          빈 칸을 누르면 그 칸이 미리 골라진 캡처가 열리고, 채운 칸을 누르면 그 기록이 열린다. */}
+      <PracticeStrip
+        cells={layoutDay(today, data.practice)}
+        onFill={(key) => onCompose(key === 'workout' ? 'workout' : 'meal', `${SLOT_WORD[key]} `)}
+        onOpen={onOpen}
+      />
+
       <div class="chips scroll">
-        {TYPE_ORDER.map((t) => (
+        {CONTENT_TYPES.concat('task').map((t) => (
           <button key={t} class="chip" onClick={() => onCompose(t)}>
             <Icon name={typeIcon(t)} />
             {REGISTRY[t].label}
@@ -159,7 +181,7 @@ export function Inbox({
           style="border:0;background:none;outline:0;font-size:14px;color:var(--ink)"
           onInput={(ev) => setDraft((ev.target as HTMLInputElement).value)}
           onKeyDown={(ev) => {
-            if (ev.key === 'Enter') {
+            if (isEnter(ev)) {
               ev.preventDefault();
               void addTask();
             }
@@ -177,5 +199,34 @@ export function Inbox({
       )}
       <div class="gap" />
     </>
+  );
+}
+
+function PracticeStrip({
+  cells,
+  onFill,
+  onOpen,
+}: {
+  cells: ReturnType<typeof layoutDay>;
+  onFill: (key: (typeof COLUMNS)[number]['key']) => void;
+  onOpen: (id: string) => void;
+}): JSX.Element {
+  return (
+    <div class="pstrip">
+      {COLUMNS.map((c) => {
+        const cell = cells.cells[c.key];
+        return (
+          <div key={c.key} class={c.key === 'workout' ? 'pcol wk' : 'pcol'}>
+            <Cell
+              cell={cell}
+              size="strip"
+              label={`${c.label} ${cell.state === 'none' ? '적기' : '열기'}`}
+              onClick={() => (cell.entry ? onOpen(cell.entry.id) : onFill(c.key))}
+            />
+            <span class="micro">{c.label}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
