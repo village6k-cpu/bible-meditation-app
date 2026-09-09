@@ -14,6 +14,7 @@ import { exportRange, RANGE_LABEL, type ExportRange } from '../../export/obsidia
 import { photoStat, sharePhotoBatch, sweepOrphans, type PhotoStat } from '../../export/photos';
 import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
+import { SyncLogin } from '../parts/SyncLogin';
 import { bump } from '../store';
 import {
   getSyncState,
@@ -58,8 +59,6 @@ export function SettingsSheet({
   // 사진은 묶음으로 나가므로, 어디까지 보냈는지 기억한다
   const [cursor, setCursor] = useState<string | null>(null);
   const [syncState, setSyncState] = useState(getSyncState);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -110,44 +109,11 @@ export function SettingsSheet({
       <div class="sheet-body" style="padding:0 0 var(--safe-b)">
         <SectionRow label="기기 간 동기화" first />
         {syncState.phase === 'signed-out' ? (
-          <form
-            style="padding:12px 16px 16px;display:grid;gap:8px"
-            onSubmit={(ev) => {
-              ev.preventDefault();
-              void guard('login', async () => {
-                await signInForSync(email, password);
-                setPassword('');
-                const result = await syncNow(handle).finally(bump);
-                toast(`연결했습니다 · ${result.pushed + result.pulled}건 맞춤`);
-              });
-            }}
-          >
-            <input
-              class="field"
-              type="email"
-              inputMode="email"
-              autoComplete="username"
-              placeholder="HeyBilly 계정 이메일"
-              value={email}
-              onInput={(ev) => setEmail(ev.currentTarget.value)}
-              required
-            />
-            <input
-              class="field"
-              type="password"
-              autoComplete="current-password"
-              placeholder="비밀번호"
-              value={password}
-              onInput={(ev) => setPassword(ev.currentTarget.value)}
-              required
-            />
-            <button class="chip on" type="submit" disabled={busy !== null} style="justify-self:start">
-              {busy === 'login' ? '연결 중…' : '기존 계정으로 연결'}
-            </button>
-            <div class="cap dim">
-              HeyBilly가 쓰는 Supabase 계정을 그대로 씁니다. 로그인 전 기록도 첫 연결 때 올라갑니다.
-            </div>
-          </form>
+          <SyncLogin
+            busy={busy !== null}
+            error={syncState.error}
+            onSignIn={() => void guard('login', signInForSync)}
+          />
         ) : (
           <>
             <div class="row">

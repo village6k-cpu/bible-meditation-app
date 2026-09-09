@@ -19,6 +19,7 @@
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",
     "@types/node": "^22.20.1",
+    "preact-render-to-string": "6.7.0",
     "tsx": "^4.23.13",
     "typescript": "~5.9.2",
     "vite": "^7.1.5"

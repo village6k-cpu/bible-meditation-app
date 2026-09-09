@@ -5,37 +5,18 @@ import { bindSyncAccount, syncOnce, type SyncResult } from '@db/syncEngine';
 import { supabase } from './client';
 import { createSupabaseSyncApi } from './supabaseApi';
 import { processPendingPhotos } from './photos';
+import { googleSignInUrl } from './googleAuth';
+import { getSyncState, publishSyncState as publish } from './state';
+export { getSyncState, subscribeSyncState, type SyncState } from './state';
 
-export type SyncState =
-  | { phase: 'signed-out'; email: null; lastSyncedAt: null; error: null }
-  | { phase: 'idle' | 'syncing'; email: string; lastSyncedAt: number | null; error: null }
-  | { phase: 'error'; email: string; lastSyncedAt: number | null; error: string };
-
-let state: SyncState = { phase: 'signed-out', email: null, lastSyncedAt: null, error: null };
 let active: Promise<SyncResult> | null = null;
-const listeners = new Set<(next: SyncState) => void>();
-
-function publish(next: SyncState): void {
-  state = next;
-  for (const listener of listeners) listener(next);
-}
 
 function emailOf(session: Session): string {
   return session.user.email ?? '연결된 계정';
 }
 
-export function getSyncState(): SyncState {
-  return state;
-}
-
-export function subscribeSyncState(listener: (next: SyncState) => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export async function signInForSync(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) throw new Error('로그인하지 못했습니다. 이메일과 비밀번호를 확인하세요.');
+export async function signInForSync(): Promise<void> {
+  window.location.assign(await googleSignInUrl(supabase.auth, window.location.href));
 }
 
 export async function signOutFromSync(): Promise<void> {
@@ -51,7 +32,7 @@ export async function syncNow(handle: WebDb, retryPhotos = false): Promise<SyncR
     const session = data.session;
     if (!session) throw new Error('먼저 동기화 계정에 로그인하세요.');
     const email = emailOf(session);
-    publish({ phase: 'syncing', email, lastSyncedAt: state.lastSyncedAt, error: null });
+    publish({ phase: 'syncing', email, lastSyncedAt: getSyncState().lastSyncedAt, error: null });
     try {
       const sqlite = asSqlite(handle);
       await bindSyncAccount(sqlite, session.user.id);
@@ -70,7 +51,7 @@ export async function syncNow(handle: WebDb, retryPhotos = false): Promise<SyncR
       return result;
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
-      publish({ phase: 'error', email, lastSyncedAt: state.lastSyncedAt, error: message });
+      publish({ phase: 'error', email, lastSyncedAt: getSyncState().lastSyncedAt, error: message });
       throw reason;
     }
   })().finally(() => { active = null; });
@@ -80,6 +61,8 @@ export async function syncNow(handle: WebDb, retryPhotos = false): Promise<SyncR
 export function startAutoSync(handle: WebDb, onApplied: () => void): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+  let subscription: { unsubscribe: () => void } | null = null;
+  let loginError: string | null = null;
 
   const run = (): void => {
     if (stopped || !navigator.onLine) return;
@@ -87,19 +70,29 @@ export function startAutoSync(handle: WebDb, onApplied: () => void): () => void 
     void syncNow(handle).catch(() => {}).finally(() => { if (!stopped) onApplied(); });
   };
   const setSession = (session: Session | null): void => {
+    if (stopped) return;
     if (!session) {
-      publish({ phase: 'signed-out', email: null, lastSyncedAt: null, error: null });
+      publish({ phase: 'signed-out', email: null, lastSyncedAt: null, error: loginError });
       return;
     }
-    publish({ phase: 'idle', email: emailOf(session), lastSyncedAt: state.lastSyncedAt, error: null });
+    loginError = null;
+    publish({ phase: 'idle', email: emailOf(session), lastSyncedAt: getSyncState().lastSyncedAt, error: null });
     queueMicrotask(run);
   };
   const onVisible = (): void => {
     if (document.visibilityState === 'visible') run();
   };
 
-  void supabase.auth.getSession().then(({ data }) => setSession(data.session));
-  const { data: auth } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+  // SDK가 PKCE 코드를 한 번 교환한 뒤 구독한다. getSession만 읽으면 콜백 오류가 사라진다.
+  void supabase.auth.initialize().then(({ error }) => {
+    if (stopped) return;
+    if (error) loginError = 'Google 로그인을 마치지 못했습니다. 취소했거나 연결이 만료됐다면 다시 연결하세요.';
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    subscription = data.subscription;
+  }).catch(() => {
+    loginError = '로그인 상태를 확인하지 못했습니다. 다시 연결하세요.';
+    setSession(null);
+  });
   window.addEventListener('online', run);
   document.addEventListener('visibilitychange', onVisible);
   timer = setInterval(run, 30_000);
@@ -107,7 +100,7 @@ export function startAutoSync(handle: WebDb, onApplied: () => void): () => void 
   return () => {
     stopped = true;
     if (timer) clearInterval(timer);
-    auth.subscription.unsubscribe();
+    subscription?.unsubscribe();
     window.removeEventListener('online', run);
     document.removeEventListener('visibilitychange', onVisible);
   };

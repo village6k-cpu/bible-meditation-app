@@ -238,7 +238,7 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 - 옵시디언 마크다운 내보내기(주/월/전체)
 - PWA: 서비스 워커 프리캐시(빌드 시 asset 목록 + sha256 빌드 ID 주입), 설치 안내, 아이콘은 코드로 생성
 - `.github/workflows/deploy-web.yml` — `main`의 `web/`·`mitjul/src/` 변경에 반응해 Pages로 배포
-- 기기 간 본문 동기화: HeyBilly와 같은 Supabase Auth, 사용자별 RLS 변경 로그, OPFS 로컬 우선,
+- 기기 간 본문 동기화: HeyBilly의 Supabase 프로젝트 재사용, Google OAuth 로그인, 사용자별 RLS 변경 로그, OPFS 로컬 우선,
   앱 열기·온라인 복귀·화면 복귀·30초 주기 자동 맞춤. 첫 연결 전 로컬 기록도 전부 올린다
 - 충돌은 행 단위 마지막 서버 반영 우선이다. 아직 보내지 않은 로컬 변경은 수신 값으로 덮지 않고,
   참조 데이터 순서와 500건 페이지 경계도 처리한다. 다른 계정에 같은 로컬 기록함을 섞지 않는다
@@ -257,7 +257,12 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 - 전용 Google Cloud 프로젝트 `ledger-village6k-2026`에 Ledger OAuth 앱과 `Ledger Web` 클라이언트를
   만들고 Google Photos Library API를 활성화했다. Supabase의 OAuth client ID/secret도 이 전용
   자격증명으로 교체했다. 테스트 사용자 `village.6k@gmail.com`과 사진 권한 세 개 등록도 완료했다
-- 마이그레이션 v1–v8, 코어/DB 테스트 108개와 웹 테스트 5개 통과, 양쪽 strict 타입 클린
+- 로그인 UI는 Google 계정 선택 버튼 하나다. PKCE로 반환 코드를 교환하며 사진 권한은 별도로 연결한다.
+  공유 Supabase를 쓴다는 이유로 「HeyBilly 계정 이메일/비밀번호」 입력을 만들지 말 것.
+  서버 자원 재사용과 사용자의 로그인 방식은 다르다. Ledger는 비밀번호를 직접 받지 않는다.
+- 로그인 결과 구독은 현재 상태도 즉시 전달한다. 렌더와 effect 사이에 인증이 끝나면 초기 결과를
+  놓칠 수 있다. 실제 취소 콜백에서 오류가 사라지는 문제를 재현하고 회귀 테스트로 고쳤다.
+- 마이그레이션 v1–v8, 코어/DB 테스트 108개와 웹 테스트 9개 통과, 양쪽 strict 타입 클린
 - 390px·1280px 설정 화면을 브라우저 스크린샷으로 확인했고, 별도 localhost 기록함에서 태그가 붙은
   기록의 저장·새로고침 유지·삭제를 확인했다. 이 검증은 실계정 기기 간 왕복 검증을 대신하지 않는다
 - 적대적 리뷰 여러 차례(웹앱만 114 에이전트 → 확인 31건 전건 수정)
@@ -282,9 +287,19 @@ Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger W
 1. 테스트 사용자 `village.6k@gmail.com`과 요청 범위 등록은 완료했다. 범위는
    `photoslibrary.appendonly`, `photoslibrary.readonly.appcreateddata`,
    `photoslibrary.edit.appcreateddata` 세 개다. 2025년 이후 API 규칙상 Ledger가 만든 사진만 읽는다.
-2. Ledger의 보관 → 기기 간 동기화에서 HeyBilly 계정으로 로그인하고 Google Photos를 연결한다.
+2. **Supabase Auth의 Google 공급자는 아직 꺼져 있다.** 아래 로그인 설정을 먼저 완료해야 한다.
+   - 공유 프로젝트의 기존 Site URL/다른 로그인 방식을 보존하고 Google 공급자를 추가한다.
+   - Google의 `Ledger Web` 클라이언트에 기존 Photos 콜백을 유지한 채
+     `https://tedffwpijiylklfuzkua.supabase.co/auth/v1/callback`을 추가한다.
+   - Supabase Auth → URL Configuration의 허용 반환 주소에
+     `https://village6k-cpu.github.io/bible-meditation-app/?sync=1`과 로컬 검증용
+     `http://127.0.0.1:5174/?sync=1`을 추가한다. 기존 Site URL은 `http://localhost:3000`,
+     허용 반환 주소는 비어 있는 상태를 확인했다. 공유 서버 접근 설정 변경은 사용자 확인 요청 중이다.
+   - 기존 Google client secret은 콘솔에서 다시 볼 수 없다. 기존 Photos용 secret을 없애지 말고
+     Auth용 추가 secret을 생성해 공급자 설정에 넣는다. 비밀값을 저장소·로그에 남기지 않는다.
+3. Ledger의 보관 → 기기 간 동기화에서 「Google로 연결」을 누르고 Google Photos를 별도로 연결한다.
    연결 뒤 데스크톱/390px 모바일에서 글 1건과 사진 1장을 왕복해 직접 확인한다.
-3. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
+4. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
    운영 모드·브랜딩 검증 상태를 정리하고 다시 연결해야 한다. 테스트 연결만 하고 장기 사용 준비가
    끝났다고 하지 말 것. [Google 공식 만료 규칙](https://developers.google.com/identity/protocols/oauth2#expiration)
 
@@ -301,9 +316,9 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 
 사용자 결정은 끝났다. 이미 가진 HeyBilly Supabase를 본문/계정에 재사용하고, 사진 바이트는 비용이
 커지지 않도록 Google Photos에 둔다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
-`supabase/`가 구현이다. 설정 화면은 HeyBilly 이메일/비밀번호로 로그인한다.
+`supabase/`가 구현이다. 설정 화면은 Google 계정 선택으로만 연결한다. 이메일/비밀번호 폼은 제거했다.
 
-남은 것은 위 (A)의 운영 모드 정리, PR #10의 최종 CI, 그리고 **실제 계정으로 로그인해 두 기기에서
+남은 것은 위 (A)의 Google 로그인 공급자 설정·운영 모드 정리, PR #10의 최종 CI, 그리고 **실제 계정으로 로그인해 두 기기에서
 글 1건과 사진 1장을 왕복하는 것**이다. 390px와 1280px 설정 화면은 로컬 브라우저에서 직접 확인했다.
 본문 동기화는 Supabase에 이미 적용됐지만 `main`에 웹 코드가 아직 배포되지 않았다. 실계정 왕복까지
 끝내기 전에는 “라이브 동기화 완료”라고 말하지 말 것.

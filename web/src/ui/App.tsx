@@ -113,6 +113,17 @@ export function App(): JSX.Element {
     return startAutoSync(boot.handle, bump);
   }, [boot]);
 
+  // Google에서 돌아오면 연결 결과가 있는 보관 화면으로 안내한다.
+  // 인증 코드 정리는 SDK에 맡기고, 화면 표시용 표지만 한 번 소비한다.
+  useEffect(() => {
+    if (boot.phase !== 'ready') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('sync') !== '1') return;
+    url.searchParams.delete('sync');
+    history.replaceState(history.state, '', url);
+    push({ kind: 'settings' });
+  }, [boot.phase, push]);
+
   if (boot.phase === 'opening') {
     return <div class="boot">기록함을 여는 중…</div>;
   }
