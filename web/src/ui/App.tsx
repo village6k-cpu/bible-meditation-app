@@ -170,7 +170,7 @@ export function App(): JSX.Element {
             handle={handle}
             today={today}
             onOpen={openDetail}
-            onCompose={(t) => compose(t)}
+            onCompose={(t, text) => compose(t, text)}
             onReview={() => setTab('review')}
             toast={showToast}
           />
@@ -181,6 +181,8 @@ export function App(): JSX.Element {
           <Metrics
             handle={handle}
             today={today}
+            onOpen={openDetail}
+            onCompose={(t, text) => compose(t, text)}
             onSettings={() => push({ kind: 'settings' })}
             onSources={() => push({ kind: 'sources' })}
           />

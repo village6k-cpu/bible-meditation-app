@@ -13,6 +13,10 @@ export interface TypeSpec {
   sourceKinds?: SourceKind[];
   // 링크를 붙여넣는 것이 시작인 유형 — 제목·채널·썸네일은 링크에서 알아서 온다
   linkFirst?: boolean;
+  // 실천 유형 — 식사·운동. 콘텐츠가 아니라 습관이다.
+  // 단위가 기록 하나가 아니라 하루이고, 매일 비슷한 것이 반복되며, 중요한 것은 내용이 아니라 추이다.
+  // 그래서 기록 스트림·검토 큐·회상 카드에 섞이지 않고, 날짜 × 칸의 격자로만 산다.
+  practice?: boolean;
   // 컴포저에 노출할 필드와 그 문구
   fields: {
     title?: { label: string; placeholder: string };
@@ -105,6 +109,7 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     key: 'meal',
     label: '식사',
     icon: 'restaurant-outline',
+    practice: true,
     fields: {
       slot: true,
       body: { label: '식사', placeholder: '무엇을 먹었나요' },
@@ -118,6 +123,7 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
     key: 'workout',
     label: '운동',
     icon: 'barbell-outline',
+    practice: true,
     fields: {
       title: { label: '종류', placeholder: '달리기' },
       minutes: true,
@@ -154,3 +160,10 @@ export const REGISTRY: Record<EntryType, TypeSpec> = {
 export function specOf(type: EntryType): TypeSpec {
   return REGISTRY[type];
 }
+
+// 실천 유형 목록과 그 반대(콘텐츠) — 쿼리와 화면이 흩어진 type != 'task' 대신 이것을 쓴다.
+// 하나라도 빠뜨리면 그 자리에서 식사가 밑줄 사이에 다시 새어 들어온다.
+export const PRACTICE_TYPES: EntryType[] = TYPE_ORDER.filter((t) => REGISTRY[t].practice);
+export const isPractice = (t: EntryType): boolean => !!REGISTRY[t].practice;
+// 콘텐츠 = 할 일도 실천도 아닌 것. 기록 탭·검토·회상이 다루는 범위다.
+export const CONTENT_TYPES: EntryType[] = TYPE_ORDER.filter((t) => t !== 'task' && !REGISTRY[t].practice);

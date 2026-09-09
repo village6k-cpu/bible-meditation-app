@@ -1,9 +1,9 @@
 import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { daysBetween, dayKeyOf } from '@core/dates';
-import { REGISTRY, TYPE_ORDER } from '@core/registry';
+import { CONTENT_TYPES, REGISTRY } from '@core/registry';
 import type { Entry, EntryType, SourceKind } from '@core/types';
-import { queryLibrary, tagsOf } from '@db/entryRepo';
+import { contentCount, queryLibrary, tagsOf } from '@db/entryRepo';
 import { topTags } from '@db/tagRepo';
 import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
@@ -79,10 +79,8 @@ export function Records({
         rows.map((e) => e.id)
       );
       const allTags = (await topTags(db, 20)).map((t) => t.name);
-      const total = await db.getFirstAsync<{ n: number }>(
-        "SELECT COUNT(*) AS n FROM entries WHERE deleted_at IS NULL AND type != 'task'"
-      );
-      return { rows, tags, allTags, total: total?.n ?? 0 };
+      // 식사·운동은 여기 없다 — 콘텐츠가 아니라 실천이고, 지표의 격자에서 산다
+      return { rows, tags, allTags, total: await contentCount(db) };
     },
     [f.q, f.type, f.format, f.tag, f.pinned, f.sort],
     EMPTY
@@ -125,7 +123,7 @@ export function Records({
         >
           전체
         </button>
-        {TYPE_ORDER.filter((t) => t !== 'task').map((t) => (
+        {CONTENT_TYPES.map((t) => (
           <button
             key={t}
             class={f.type === t ? 'chip on' : 'chip'}

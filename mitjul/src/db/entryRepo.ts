@@ -1,8 +1,9 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { newId } from '../core/ids';
 import { extractHashtags, normalizeTags } from '../core/tags';
-import { Entry, EntryInput, EntryType, Reaction, SourceKind, TrendRow } from '../core/types';
+import { Entry, EntryInput, EntryType, MealSlot, Reaction, SourceKind, TrendRow } from '../core/types';
 import { ResurfaceCandidate } from '../core/resurface';
+import { CONTENT_TYPES, PRACTICE_TYPES, isPractice } from '../core/registry';
 import { setEntryTags, tagsForEntries } from './tagRepo';
 
 // '%'와 '_'가 사용자 입력에 있어도 문자 그대로 찾도록
@@ -11,6 +12,10 @@ function escapeLike(text: string): string {
 }
 
 const LIVE = 'deleted_at IS NULL';
+// 콘텐츠만 — 할 일과 실천(식사·운동)을 뺀다. 기록 탭·검토·회상·기록 수 집계가 모두 이 범위다.
+// 실천은 격자로만 산다(practiceEntries). 여기에 섞이면 하루 세 끼가 1년에 천 줄로 밑줄 사이에 낀다.
+const CONTENT = `type IN (${CONTENT_TYPES.map((t) => `'${t}'`).join(', ')})`;
+const PRACTICE = `type IN (${PRACTICE_TYPES.map((t) => `'${t}'`).join(', ')})`;
 
 function collectTags(input: EntryInput): string[] {
   const inline = extractHashtags(`${input.quote ?? ''} ${input.body ?? ''}`);
@@ -21,8 +26,9 @@ export async function createEntry(db: SQLiteDatabase, input: EntryInput): Promis
   const id = newId();
   const now = Date.now();
   const tagsNow = collectTags(input);
-  // 구조가 이미 붙었으면(출처나 갈피가 있으면) 검토 큐에 올리지 않는다
-  const filed = input.source_id || tagsNow.length > 0 ? now : null;
+  // 구조가 이미 붙었으면(출처나 갈피가 있으면) 검토 큐에 올리지 않는다.
+  // 실천(식사·운동)은 애초에 정리할 것이 없다 — 갈피를 붙이라고 물을 대상이 아니다.
+  const filed = input.source_id || tagsNow.length > 0 || isPractice(input.type) ? now : null;
   await db.runAsync(
     `INSERT INTO entries (id, type, day, created_at, updated_at, filed_at, source_id, title, subtitle, quote, body,
                           url, image_uri, page, slot, minutes, practiced, done, due_time)
@@ -136,7 +142,7 @@ export interface LibraryQuery {
 }
 
 export async function queryLibrary(db: SQLiteDatabase, opts: LibraryQuery): Promise<Entry[]> {
-  const where: string[] = [LIVE, "type != 'task'"];
+  const where: string[] = [LIVE, CONTENT];
   const params: (string | number)[] = [];
 
   if (opts.type) {
@@ -248,7 +254,7 @@ export async function resurfaceCandidates(db: SQLiteDatabase, today: string): Pr
             EXISTS(SELECT 1 FROM resurfacings r WHERE r.entry_id = e.id AND r.reaction = 'skipped') as skipped,
             EXISTS(SELECT 1 FROM resurfacings r WHERE r.entry_id = e.id AND r.reaction = 'retired') as retired
      FROM entries e
-     WHERE e.${LIVE} AND e.type != 'task' AND e.day < ?`,
+     WHERE e.${LIVE} AND e.${CONTENT} AND e.day < ?`,
     [today, today]
   );
   return rows.map((r) => ({
@@ -305,7 +311,7 @@ export async function trendRows(db: SQLiteDatabase, from: string, to: string): P
             SUM(CASE WHEN type = 'meal' THEN 1 ELSE 0 END) as meal_count,
             SUM(CASE WHEN type = 'meal' AND practiced = 1 THEN 1 ELSE 0 END) as meal_practiced,
             SUM(CASE WHEN type = 'verse' THEN 1 ELSE 0 END) as verse_count,
-            SUM(CASE WHEN type != 'task' THEN 1 ELSE 0 END) as entry_count
+            SUM(CASE WHEN ${CONTENT} THEN 1 ELSE 0 END) as entry_count
      FROM entries
      WHERE day BETWEEN ? AND ? AND ${LIVE} AND type != 'task'
      GROUP BY day ORDER BY day`,
@@ -330,7 +336,7 @@ export interface MonthShelfRow {
 export async function monthShelf(db: SQLiteDatabase, from: string, to: string): Promise<MonthShelfRow[]> {
   return db.getAllAsync<MonthShelfRow>(
     `SELECT type, COUNT(*) as count FROM entries
-     WHERE day BETWEEN ? AND ? AND ${LIVE} AND type != 'task'
+     WHERE day BETWEEN ? AND ? AND ${LIVE} AND ${CONTENT}
      GROUP BY type ORDER BY count DESC`,
     [from, to]
   );
@@ -344,7 +350,7 @@ export async function unfiledCount(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM entries
      WHERE deleted_at IS NULL AND filed_at IS NULL AND source_id IS NULL
-       AND type != 'task'
+       AND ${CONTENT}
        AND id NOT IN (SELECT entry_id FROM entry_tags)`
   );
   return row?.n ?? 0;
@@ -354,7 +360,7 @@ export async function unfiledEntries(db: SQLiteDatabase, limit: number = 20): Pr
   return db.getAllAsync<Entry>(
     `SELECT * FROM entries
      WHERE deleted_at IS NULL AND filed_at IS NULL AND source_id IS NULL
-       AND type != 'task'
+       AND ${CONTENT}
        AND id NOT IN (SELECT entry_id FROM entry_tags)
      ORDER BY created_at ASC LIMIT ?`,
     [limit]
@@ -368,4 +374,39 @@ export async function markFiled(db: SQLiteDatabase, id: string): Promise<void> {
     Date.now(),
     id,
   ]);
+}
+
+// 기록 탭의 '전체 N건' — 콘텐츠만 센다
+export async function contentCount(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM entries WHERE ${LIVE} AND ${CONTENT}`
+  );
+  return row?.n ?? 0;
+}
+
+// ─── 실천 격자 ───
+// 식사·운동은 줄이 아니라 격자다. 화면이 날짜 × 칸으로 그릴 수 있게 얇은 행만 준다.
+
+export interface PracticeCell {
+  id: string;
+  type: EntryType;
+  day: string;
+  slot: MealSlot | null;
+  practiced: number | null;
+  image_uri: string | null;
+  minutes: number | null;
+  body: string | null;
+}
+
+export async function practiceEntries(
+  db: SQLiteDatabase,
+  from: string,
+  to: string
+): Promise<PracticeCell[]> {
+  return db.getAllAsync<PracticeCell>(
+    `SELECT id, type, day, slot, practiced, image_uri, minutes, body FROM entries
+     WHERE ${LIVE} AND ${PRACTICE} AND day BETWEEN ? AND ?
+     ORDER BY day DESC, created_at ASC`,
+    [from, to]
+  );
 }

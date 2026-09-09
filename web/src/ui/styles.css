@@ -796,3 +796,141 @@ ol.recipe code {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── 실천 격자 ──
+   식사·운동은 줄이 아니라 격자다. 칸은 사진이거나 점이고, 지킴은 먹, 어김은 빗금, 비움은 테두리만. */
+.pstrip {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.pstrip .pcol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+.pstrip .pcol.wk {
+  margin-left: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+.pcell {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  overflow: hidden;
+  flex: none;
+}
+.pcell.strip {
+  width: 100%;
+  aspect-ratio: 1;
+}
+.pcell.grid {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+}
+.pcell .pcell-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--sunken);
+}
+.pcell.kept .pcell-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pcell.broken .pcell-dot {
+  background: var(--soft);
+  border-color: var(--line);
+}
+.pcell .pcell-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: inherit;
+}
+/* 어김 표시 — 색이 아니라 빗금. 사진 위에도 얹힌다 */
+.pcell-x {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--ink3) 5px 6.5px);
+  opacity: 0.55;
+  border-radius: inherit;
+}
+.pcell.broken.strip .pcell-x,
+.pcell.broken.grid .pcell-x {
+  outline: 1px solid var(--ink3);
+  outline-offset: -1px;
+}
+.pcell:active {
+  transform: scale(0.96);
+}
+.pgrid {
+  padding: 6px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pgrid-head,
+.pgrid-row {
+  display: grid;
+  grid-template-columns: 58px repeat(3, 34px) 14px 34px 1fr;
+  align-items: center;
+  gap: 5px;
+}
+.pgrid-head {
+  height: 18px;
+  margin-bottom: 2px;
+}
+.pgrid-head .micro {
+  text-align: center;
+}
+.pgrid-row .dt {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink3);
+  white-space: nowrap;
+}
+.pgrid-row.today .dt {
+  color: var(--ink);
+}
+.pgrid-row .min {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink3);
+  padding-left: 4px;
+}
+.psum {
+  display: flex;
+  gap: 18px;
+  padding: 10px 16px 4px;
+}
+.psum .k {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.psum .v {
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.psum .v small {
+  font-size: 11px;
+  color: var(--ink3);
+  margin-left: 3px;
+}

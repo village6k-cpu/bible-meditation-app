@@ -2,7 +2,7 @@ import type { JSX } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { todayKey } from '@core/dates';
 import { parseCapture, type Capture, type SignalKind } from '@core/parse';
-import { REGISTRY, TYPE_ORDER, specOf } from '@core/registry';
+import { REGISTRY, TYPE_ORDER, isPractice, specOf } from '@core/registry';
 import type { EntryInput, EntryType, Source, SourceKind } from '@core/types';
 import { createEntry } from '@db/entryRepo';
 import { createSource, findSourceByUrl, recentSources, touchSource } from '@db/sourceRepo';
@@ -14,6 +14,7 @@ import { domainOf } from '@ex/linkMeta';
 import { readClipboard } from '../../platform/intake';
 import { deletePhoto, pickPhotos, savePhoto } from '../../platform/photos';
 import { Photo } from '../parts/photo';
+import { isEnter } from '../keys';
 import { Icon, PlayIcon } from '../icons';
 import { bump } from '../store';
 
@@ -174,9 +175,12 @@ export function CaptureSheet({
   }
 
   // 출처는 한 번만 등록한다. 그 '한 번'이 캡처 칸을 떠나야 할 이유가 되면 안 되므로 여기서 끝낸다.
+  // 같은 등록이 겹쳐 들어오면 뒤의 것은 버린다 — 한글 Enter 이중 발화와 연타를 여기서 한 번 더 막는다
+  const registering = useRef(false);
   async function registerSource(): Promise<void> {
     const draft = newSource;
-    if (!draft?.title.trim()) return;
+    if (!draft?.title.trim() || registering.current) return;
+    registering.current = true;
     const kind = (sourceKinds[0] ?? 'book') as SourceKind;
     try {
       const made = await createSource(db, kind, draft.title.trim(), draft.creator.trim() || null);
@@ -188,6 +192,8 @@ export function CaptureSheet({
       inputRef.current?.focus();
     } catch {
       toast('출처를 만들지 못했습니다');
+    } finally {
+      registering.current = false;
     }
   }
 
@@ -290,6 +296,12 @@ export function CaptureSheet({
       await handle.flush();
       bump();
 
+      // 실천(식사·운동)은 칸 하나를 채우면 끝이다 — 점심을 적고 나서 이어서 적을 것은 없다.
+      // 콘텐츠는 반대로 이어서 적는다: 밑줄은 한 번에 수십 개다.
+      if (isPractice(entryType)) {
+        onClose();
+        return;
+      }
       // 이어서 적는다 — 시트는 닫지 않고 칸만 비운다
       setCount((n) => n + 1);
       setText('');
@@ -469,7 +481,7 @@ export function CaptureSheet({
                             : v
                         )
                       }
-                      onKeyDown={(ev) => ev.key === 'Enter' && void registerSource()}
+                      onKeyDown={(ev) => isEnter(ev) && void registerSource()}
                     />
                     <input
                       class="field"
@@ -486,7 +498,7 @@ export function CaptureSheet({
                             : v
                         )
                       }
-                      onKeyDown={(ev) => ev.key === 'Enter' && void registerSource()}
+                      onKeyDown={(ev) => isEnter(ev) && void registerSource()}
                     />
                     <button
                       class="chip on"

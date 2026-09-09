@@ -48,7 +48,28 @@ export interface SourceExtra {
 
 // 없으면 만들고, 있으면 그것을 돌려준다 (비어 있던 저자·링크·썸네일은 이번 입력으로 채운다).
 // 링크가 있으면 링크로만 찾는다 — 제목이 같아도(제목을 못 얻어 'YouTube · id'로 남긴 두 영상) 다른 영상이다.
+//
+// 같은 출처를 만드는 호출이 겹치면 하나로 합친다. '찾기'와 '넣기' 사이에 await가 있어서, 겹친 두 호출은
+// 둘 다 '없다'를 보고 둘 다 넣는다 — 한글 Enter가 두 번 오는 것만으로 같은 책이 둘 생겼다.
+// 화면도 막지만, 저장소가 스스로 지키는 것이 맞다. 키는 링크가 있으면 링크, 없으면 종류+제목이다.
+const inflight = new Map<string, Promise<Source>>();
+
 export async function createSource(
+  db: SQLiteDatabase,
+  kind: SourceKind,
+  title: string,
+  creator: string | null,
+  extra: SourceExtra = {}
+): Promise<Source> {
+  const key = `${extra.url ?? ''}|${extra.url ? '' : kind}|${extra.url ? '' : title.trim()}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const p = createSourceOnce(db, kind, title, creator, extra).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function createSourceOnce(
   db: SQLiteDatabase,
   kind: SourceKind,
   title: string,
