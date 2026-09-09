@@ -10,9 +10,10 @@ import { CaptureSheet } from './sheets/Capture';
 import { DetailSheet } from './sheets/Detail';
 import { SettingsSheet } from './sheets/Settings';
 import { SourcesSheet } from './sheets/Sources';
-import { useBoot, useToast, useToday } from './store';
+import { bump, useBoot, useToast, useToday } from './store';
 import { canIntakeSafely, consumeFromUrl, peekFromUrl, writeClipboard } from '../platform/intake';
 import { requestPersistence } from '../platform/install';
+import { startAutoSync } from '../sync';
 
 type Tab = 'inbox' | 'records' | 'review' | 'metrics';
 
@@ -103,6 +104,13 @@ export function App(): JSX.Element {
     };
     document.addEventListener('visibilitychange', flush);
     return () => document.removeEventListener('visibilitychange', flush);
+  }, [boot]);
+
+  // 계정이 연결돼 있으면 열 때·온라인 복귀 때·30초마다 조용히 맞춘다.
+  // 원격 변경을 받은 뒤에는 SQLite를 다시 읽어 화면도 같은 상태로 만든다.
+  useEffect(() => {
+    if (boot.phase !== 'ready') return;
+    return startAutoSync(boot.handle, bump);
   }, [boot]);
 
   if (boot.phase === 'opening') {

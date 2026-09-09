@@ -5,3 +5,4 @@ web-build/
 expo-env.d.ts
 .DS_Store
 *.log
+supabase/.temp/

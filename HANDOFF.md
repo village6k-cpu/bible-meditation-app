@@ -4,7 +4,7 @@
 
 - 저장소: `village6k-cpu/bible-meditation-app`
 - 작업 브랜치: `claude/personal-daily-log-app-raeet6` (**이 브랜치에만** 커밋·푸시할 것)
-- PR: [#1](https://github.com/village6k-cpu/bible-meditation-app/pull/1) — draft, `mergeable_state: clean`, CI 없음
+- 현재 작업: 기기 간 동기화 구현. 새 PR을 만들어 검증 뒤 `main`에 합칠 것.
 - 이 저장소에는 원래 다른 앱(성경 묵상 앱)이 있다. 그 코드는 `main`과 동일하게 두고 건드리지 않는다.
   Ledger는 `mitjul/`과 `web/` 두 디렉터리에만 있다.
 - 앱 이름은 **Ledger**다. 다만 코드와 UI 문구의 「밑줄」은 대부분 *책에 긋는 하이라이트*라는
@@ -55,27 +55,32 @@ mitjul/          Expo SDK 54 네이티브 앱 (남겨둔 것. 주력 아님)
   src/db/        SQLite 리포지토리 — expo-sqlite 메서드 5개만 쓴다      ← 웹과 공유
   src/export/    마크다운 내보내기
   app/           expo-router 화면
-  tests/         node:test 유닛 테스트 (73개)
+  tests/         node:test 유닛 테스트 (102개)
 
 web/             Vite 7 + Preact 10 웹앱 (주력)
   src/db/        worker.ts(SQLite 워커) · sqlite.ts(expo-sqlite 인터페이스 구현) · index.ts
   src/platform/  photos · backup · install · intake · viewport
   src/export/    obsidian · photos
+  src/sync/      Supabase 본문 동기화 · Google Photos 연결/전송
   src/ui/        App.tsx(뷰 스택) · screens/ · sheets/ · parts/
   public/sw.js   서비스 워커 (빌드 시 프리캐시 목록이 주입된다)
   selftest.html  실기기에서 마이그레이션·검색·트랜잭션·백업이 도는지 확인하는 페이지
+
+supabase/
+  migrations/    사용자별 동기화 표 · 잠긴 Google OAuth/앨범 표
+  functions/     ledger-photos Edge Function
 ```
 
 `web/tsconfig.json`의 경로 별칭: `@core` → `../mitjul/src/core`, `@db` → `../mitjul/src/db`,
-`@ex` → `../mitjul/src/export`. **웹이 공유 코어를 그대로 가져다 쓴다.** 마이그레이션 v1–v6과
+`@ex` → `../mitjul/src/export`. **웹이 공유 코어를 그대로 가져다 쓴다.** 마이그레이션 v1–v7과
 리포지토리 전부가 한 줄도 안 고치고 브라우저에서 돈다.
 
 ### 명령
 
 ```bash
 cd web    && npm install && npm run dev        # 웹 개발 서버
-cd web    && npm run build                     # tsc --noEmit + vite build
-cd mitjul && npm install && npm test           # 공유 코어 테스트 73개
+cd web    && npm test && npm run build          # 웹 어댑터 테스트 + tsc + Vite
+cd mitjul && npm install && npm test           # 공유 코어/DB 테스트 102개
 cd mitjul && npm run typecheck                 # 네이티브 타입 검사
 ```
 
@@ -182,6 +187,12 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 - 사진 선택기는 **취소와 조용한 실패를 구분할 수 없다**. WebKit 318572(미해결): 선택기가 '준비 중'
   단계에서 만든 임시 파일이 영구히 남아, 기기 여유 공간이 바닥나면 `change` 대신 `cancel`을 쏜다.
   그래서 `Capture.tsx`가 연속 빈손 횟수를 세서 두 번째에 사용자에게 알린다.
+- 동기화에서는 사진 바이트를 Supabase Storage에 넣지 않는다. 축소된 JPEG를 Google Photos의 월별
+  `Ledger YYYY-MM` 앨범에 두고, SQLite/Supabase에는 `mediaItemId`와 앨범 ID만 둔다.
+- Google Photos `baseUrl`은 만료되므로 저장하지 않는다. 다른 기기는 안정적인 `mediaItemId`로 Edge
+  Function에 요청해 OPFS 캐시를 다시 만든다.
+- 사용자가 확정한 삭제 의미: Ledger에서 사진을 빼면 로컬 표시와 동기화 연결만 지우고,
+  **Google Photos 원본은 남긴다.** 앱이 사진 보관함 전체의 삭제 권한을 갖지 않게 한 선택이다.
 
 ### iOS 규칙 (조사로 확인된 것들)
 
@@ -225,45 +236,77 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 - 옵시디언 마크다운 내보내기(주/월/전체)
 - PWA: 서비스 워커 프리캐시(빌드 시 asset 목록 + sha256 빌드 ID 주입), 설치 안내, 아이콘은 코드로 생성
 - `.github/workflows/deploy-web.yml` — `main`의 `web/`·`mitjul/src/` 변경에 반응해 Pages로 배포
-- 마이그레이션 v1–v6, 유닛 테스트 73개 통과, 양쪽 strict 타입 클린
+- 기기 간 본문 동기화: HeyBilly와 같은 Supabase Auth, 사용자별 RLS 변경 로그, OPFS 로컬 우선,
+  앱 열기·온라인 복귀·화면 복귀·30초 주기 자동 맞춤. 첫 연결 전 로컬 기록도 전부 올린다
+- 충돌은 행 단위 마지막 서버 반영 우선이다. 아직 보내지 않은 로컬 변경은 수신 값으로 덮지 않고,
+  참조 데이터 순서와 500건 페이지 경계도 처리한다. 다른 계정에 같은 로컬 기록함을 섞지 않는다
+- 사진 동기화 큐: 실패해도 기록은 남고 최대 5번 재시도한다. Google Photos에는 월별 앨범으로 올리고
+  다른 기기의 OPFS 캐시를 내려받아 만든다
+- Supabase `village-ai`(`tedffwpijiylklfuzkua`)에 Ledger 표 마이그레이션 3개와
+  `ledger-photos` Edge Function v1이 적용됐다. 본문 표는 RLS 사용자별 4개 정책, 토큰 표는
+  `anon`/`authenticated` 권한 없음 + service role 전용이다
+- Supabase 대시보드에는 조직의 사용량 유예 기간이 끝났고 할당량 소진 시 서비스가 멈춘다는 경고가
+  떠 있다. Ledger 코드와 별개인 운영 위험이므로 배포 전에 결제/사용량을 확인할 것
+- 보안 Advisor의 기존 경고 중 `public.notice_cleanup_work_sources_v2`는 Ledger와 무관한 표지만 RLS가
+  꺼져 있다. 기존 호출자를 확인하지 않고 자동 수정하지 않았다. 비공개 표라면
+  `ALTER TABLE public.notice_cleanup_work_sources_v2 ENABLE ROW LEVEL SECURITY;` 뒤 필요한 정책을 만들 것
+- 전용 Google Cloud 프로젝트 `ledger-village6k-2026`에 Ledger OAuth 앱과 `Ledger Web` 클라이언트를
+  만들고 Google Photos Library API를 활성화했다. Supabase의 OAuth client ID/secret도 이 전용
+  자격증명으로 교체했다
+- 마이그레이션 v1–v7, 코어/DB 테스트 102개와 웹 동기화 테스트 4개 통과, 양쪽 strict 타입 클린
 - 적대적 리뷰 여러 차례(웹앱만 114 에이전트 → 확인 31건 전건 수정)
 
 ---
 
 ## 5. 남은 일
 
-### (A) 사용자가 해야 하는 것 — 전부 끝났다
+### (A) 배포 전에 한 번 해야 하는 Google 설정
 
-Pages 설정, PR 머지, 홈 화면 추가 모두 완료. 배포는
+Pages 설정과 홈 화면 추가는 완료됐다. 앱은
 https://village6k-cpu.github.io/bible-meditation-app/ 에서 돌고 있고, `main`에 푸시하면 자동 배포된다.
+
+Google Cloud 콘솔 계정은 `village.6k@gmail.com`, 전용 프로젝트는 `ledger-village6k-2026`다.
+Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger Web`은 만들었고 Supabase의
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_STATE_SECRET`,
+`GOOGLE_TOKEN_ENCRYPTION_KEY`도 설정했다. 승인된 리디렉션 URI는 다음과 같다.
+   `https://tedffwpijiylklfuzkua.supabase.co/functions/v1/ledger-photos?callback=1`
+
+배포 전에 남은 설정과 검증:
+
+1. 동의 화면이 테스트 모드이므로 사용할 Google 계정을 테스트 사용자로 넣는다. 요청 범위는
+   `photoslibrary.appendonly`, `photoslibrary.readonly.appcreateddata`,
+   `photoslibrary.edit.appcreateddata` 세 개다. 2025년 이후 API 규칙상 Ledger가 만든 사진만 읽는다.
+2. Ledger의 보관 → 기기 간 동기화에서 HeyBilly 계정으로 로그인하고 Google Photos를 연결한다.
+   연결 뒤 데스크톱/390px 모바일에서 글 1건과 사진 1장을 왕복해 직접 확인한다.
+
+기존 `savvy-range-417607`은 `book-ocr` OAuth 브랜딩을 쓰므로 건드리지 않았다. 그 프로젝트에 처음
+잘못 만든 미사용 `Ledger` 웹 클라이언트 하나가 남아 있다. 삭제는 별도 승인 뒤 할 것.
+
+OAuth 콜백은 JWT가 없으므로 Edge Function의 플랫폼 `verify_jwt=false`가 의도된 값이다. 대신 콜백은
+10분짜리 HMAC state를 검증하고, 나머지 모든 동작은 함수 안에서 Supabase bearer 사용자 인증을 한다.
+refresh token은 AES-GCM 암호문으로만 저장한다.
 
 ### (B) 코드로 남은 것
 
-#### B-1. 기기 간 동기화 — 지금 제일 큰 것, 사용자의 결정이 필요하다
+#### B-1. 기기 간 동기화 — 구현 완료, 설정·실기기 검증 남음
 
-**기록은 서버에 없다. 그 브라우저 안(OPFS)에만 있다.** 동기화 코드는 저장소 전체에 없다.
+사용자 결정은 끝났다. 이미 가진 HeyBilly Supabase를 본문/계정에 재사용하고, 사진 바이트는 비용이
+커지지 않도록 Google Photos에 둔다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
+`supabase/`가 구현이다. 설정 화면은 HeyBilly 이메일/비밀번호로 로그인한다.
 
-```
-데스크톱 크롬   ─ 저장소 A
-아이폰 사파리   ─ 저장소 B
-아이폰 홈화면앱 ─ 저장소 C   ← 사파리와도 다른 통이다 (WebKit의 설계)
-```
+남은 것은 위 (A)의 테스트 사용자/범위 설정, 새 PR CI, 그리고 **실제 계정으로 로그인해 두 기기에서
+글 1건과 사진 1장을 왕복하는 것**이다. 390px와 1280px 설정 화면은 로컬 브라우저에서 직접 확인했다.
+본문 동기화는 Supabase에 이미 적용됐지만 `main`에 웹 코드가 아직 배포되지 않았다. 실계정 왕복까지
+끝내기 전에는 “라이브 동기화 완료”라고 말하지 말 것.
 
-사용자가 데스크톱에서 한참 적은 뒤 폰에서 안 보인다고 했다. 버그가 아니라 구조인데,
-**그 구조를 사용자가 부딪히기 전에 분명히 짚지 않은 것이 잘못이었다.** 지금 수동 우회로는
-보관 → 백업으로 `.sqlite3`를 받아 옮기고 반대편에서 되돌리기뿐이다.
+중요한 의미론:
 
-사용자에게 세 갈래를 제시했고 답을 아직 못 받았다. **먼저 물어볼 것:**
-
-1. **클라우드 드라이브에 백업 자동 저장** — 서버 없음. iCloud Drive는 웹에서 프로그램으로 못 쓰므로
-   실질적으로 Google Drive OAuth. 오늘 안에 되지만 자동은 반쪽이고(사용자 조작 필요),
-   충돌 해결이 없다(마지막에 올린 것이 이긴다).
-2. **작은 동기화 서버** — Cloudflare D1 / Turso 등. 진짜로 어디서나 같은 기록이 된다. 대신
-   "서버도 계정도 없다"는 지금 설계를 버리는 것이고, SQLite 파일 통째 교환이 아니라
-   행 단위 동기화(변경 로그 + 마지막 쓰기 승리 또는 CRDT)를 새로 설계해야 한다. 규모가 크다.
-3. **폰만 쓰고 데스크톱은 보기용** — 원래 전제. 사용자가 실제로 데스크톱에서 썼으므로 아마 아니다.
-
-어느 쪽이든 **사진(`photos/`)은 DB 밖 OPFS 파일**이라 별도로 다뤄야 한다는 것을 잊지 말 것.
+- OPFS가 로컬 원본이고 서버는 행 단위 변경 로그다. 설정(`settings`)과 사진 작업 큐는 기기 전용이다.
+- 서버는 `(owner_id, entity_type, entity_id)`당 최신 상태 한 줄을 보관한다. 삭제도 tombstone으로 남긴다.
+- 전송은 부모(`sources`, `tags`)부터, 삭제는 자식부터다. 이 순서를 시각 순으로 되돌리면 첫 대량
+  동기화가 페이지 경계에서 FK 오류로 멈춘다.
+- Google Photos 업로드는 Google 계정 저장용량에 포함된다. 과거의 “무제한” 전제를 UI나 문서에 쓰지 말 것.
+- Ledger에서 사진 연결을 지워도 Google Photos 원본은 남긴다. 사용자가 명시적으로 고른 규칙이다.
 
 #### B-2. 그 외 — 요청받은 적 없고 만든 적도 없는 것들
 
@@ -287,4 +330,5 @@ https://village6k-cpu.github.io/bible-meditation-app/ 에서 돌고 있고, `mai
 - 이 저장소에는 Codex PR 리뷰 봇이 붙어 있다(draft를 ready로 바꾸거나 PR을 열면 자동으로 돈다).
 - 커밋 메시지·PR 본문·코드 주석 등 **저장소에 들어가는 어떤 산출물에도 AI 모델 이름을 넣지 않는다.**
 - 코드 주석은 한국어로, "무엇을"이 아니라 "왜"를 적는다 — 기존 주석 톤을 그대로 따를 것.
-- 푸시 전에 반드시: `cd web && npm run build` 와 `cd mitjul && npm test && npm run typecheck`.
+- 푸시 전에 반드시: `cd web && npm test && npm run build` 와
+  `cd mitjul && npm test && npm run typecheck`.
