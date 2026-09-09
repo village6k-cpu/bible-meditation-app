@@ -294,15 +294,27 @@ Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger W
    - Google `Ledger Web`에는 기존 Photos 콜백과 로그인 콜백을 함께 등록했다.
    - Supabase Auth → URL Configuration의 허용 반환 주소에
      `https://village6k-cpu.github.io/bible-meditation-app/?sync=1`과 로컬 검증용
-     `http://127.0.0.1:5174/?sync=1`을 추가했다. 기존 Site URL `http://localhost:3000`은 변경하지 않았다.
+     `http://127.0.0.1:5174/?sync=1`을 추가했다. 독립 저장소 검증용
+     `http://localhost:5174/?sync=1`도 등록했다. 기존 Site URL `http://localhost:3000`은 변경하지 않았다.
    - 기존 Photos용 secret을 보존하고 같은 클라이언트의 추가 secret을 Auth 공급자에 넣었다.
      현재 secret 두 개는 각각 Photos와 Auth에서 사용한다. 하나를 없애면 해당 연결이 끊어진다.
      비밀값은 저장소·로그에 남기지 않는다.
    - 기본 계정 범위 `openid`, `userinfo.email`, `userinfo.profile`도 등록했다.
-   - 실제 로컬 Ledger 버튼 → Google 계정 선택 화면까지 확인했다. 여기에는 저장 서버 주소
-     `tedffwpijiylklfuzkua.supabase.co`가 표시된다. 여러 계정 중 사용할 계정은 사용자 선택을 기다린다.
+   - 사용자가 `village.6k@gmail.com` 사용을 승인했다. 두 로컬 origin 모두 Google 로그인 완료 후
+     Ledger에 같은 계정과 동기화 시각이 표시된다. Google에는 저장 서버 주소
+     `tedffwpijiylklfuzkua.supabase.co`가 표시된다.
 3. Ledger의 보관 → 기기 간 동기화에서 「Google로 연결」을 누르고 Google Photos를 별도로 연결한다.
    연결 뒤 데스크톱/390px 모바일에서 글 1건과 사진 1장을 왕복해 직접 확인한다.
+   - 본문 검증 진행: `127.0.0.1:5174`와 `localhost:5174`는 Chrome 안에서도 OPFS와 로그인 저장소가
+     분리된다. A에서 쓴 「렛저 동기화 검증 A」와 `#동기화검증`이 서버(revision 7)를 거쳐 B 화면에
+     나타났고, A 새로고침 후에도 남는다. B에서 쓴 「렛저 동기화 검증 B」도 서버(revision 9)에 저장됐다.
+     B→A 최종 화면 확인은 아직 남았다. 실제 폰에서 검증한 것은 아니다.
+   - 위 검증용 기록 두 건은 남아 있다. 기존 개인 기록은 수정하거나 삭제하지 않았다.
+   - Google Photos의 추가 동의는 자동 안전 검사에 막혀 사용자 확인을 요청했다. 요청 범위는
+     사진 추가 및 앱이 만든 사진 조회·정보 수정이며, 기존 라이브러리 전체 조회는 아니다.
+     브라우저 파일 첨부 API도 `Not allowed`를 반환해 테스트 이미지 첨부·업로드는 하지 못했다.
+   - 마지막 브라우저 중단: Chrome이 열린 확장 프로그램 UI 때문에 자동 조작을 차단했다.
+     사용자가 팝업을 닫은 뒤에만 이어갈 것. 도구 제한을 우회해서 인증이나 첨부를 수행하지 않는다.
 4. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
    운영 모드·브랜딩 검증 상태를 정리하고 다시 연결해야 한다. 테스트 연결만 하고 장기 사용 준비가
    끝났다고 하지 말 것. [Google 공식 만료 규칙](https://developers.google.com/identity/protocols/oauth2#expiration)
