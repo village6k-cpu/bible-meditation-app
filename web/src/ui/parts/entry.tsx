@@ -20,9 +20,7 @@ export function srcLine(e: Entry): string {
     case 'link':
       return [e.title, e.subtitle].filter(Boolean).join(' · ');
     case 'workout':
-      return [e.title, e.minutes ? `${e.minutes}분` : null, broke(e)]
-        .filter(Boolean)
-        .join(' · ');
+      return [e.title, e.minutes ? `${e.minutes}분` : null, broke(e)].filter(Boolean).join(' · ');
     case 'meal':
       return [e.slot ? MEAL_SLOT_LABELS[e.slot] : '식사', broke(e)].filter(Boolean).join(' · ');
     case 'verse':

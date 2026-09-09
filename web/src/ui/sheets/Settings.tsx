@@ -243,16 +243,16 @@ export function SettingsSheet({
             <div style="padding:12px 16px 20px">
               <div class="cap">
                 아이폰에서는 공유 시트가 웹앱을 직접 열 수 없습니다(웹 공유 대상 API가 WebKit에
-                없습니다). 대신 단축어가 클립보드에 담고, 밑줄에서 붙여넣기를 한 번 누릅니다.
+                없습니다). 대신 단축어가 클립보드에 담고, Ledger에서 붙여넣기를 한 번 누릅니다.
               </div>
               <ol class="recipe">
-                <li>단축어 앱 → 새 단축어 → 이름 ‘밑줄에 담기’</li>
+                <li>단축어 앱 → 새 단축어 → 이름 ‘Ledger에 담기’</li>
                 <li>
                   동작 <code>클립보드에 복사</code> 하나만 넣고, 입력은 <code>단축어 입력</code>으로
                   둡니다
                 </li>
                 <li>세부사항에서 ‘공유 시트에 표시’를 켜고, 종류는 URL·텍스트만 남깁니다</li>
-                <li>유튜브·사파리에서 공유 → ‘밑줄에 담기’ → 홈 화면의 밑줄을 열어 붙여넣기</li>
+                <li>유튜브·사파리에서 공유 → ‘Ledger에 담기’ → 홈 화면의 Ledger를 열어 붙여넣기</li>
               </ol>
               <div class="cap dim" style="margin-top:10px">
                 단축어가 주소를 여는 방식(<code>?add=</code>)도 동작하지만, 그 주소는 Safari에서

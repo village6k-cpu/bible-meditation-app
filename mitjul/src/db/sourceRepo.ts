@@ -149,6 +149,23 @@ async function propagateThumbnail(
 // 같은 링크나 제목의 살아 있는 출처가 이미 있으면 그쪽으로 합친다 (오타를 고쳐 원래 책과 만나는 경우):
 // 밑줄은 그 출처로 옮기고, 이 출처는 조용히 내린다. 돌려주는 값이 앞으로 쓸 출처다.
 // thumbnail: undefined면 그대로, null이면 지운다, 문자열이면 바꾼다 (링크가 바뀔 때만 넘긴다)
+// 이름을 고쳤을 때 '합쳐질 상대'. 화면이 미리 물어보려면 renameSource와 같은 규칙을 봐야 하므로
+// 조건을 여기 한 군데에만 둔다. 없으면 null — 그때만 조용히 고쳐도 안전하다.
+//
+// 규칙에 눈먼 구간이 하나 있다: 링크를 가진 출처는 첫 항에서 자기 자신을 찾아 `||`가 단락되므로
+// 제목이 겹쳐도 상대를 못 만난다. 그래서 '합치기'를 따로 두었다 — 그쪽은 사용자가 상대를 지목한다.
+export async function findMergeTarget(
+  db: SQLiteDatabase,
+  id: string,
+  kind: SourceKind,
+  title: string,
+  url: string | null
+): Promise<Source | null> {
+  const found =
+    (url && (await findSourceByUrl(db, url))) || (await findSource(db, [kind], title.trim()));
+  return found && found.id !== id ? found : null;
+}
+
 export async function renameSource(
   db: SQLiteDatabase,
   id: string,
@@ -161,10 +178,9 @@ export async function renameSource(
   if (!before) throw new Error('source not found');
   const t = title.trim();
   const now = Date.now();
-  const target =
-    (url && (await findSourceByUrl(db, url))) || (await findSource(db, [before.kind], t));
+  const target = await findMergeTarget(db, id, before.kind, t, url);
 
-  if (target && target.id !== id) {
+  if (target) {
     const merged: Source = {
       ...target,
       creator: target.creator ?? creator,
@@ -210,7 +226,96 @@ export async function renameSource(
   return { ...before, title: t, creator, url, thumbnail_uri: nextThumb };
 }
 
-// 출처만 조용히 내린다 — 밑줄은 복사된 제목을 지닌 채 그대로 남는다
+// 출처를 내리고, 매달려 있던 밑줄은 출처에서 떼어 낸다.
+//
+// 떼어 내지 않으면 기록이 죽은 출처를 가리킨 채 남는데, 그러면 목록과 상세에는 그대로 보이면서
+// 형식(책·영상·글) 필터에서만 조용히 사라진다. 그 필터가 살아 있는 출처를 거쳐 kind를 얻기
+// 때문이다(entryRepo의 sourceKind 조건). 있는데 안 보이는 것이 가장 나쁜 상태다.
+//
+// 그래서 source_id를 비운다. 비면 그 기록은 검토 탭의 줄로 돌아온다 — 출처가 사라진 기록을
+// 어디에 둘지는 사람이 정하는 게 맞고, 이 앱은 이미 그 리듬을 갖고 있다.
+// 복사돼 있던 제목·저자는 지우지 않는다. 출처를 잃었다고 무엇을 읽었는지까지 잃을 이유는 없다.
 export async function deleteSource(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync('UPDATE sources SET deleted_at = ? WHERE id = ?', [Date.now(), id]);
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    // filed_at도 함께 지운다. createEntry는 출처가 있으면 '구조가 붙었다'고 보고 이 칸을 찍어
+    // 검토 큐에서 빼는데(entryRepo의 규칙), 출처만 떼고 이 칸을 남기면 그 기록은 출처도 없고
+    // 검토에도 안 뜨는 미아가 된다. 갈피가 붙어 있으면 그것이 구조이므로 찍힌 채로 둔다 —
+    // 큐에 올릴지 말지의 기준을 createEntry와 똑같이 맞춘다.
+    await db.runAsync(
+      `UPDATE entries
+          SET source_id = NULL,
+              filed_at = CASE WHEN id IN (SELECT entry_id FROM entry_tags) THEN filed_at ELSE NULL END,
+              updated_at = ?
+        WHERE source_id = ? AND deleted_at IS NULL`,
+      [now, id]
+    );
+    // 지운 기록은 참조만 끊는다 — 얼굴을 다시 찍을 이유가 없다
+    await db.runAsync('UPDATE entries SET source_id = NULL WHERE source_id = ?', [id]);
+    await db.runAsync('UPDATE sources SET deleted_at = ? WHERE id = ?', [now, id]);
+  });
+}
+
+// === 출처 관리 ===
+// 화면이 출처를 손보려면 두 가지가 더 필요하다: 이 출처에 밑줄이 몇 개나 매달렸는지, 그리고 합치기.
+
+export interface SourceWithCount extends Source {
+  entry_count: number;
+}
+
+// 살아 있는 출처 전부 + 각 출처에 매달린 살아 있는 기록 수.
+// 개수를 함께 주는 이유는 하나다 — 지우거나 합치기 전에 무엇이 얼마나 움직이는지 보여줘야 하기 때문이다.
+export async function allSources(db: SQLiteDatabase): Promise<SourceWithCount[]> {
+  return db.getAllAsync<SourceWithCount>(
+    `SELECT s.*, (SELECT COUNT(*) FROM entries e
+                  WHERE e.source_id = s.id AND e.deleted_at IS NULL) AS entry_count
+     FROM sources s WHERE s.deleted_at IS NULL
+     ORDER BY s.last_used_at DESC`
+  );
+}
+
+// 출처 둘을 합친다. from은 내려가고 to가 남는다 — 돌려주는 값이 앞으로 쓸 출처다.
+//
+// renameSource도 안에서 같은 일을 하지만 그쪽은 이름을 고치다가 '어쩌다' 합쳐지는 길이다.
+// 그 길은 사용자가 친 제목을 조용히 버리기까지 한다(살아남는 쪽 제목이 이긴다).
+// 그래서 합치기를 이렇게 따로 꺼내 둔다. 사용자가 상대를 지목하고, 무엇이 움직이는지 보고 누른다.
+export async function mergeSources(
+  db: SQLiteDatabase,
+  fromId: string,
+  toId: string
+): Promise<Source> {
+  if (fromId === toId) throw new Error('같은 출처끼리는 합칠 수 없습니다.');
+  const from = await getSource(db, fromId);
+  const to = await getSource(db, toId);
+  if (!from || !to) throw new Error('출처를 찾지 못했습니다.');
+
+  const now = Date.now();
+  // 남는 쪽이 이긴다. 비어 있던 칸만 사라지는 쪽에서 채워 온다.
+  const merged: Source = {
+    ...to,
+    creator: to.creator ?? from.creator,
+    url: to.url ?? from.url,
+    thumbnail_uri: to.thumbnail_uri ?? from.thumbnail_uri,
+    last_used_at: now,
+  };
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ? WHERE id = ?',
+      [merged.creator, merged.url, merged.thumbnail_uri, now, to.id]
+    );
+    // 지운 기록까지 함께 옮긴다 — 죽은 출처를 가리키는 참조를 남기지 않는다.
+    await db.runAsync('UPDATE entries SET source_id = ? WHERE source_id = ?', [to.id, from.id]);
+    // 얼굴(제목·저자)은 살아 있는 기록에만 새로 찍는다
+    await db.runAsync(
+      'UPDATE entries SET title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
+      [merged.title, merged.creator, now, to.id]
+    );
+    if (merged.url) await propagateUrl(db, to.id, from.url, merged.url);
+    if (merged.thumbnail_uri && merged.thumbnail_uri !== from.thumbnail_uri) {
+      await propagateThumbnail(db, to.id, from.thumbnail_uri, merged.thumbnail_uri);
+    }
+    await db.runAsync('UPDATE sources SET deleted_at = ? WHERE id = ?', [now, from.id]);
+  });
+  return merged;
 }

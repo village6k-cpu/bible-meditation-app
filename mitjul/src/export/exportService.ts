@@ -9,12 +9,12 @@ export type ExportRange = 'week' | 'month' | 'all';
 function rangeBounds(range: ExportRange): { from: string; to: string; name: string } {
   const today = todayKey();
   if (range === 'week') {
-    return { from: mondayOf(today), to: today, name: `밑줄-${today}-주간` };
+    return { from: mondayOf(today), to: today, name: `ledger-${today}-주간` };
   }
   if (range === 'month') {
-    return { from: `${today.slice(0, 7)}-01`, to: today, name: `밑줄-${today.slice(0, 7)}` };
+    return { from: `${today.slice(0, 7)}-01`, to: today, name: `ledger-${today.slice(0, 7)}` };
   }
-  return { from: '1970-01-01', to: today, name: '밑줄-전체' };
+  return { from: '1970-01-01', to: today, name: 'ledger-전체' };
 }
 
 export async function exportRange(
