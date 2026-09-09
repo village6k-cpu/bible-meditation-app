@@ -1,0 +1,121 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { MIGRATIONS, migrate } from '../src/db/migrations';
+import { FakeDb, schemaUpTo } from './sqliteShim';
+
+type AnyDb = Parameters<typeof migrate>[0];
+
+function insertEntry(db: FakeDb, e: Record<string, unknown>) {
+  const cols = Object.keys(e);
+  return db.runAsync(
+    `INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+    cols.map((c) => e[c])
+  );
+}
+
+test('빈 DB — 끝 버전까지 올라가고 표가 다 있다', async () => {
+  const db = new FakeDb();
+  await migrate(db as unknown as AnyDb);
+  const v = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  assert.equal(v?.user_version, MIGRATIONS[MIGRATIONS.length - 1].version);
+  const cols = (await db.getAllAsync<{ name: string }>('PRAGMA table_info(sources)')).map((c) => c.name);
+  assert.ok(cols.includes('url') && cols.includes('thumbnail_uri'));
+});
+
+test('v2 DB — 출처 없이 남긴 책·영상 기록을 제목별 출처로 잇고, 있던 출처는 재사용한다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 2, MIGRATIONS);
+  const base = { day: '2026-08-01', updated_at: 0, pinned: 0, revisit_count: 0 };
+  await insertEntry(db, { ...base, id: 'e1', type: 'book', created_at: 100, title: '모모', subtitle: '미하엘 엔데', quote: 'q1' });
+  await insertEntry(db, { ...base, id: 'e2', type: 'book', created_at: 200, title: '모모', subtitle: '미하엘 엔데', quote: 'q2' });
+  await insertEntry(db, { ...base, id: 'e3', type: 'book', created_at: 300, title: '모모', deleted_at: 300, quote: 'q3' });
+  await insertEntry(db, { ...base, id: 'e4', type: 'book', created_at: 400, quote: 'q4' }); // 제목 없음
+  await insertEntry(db, { ...base, id: 'e7', type: 'book', created_at: 700, title: '데미안', subtitle: '헤세', quote: 'q7' });
+  await insertEntry(db, { ...base, id: 'e8', type: 'moment', created_at: 800, title: '제목 있는 순간', body: 'b' });
+  await db.runAsync(
+    "INSERT INTO sources (id,kind,title,creator,created_at,last_used_at,last_tags) VALUES ('s-demian','book','데미안','헤세',50,50,'소설')"
+  );
+  await migrate(db as unknown as AnyDb);
+
+  const sources = await db.getAllAsync<{ id: string; title: string; creator: string | null }>(
+    'SELECT id, title, creator FROM sources WHERE deleted_at IS NULL ORDER BY title'
+  );
+  assert.deepEqual(sources.map((s) => s.title), ['데미안', '모모']);
+  assert.equal(sources.find((s) => s.title === '모모')?.creator, '미하엘 엔데');
+  const momo = await db.getAllAsync<{ source_id: string | null }>("SELECT source_id FROM entries WHERE title='모모'");
+  assert.equal(new Set(momo.map((r) => r.source_id)).size, 1);
+  assert.equal((await db.getFirstAsync<{ source_id: string }>("SELECT source_id FROM entries WHERE id='e7'"))?.source_id, 's-demian');
+  for (const id of ['e4', 'e8']) {
+    assert.equal((await db.getFirstAsync<{ source_id: string | null }>(`SELECT source_id FROM entries WHERE id='${id}'`))?.source_id, null);
+  }
+});
+
+test('v2 DB — 영상 출처의 링크는 살아 있는 메모에서 오고, 지워진 메모의 링크는 바로잡힌다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 2, MIGRATIONS);
+  const base = { day: '2026-08-01', updated_at: 0, pinned: 0, revisit_count: 0, type: 'video', title: 'Vid V' };
+  await insertEntry(db, { ...base, id: 'v1', created_at: 100, url: 'https://youtu.be/aaaaaaaaaaa', body: 'a' });
+  await insertEntry(db, { ...base, id: 'v2', created_at: 200, url: 'https://youtu.be/bbbbbbbbbbb', body: 'b' });
+  await insertEntry(db, { ...base, id: 'v3', created_at: 300, url: 'https://youtu.be/ccccccccccc', body: 'deleted', deleted_at: 300 });
+  await migrate(db as unknown as AnyDb);
+  const src = await db.getFirstAsync<{ url: string }>("SELECT url FROM sources WHERE kind='video'");
+  // 지워진 메모(c)가 아니라 살아 있는 최신 메모(b)의 링크, 그것도 정규형으로
+  assert.equal(src?.url, 'https://www.youtube.com/watch?v=bbbbbbbbbbb');
+});
+
+test('v4 DB — 원본 링크로 저장된 영상 출처는 정규형이 되고, 같은 영상은 최근 것에 합쳐진다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 4, MIGRATIONS);
+  await db.runAsync(
+    "INSERT INTO sources (id,kind,title,creator,url,created_at,last_used_at,last_tags) VALUES ('s-old','video','강연','채널','https://www.youtube.com/watch?v=dQw4w9WgXcQ',100,100,'')"
+  );
+  await db.runAsync(
+    "INSERT INTO sources (id,kind,title,creator,url,created_at,last_used_at,last_tags) VALUES ('s-new','video','강연','채널','https://youtu.be/dQw4w9WgXcQ?si=abc',200,200,'기록')"
+  );
+  const base = { day: '2026-08-01', updated_at: 0, pinned: 0, revisit_count: 0, type: 'video', title: '강연' };
+  await insertEntry(db, { ...base, id: 'm1', created_at: 100, source_id: 's-old', url: 'https://youtu.be/dQw4w9WgXcQ?t=90', body: 'old memo' });
+  await insertEntry(db, { ...base, id: 'm2', created_at: 200, source_id: 's-new', url: 'https://youtu.be/dQw4w9WgXcQ?si=abc', body: 'new memo' });
+  await migrate(db as unknown as AnyDb);
+
+  const live = await db.getAllAsync<{ id: string; url: string }>("SELECT id, url FROM sources WHERE kind='video' AND deleted_at IS NULL");
+  assert.deepEqual(live, [{ id: 's-new', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+  const moved = await db.getFirstAsync<{ source_id: string; url: string }>("SELECT source_id, url FROM entries WHERE id='m1'");
+  assert.equal(moved?.source_id, 's-new');
+  assert.equal(moved?.url, 'https://youtu.be/dQw4w9WgXcQ?t=90'); // 기록의 시점은 그대로
+});
+
+test('v6 — 영상이 링크가 되고, 표를 다시 지어도 갈피·되새김은 살아남는다', async () => {
+  const db = new FakeDb();
+  await schemaUpTo(db, 5, MIGRATIONS);
+  const base = { day: '2026-08-01', updated_at: 0, pinned: 0, revisit_count: 0 };
+  await insertEntry(db, { ...base, id: 'v1', type: 'video', created_at: 100, title: '강연', url: 'https://youtu.be/aaaaaaaaaaa' });
+  await insertEntry(db, { ...base, id: 'b1', type: 'book', created_at: 200, quote: '문장' });
+  await insertEntry(db, { ...base, id: 'm1', type: 'moment', created_at: 300, body: '구조 없는 기록' });
+  await db.runAsync("INSERT INTO tags (id,name,created_at) VALUES ('t1','독서',1)");
+  await db.runAsync("INSERT INTO entry_tags (entry_id,tag_id) VALUES ('b1','t1')");
+  await db.runAsync("INSERT INTO resurfacings (entry_id,shown_day) VALUES ('b1','2026-08-02')");
+
+  await migrate(db as unknown as AnyDb);
+
+  const types = await db.getAllAsync<{ id: string; type: string }>('SELECT id, type FROM entries ORDER BY id');
+  assert.deepEqual(types, [
+    { id: 'b1', type: 'book' },
+    { id: 'm1', type: 'moment' },
+    { id: 'v1', type: 'link' },
+  ]);
+  // 자식 행이 딸려 지워지지 않았다
+  assert.equal((await db.getAllAsync('SELECT * FROM entry_tags')).length, 1);
+  assert.equal((await db.getAllAsync('SELECT * FROM resurfacings')).length, 1);
+  // 구조가 붙은 기록만 검토 큐에서 빠진다
+  const filed = await db.getAllAsync<{ id: string; filed_at: number | null }>(
+    'SELECT id, filed_at FROM entries ORDER BY id'
+  );
+  assert.notEqual(filed[0].filed_at, null); // b1: 갈피가 있다
+  assert.equal(filed[1].filed_at, null); // m1: 아직 구조가 없다
+  // 외래 키가 다시 켜져 있고 링크 종류가 넓어졌다
+  const fk = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys');
+  assert.equal(fk?.foreign_keys, 1);
+  await db.runAsync(
+    "INSERT INTO sources (id,kind,title,created_at,last_used_at,last_tags) VALUES ('s-a','article','어느 글',1,1,'')"
+  );
+});
