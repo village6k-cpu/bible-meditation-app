@@ -33,7 +33,19 @@ function precache(): Plugin {
       );
       const swPath = join(out, 'sw.js');
       const src = readFileSync(swPath, 'utf8');
-      const build = createHash('sha256').update(assets.sort().join('|')).digest('hex').slice(0, 12);
+      // 빌드 아이디는 파일 '이름'이 아니라 '내용'으로 짓는다.
+      //
+      // 이름만 세면 index.html·manifest·아이콘처럼 이름이 고정된 파일이 아무리 바뀌어도 아이디가
+      // 그대로다. 그러면 sw.js가 바이트까지 똑같아져 브라우저가 '바뀐 것이 없다'고 판단하고
+      // 새 워커를 아예 설치하지 않는다. 캐시에 굳은 옛 껍데기가 영원히 나온다.
+      // 실제로 앱 이름을 바꿨는데 기기에서 옛 이름이 계속 나왔고, 원인이 이것이었다.
+      const shellFiles = [...assets, './index.html'].sort();
+      const digest = createHash('sha256');
+      for (const f of shellFiles) {
+        digest.update(f);
+        digest.update(readFileSync(join(out, f)));
+      }
+      const build = digest.digest('hex').slice(0, 12);
       writeFileSync(
         swPath,
         src.replace('__PRECACHE__', JSON.stringify(assets.sort())).replace('__BUILD_ID__', build),
