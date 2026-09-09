@@ -82,6 +82,22 @@ cd mitjul && npm run typecheck                 # 네이티브 타입 검사
 
 ## 3. 반드시 알아야 할 것 (모르면 반드시 깨진다)
 
+### 웹 빌드는 `web/` 안에서 완결되어야 한다
+
+이 저장소는 루트에 다른 앱(성경 묵상 앱)의 `node_modules`가 있어서, 로컬에서는 웹 빌드가
+거기에 몰래 기대도 통과한다. CI는 `web/`만 설치하므로 그대로 죽는다. 실제로 두 번 그랬다.
+
+- `@types/node`는 **`web`의 devDependency**여야 한다 — `vite.config.ts`가 `node:*`를 쓴다.
+- `vite.config.ts`의 `esbuild.tsconfigRaw`는 **문자열**이어야 한다. 객체로 주면 Vite가 파일마다
+  가장 가까운 tsconfig을 찾아 올라간 뒤 합치는데, `mitjul/src/**`에서 걸리는
+  `mitjul/tsconfig.json`이 `expo/tsconfig.base`를 extends 해서 네이티브 의존성 없이는 죽는다.
+
+고쳤는지 확인하는 법 — 루트와 `mitjul`의 `node_modules` 없이 돌려 본다:
+
+```bash
+git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run build
+```
+
 ### 저장 — OPFS SAHPool VFS
 
 - SQLite는 **전용 모듈 워커** 안에서 돈다. `FileSystemSyncAccessHandle`이 `[Exposed=DedicatedWorker]`라서 메인 스레드에서는 안 된다.
