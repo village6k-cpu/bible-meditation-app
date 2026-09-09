@@ -7,6 +7,9 @@ import { PlayIcon } from '../icons';
 import { isPhotoRef } from '../../platform/photos';
 import { Photo } from './photo';
 
+// 어긴 날은 목록에서도 보여야 한다 — 안 보이면 지표에서만 숫자가 떨어진다
+const broke = (e: Entry): string | null => (e.practiced === 0 ? '못 지킴' : null);
+
 // 한 줄로 요약되는 출처. 유형마다 무엇이 '어디서 왔는지'가 다르다.
 export function srcLine(e: Entry): string {
   switch (e.type) {
@@ -17,9 +20,11 @@ export function srcLine(e: Entry): string {
     case 'link':
       return [e.title, e.subtitle].filter(Boolean).join(' · ');
     case 'workout':
-      return [e.title, e.minutes ? `${e.minutes}분` : null].filter(Boolean).join(' · ');
+      return [e.title, e.minutes ? `${e.minutes}분` : null, broke(e)]
+        .filter(Boolean)
+        .join(' · ');
     case 'meal':
-      return e.slot ? MEAL_SLOT_LABELS[e.slot] : '식사';
+      return [e.slot ? MEAL_SLOT_LABELS[e.slot] : '식사', broke(e)].filter(Boolean).join(' · ');
     case 'verse':
       return e.subtitle ?? '';
     default:

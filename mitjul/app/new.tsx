@@ -208,7 +208,13 @@ export default function NewEntryScreen() {
         page: spec.fields.page ? live.page : null,
         slot: spec.fields.slot ? live.slot : null,
         minutes: spec.fields.minutes ? live.minutes : null,
-        practiced: entryType === 'meal' || entryType === 'workout' ? 1 : null,
+        // 어긴 날을 적을 수 있어야 지표가 '지켰나'를 세지 '기록했나'를 세지 않는다
+        practiced:
+          entryType === 'meal' || entryType === 'workout'
+            ? live.practiced === false
+              ? 0
+              : 1
+            : null,
         done: entryType === 'task' ? (live.done ? 1 : 0) : null,
         due_time: spec.fields.dueTime ? live.dueTime : null,
         tags,
@@ -459,6 +465,7 @@ function applyDropped(c: Capture, dropped: SignalKind[]): Capture {
     slot: off('slot') ? null : c.slot,
     dueTime: off('time') ? null : c.dueTime,
     quote: off('quote') ? null : c.quote,
+    practiced: off('practiced') ? null : c.practiced,
     body: [c.body, restored].filter(Boolean).join(' ') || null,
     rest: [c.rest, restored].filter(Boolean).join(' '),
   };

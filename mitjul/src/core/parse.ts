@@ -15,7 +15,8 @@ export type SignalKind =
   | 'slot'
   | 'time'
   | 'quote'
-  | 'done';
+  | 'done'
+  | 'practiced';
 
 export interface Signal {
   kind: SignalKind;
@@ -37,6 +38,8 @@ export interface Capture {
   slot: MealSlot | null;
   dueTime: string | null;
   done: boolean;
+  // 식단·운동을 지켰는가. null이면 적은 글에 아무 신호가 없다는 뜻 — 지킨 것으로 본다.
+  practiced: boolean | null;
   tags: string[];
   signals: Signal[];
   rest: string; // 신호를 걷어내고 남은 글
@@ -96,6 +99,14 @@ function slotOf(word: string): MealSlot {
   if (word.startsWith('저녁')) return 'dinner';
   return 'snack';
 }
+
+// 지켰나 못 지켰나. 어긴 날을 적을 길이 없으면 '식사를 기록했나'만 세게 된다.
+// 먼저 어긴 쪽을 본다 — '못 지켰'의 꼬리를 '지켰'이 다시 집지 않도록.
+const BROKEN_RE =
+  /치팅(?:데이)?|과식|폭식|망했|망함|망침|못\s?지[켰킴]|안\s?지[켰킴]|못\s?했|안\s?했|어겼|어김|실패|무너졌|무너짐|걸렀|건너뛰|빼먹/;
+const KEPT_RE = /클린|계획대로|잘\s?지[켰킴]|잘\s?챙[겼김]|챙겨\s?먹|지켰|지킴/;
+// 갈피로 적는 사람도 있다 — #치팅
+const BROKEN_TAGS = new Set(['치팅', '치팅데이', '과식', '폭식', '실패']);
 
 const WORKOUT_WORDS =
   /운동|달리기|러닝|조깅|헬스|웨이트|요가|필라테스|수영|등산|자전거|라이딩|산책|스쿼트|데드리프트|턱걸이|푸시업|플랭크|클라이밍|축구|농구|테니스|배드민턴|줄넘기|스트레칭/;
@@ -241,7 +252,18 @@ export function parseCapture(input: string): Capture {
     if (add('slot', word, start, start + word.length)) slot = slotOf(word);
   }
 
-  // 8. 할 일 표시
+  // 8. 지켰나 못 지켰나
+  let practiced: boolean | null = null;
+  const broken = BROKEN_RE.exec(text);
+  if (broken && add('practiced', '못 지킴', broken.index, broken.index + broken[0].length)) {
+    practiced = false;
+  }
+  if (practiced === null) {
+    const kept = KEPT_RE.exec(text);
+    if (kept && add('practiced', '지킴', kept.index, kept.index + kept[0].length)) practiced = true;
+  }
+
+  // 9. 할 일 표시
   const doneMatch = DONE_RE.exec(text);
   const todoMatch = TODO_RE.exec(text);
   let done = false;
@@ -253,7 +275,7 @@ export function parseCapture(input: string): Capture {
     isTask = add('done', '할 일', 0, todoMatch[0].length) || true;
   }
 
-  // 9. 인용 — 따옴표로 감싸거나 '>'로 시작한 줄
+  // 10. 인용 — 따옴표로 감싸거나 '>'로 시작한 줄
   let quote: string | null = null;
   for (const m of text.matchAll(QUOTE_RE)) {
     const start = m.index ?? 0;
@@ -267,6 +289,8 @@ export function parseCapture(input: string): Capture {
 
   const rest = reader.rest();
   const tags = normalizeTags(tagWords);
+  // 글에 말이 없어도 갈피가 말해 준다
+  if (practiced === null && tags.some((t) => BROKEN_TAGS.has(t))) practiced = false;
   const video = url ? parseVideoLink(url) : null;
 
   // ─── 유형 결정 ───
@@ -285,6 +309,10 @@ export function parseCapture(input: string): Capture {
   } else if (WORKOUT_WORDS.test(rest) || (minutes !== null && !quote)) {
     typeGuess = 'workout';
     confident = WORKOUT_WORDS.test(rest);
+  } else if (practiced !== null) {
+    // '치팅' 한 마디만 적어도 식사로 — 어긴 날일수록 길게 적지 않는다
+    typeGuess = 'meal';
+    confident = false;
   } else if (quote) {
     // 따옴표만 있으면 책일 확률이 높지만 확신하지는 않는다
     typeGuess = 'book';
@@ -316,6 +344,7 @@ export function parseCapture(input: string): Capture {
     slot,
     dueTime,
     done,
+    practiced,
     tags,
     signals: signals.sort((a, b) => a.start - b.start),
     rest,

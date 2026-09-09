@@ -150,54 +150,21 @@ cd mitjul && npm run typecheck                 # 네이티브 타입 검사
 ### (A) 사용자가 해야 하는 것 — 코드 아님
 
 1. **저장소 Settings → Pages → Source를 `GitHub Actions`로** 한 번 바꾼다.
-   안 바꾸면 배포 워크플로가 마지막 단계에서 실패한다.
-2. PR #1을 `Ready for review` → 머지. `main`에 들어가면 자동 배포된다.
-   주소는 `https://village6k-cpu.github.io/bible-meditation-app/`.
+   `actions/configure-pages`의 `enablement: true`로 자동화하는 길도 있지만, 그건 `GITHUB_TOKEN`으로
+   안 되고 `administration:write`를 가진 PAT를 secret으로 넣어야 해서 클릭보다 번거롭다.
+2. ~~PR #1 머지~~ — 끝났다. `514711d`로 `main`에 들어갔다.
 3. 아이폰 Safari로 열고 **공유 → 홈 화면에 추가**. 탭으로 쓰면 저장 통이 달라서 기록이 갈리고
    ITP가 7일 뒤 지운다. 그다음 보관 화면에서 '저장소 지키기'를 한 번 누른다.
 
 ### (B) 코드로 남은 것
 
-#### B-1. 식단 실천 여부 — 유일하게 원래 요구사항에서 비어 있는 칸 (우선순위 1)
+#### B-1. ~~식단 실천 여부~~ — 끝났다
 
-**증상.** `web/src/ui/sheets/Capture.tsx:277`:
-
-```ts
-practiced: entryType === 'meal' || entryType === 'workout' ? 1 : null,
-```
-
-식사를 적으면 무조건 실천(1)으로 들어간다. 운동은 안 하면 기록 자체가 없으니 문제가 없는데,
-식사는 **어긴 날에도 먹은 걸 적게 되므로 어긴 날이 지킨 날로 셈된다.** 그래서 지표 탭의 식사 줄이
-"식단을 지켰나"가 아니라 "식사를 기록했나"를 세고 있다. 사용자가 원래 말한
-"식단 실천 여부와 추이"가 사실상 구현되지 않은 상태다.
-
-`mitjul/app/new.tsx:211`에도 같은 하드코딩이 있다. (네이티브 `app/compose.tsx:729`에는
-제대로 된 토글이 있으니 그 화면은 정상이다.)
-
-**고칠 방향 — 반드시 파서 쪽으로.** 토글 스위치를 캡처 시트에 다는 건 이 앱의 전제를 어긴다
-("적기 전에 결정하게 만들지 않는다"). 대신 적은 글에서 신호를 읽는다.
-
-1. `mitjul/src/core/parse.ts`
-   - `SignalKind`에 `'practiced'` 추가 (9행)
-   - `Capture`에 `practiced: boolean | null` 추가 (27행 인터페이스)
-   - `치팅` `과식` `폭식` `어김` `실패` `망함` `#치팅` 같은 말을 잡아 `practiced=false`로,
-     `잘 챙김` `클린` 같은 말은 `true`로. 아무 신호도 없으면 `null`(= 기존처럼 실천으로 간주).
-     읽어낸 구간은 다른 신호와 동일하게 `signals`에 넣어 칩으로 되돌릴 수 있게 한다.
-2. `mitjul/tests/parse.test.ts`에 케이스 추가. `npm test`가 통과해야 한다.
-3. `web/src/ui/sheets/Capture.tsx:277`을
-   `practiced: entryType === 'meal' ? (live.practiced === false ? 0 : 1) : entryType === 'workout' ? 1 : null,`
-   같은 형태로 바꾸고, 칩이 화면에 뜨는지 확인.
-4. `mitjul/app/new.tsx:211`도 동일하게.
-5. `web/src/ui/sheets/Detail.tsx`에서 고칠 때 뒤집을 수 있는지 확인 (지금은 `e.practiced`를 그대로 넘긴다).
-6. `mitjul/src/core/markdown.ts:53`이 `practiced === 1`일 때 `✓`를 붙인다 — 0일 때 표시를
-   어떻게 할지 정할 것.
-
-**지표 쪽은 손댈 필요가 없다.** 집계 SQL(`mitjul/src/db/entryRepo.ts:306`)이 이미
-`practiced = 1`만 세고, `mitjul/src/core/trends.ts`의 `dotLevel`이 이미
-`mealCount`와 `mealPracticed`를 비교해 0/1/2/3으로 나눈다 — 전부 지켰으면 3, 일부면 2,
-기록은 했는데 하나도 못 지켰으면 1, 그리고 `practicedOn`은 2 이상만 실천으로 센다.
-즉 `practiced`에 0이 들어오기 시작하는 순간 연속일수와 주간 집계가 저절로 맞아떨어진다.
-**파서와 캡처 화면만 고치면 끝난다.**
+파서에 `practiced` 신호를 넣어 해결했다. `치팅`·`과식`·`폭식`·`못 지켰`·`걸렀`·`#치팅` 등을 읽으면
+`practiced=false`, `잘 챙겨 먹`·`클린`·`계획대로` 등은 `true`, 아무 신호도 없으면 `null`(지킨 것으로 봄).
+운동도 같다 — '운동 못 했다'는 운동 기록으로 남되 실천으로는 안 센다.
+칩을 눌러 되돌릴 수 있고, 목록·상세·마크다운(`✗`)에도 나온다.
+집계 SQL과 `trends.ts`는 손대지 않았다 — 이미 0을 다룰 준비가 돼 있었다.
 
 #### B-2. 그 외 — 요청받은 적 없고 만든 적도 없는 것들
 

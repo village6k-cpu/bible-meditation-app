@@ -199,12 +199,13 @@ export default function EntryDetailScreen() {
         {entry.type === 'meal' && entry.slot ? (
           <Text style={[type.caption, { color: palette.textSecondary, marginTop: space.l }]}>
             {MEAL_SLOT_LABELS[entry.slot]}
-            {entry.practiced === 1 ? ' · 잘 챙겨 먹었어요' : ''}
+            {entry.practiced === 0 ? ' · 못 지킨 날' : entry.practiced === 1 ? ' · 지킨 날' : ''}
           </Text>
         ) : null}
         {entry.type === 'workout' ? (
           <Text style={[type.caption, { color: palette.textSecondary, marginTop: space.l }]}>
             {[entry.title, entry.minutes ? `${entry.minutes}분` : null].filter(Boolean).join(' · ')}
+            {entry.practiced === 0 ? ' · 못 지킨 날' : ''}
           </Text>
         ) : null}
 
