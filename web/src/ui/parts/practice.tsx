@@ -98,18 +98,29 @@ export type { MealSlot };
 // 대신 주를 열로, 요일을 줄로 세운다. 12주가 폭 안에 들어오고, 빈 구간이 세로 띠로 즉시 보인다.
 
 /** 하루를 0..3 농도로. 3=전부 지킴, 2=일부, 1=기록은 있으나 못 지킴, 0=기록 없음 */
-export function mealLevel(day: DayCells): 0 | 1 | 2 | 3 {
-  const slots = (['breakfast', 'lunch', 'dinner'] as const).map((k) => day.cells[k].state);
-  const logged = slots.filter((s) => s !== 'none').length;
-  if (logged === 0) return 0;
-  const kept = slots.filter((s) => s === 'kept').length;
-  if (kept === 0) return 1;
-  return kept === logged && logged >= 2 ? 3 : 2;
+// 농도와 '어김'은 다른 축이다. 농도만 쓰면 '아침 지키고 저녁 치팅'과 '아침만 기록'이 같은 회색이 되어
+// 어긴 날이 그림에서 사라진다 — 정작 보려던 것이 그건데. 그래서 둘을 갈라 돌려주고, 화면은 농도 위에
+// 빗금을 덧씌운다. 어긴 날은 얼마나 채웠든 반드시 빗금이 보인다.
+export interface Mark {
+  level: 0 | 1 | 2 | 3;
+  broke: boolean;
 }
 
-export function workoutLevel(day: DayCells): 0 | 1 | 3 {
+export function mealMark(day: DayCells): Mark {
+  const slots = (['breakfast', 'lunch', 'dinner'] as const).map((k) => day.cells[k].state);
+  const logged = slots.filter((s) => s !== 'none').length;
+  const broke = slots.some((s) => s === 'broken');
+  if (logged === 0) return { level: 0, broke: false };
+  const kept = slots.filter((s) => s === 'kept').length;
+  if (kept === 0) return { level: 1, broke };
+  return { level: kept === logged && logged >= 2 ? 3 : 2, broke };
+}
+
+export function workoutMark(day: DayCells): Mark {
   const s = day.cells.workout.state;
-  return s === 'kept' ? 3 : s === 'broken' ? 1 : 0;
+  if (s === 'kept') return { level: 3, broke: false };
+  if (s === 'broken') return { level: 1, broke: true };
+  return { level: 0, broke: false };
 }
 
 /** 12주치를 주 단위로 자른다. 각 주는 월요일부터 일곱 칸. 오늘 이후는 null. */
