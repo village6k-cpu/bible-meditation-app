@@ -189,16 +189,18 @@ export function Records({
       </div>
 
       {data.rows.length > 0 ? (
-        data.rows.map((e) => (
-          <EntryRow
-            key={e.id}
-            entry={e}
-            tags={data.tags.get(e.id)}
-            showDate
-            meta={f.sort === 'dusty' ? dustLabel(e) : null}
-            onOpen={onOpen}
-          />
-        ))
+        <div class="records-flow">
+          {data.rows.map((e) => (
+            <EntryRow
+              key={e.id}
+              entry={e}
+              tags={data.tags.get(e.id)}
+              showDate
+              meta={f.sort === 'dusty' ? dustLabel(e) : null}
+              onOpen={onOpen}
+            />
+          ))}
+        </div>
       ) : loading ? null : (
         <div class="empty">결과 없음</div>
       )}

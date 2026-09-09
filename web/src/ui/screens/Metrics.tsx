@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { addDays, formatDayGridKo, mondayOf, rangeOfDays } from '@core/dates';
+import { addDays, formatDayShortKo, mondayOf, rangeOfDays } from '@core/dates';
 import { dotLevel, streakOf, weekCount, type PracticeKey } from '@core/trends';
 import type { EntryType, SourceKind, TrendRow } from '@core/types';
 import { practiceEntries, trendRows, type PracticeCell } from '@db/entryRepo';
@@ -7,7 +7,14 @@ import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
-import { COLUMNS, Cell, SLOT_WORD, layoutDays, type DayCells } from '../parts/practice';
+import {
+  layoutDays,
+  mealLevel,
+  slotTally,
+  weeksOf,
+  workoutLevel,
+  type DayCells,
+} from '../parts/practice';
 import { useLoad } from '../store';
 
 // 격려하지 않는다. 일어난 일만 적는다.
@@ -16,7 +23,10 @@ import { useLoad } from '../store';
 // 한눈에 훑어 '요즘 어떤가'를 보는 자리다. 칸은 사진이거나 점이고, 어긴 날은 빗금이다.
 // 지킴/어김/비움의 판정은 core/trends와 parts/practice의 순수 함수가 정한다 — 네이티브와 같은 규칙.
 
-const GRID_DAYS = 28;
+// 12주 = 84일. 폭 안에 열두 열이 들어오고, 계절이 바뀌는 흐름이 보이는 최소치다.
+const WEEKS = 12;
+const SPAN = WEEKS * 7;
+const DOW = ['월', '', '수', '', '금', '', '일'];
 
 const FORMAT_LABEL: Record<SourceKind | 'none', string> = {
   book: '책',
@@ -52,10 +62,9 @@ export function Metrics({
   onSources: () => void;
 }): JSX.Element {
   const days14 = rangeOfDays(addDays(today, -13), today);
-  // 격자는 오늘이 맨 위 — 최근을 먼저 본다
-  const gridDays = rangeOfDays(addDays(today, -(GRID_DAYS - 1)), today).reverse();
-  // 월요일부터 일요일까지 일곱 칸을 늘 세운다 — 주 초에 막대가 하나만 서면 고장처럼 보인다
+  // 히트맵은 12주 전 월요일부터 — 열이 주, 줄이 요일이 되도록 주 경계에 맞춰 자른다
   const monday = mondayOf(today);
+  const heatFrom = addDays(monday, -(WEEKS - 1) * 7);
   const week = rangeOfDays(monday, addDays(monday, 6));
 
   const { data, loading } = useLoad<Data>(
@@ -64,7 +73,7 @@ export function Metrics({
       const db = asSqlite(d);
       const rows = await trendRows(db, addDays(today, -365), today);
       const byDay = new Map(rows.map((r) => [r.day, r]));
-      const cells: PracticeCell[] = await practiceEntries(db, gridDays[gridDays.length - 1], today);
+      const cells: PracticeCell[] = await practiceEntries(db, heatFrom, today);
       const formats = await db.getAllAsync<{ kind: SourceKind | null; count: number }>(
         `SELECT s.kind AS kind, COUNT(*) AS count
          FROM entries e LEFT JOIN sources s ON s.id = e.source_id AND s.deleted_at IS NULL
@@ -74,7 +83,7 @@ export function Metrics({
       const recent = days14.reduce((n, day) => n + (byDay.get(day)?.entryCount ?? 0), 0);
       return {
         rows: byDay,
-        grid: layoutDays(gridDays, cells),
+        grid: layoutDays(rangeOfDays(heatFrom, today), cells),
         formats: formats.map((f) => ({ kind: f.kind ?? 'none', count: f.count })),
         recent,
       };
@@ -84,6 +93,15 @@ export function Metrics({
   );
 
   const weekMinutes = week.reduce((n, d) => n + (data.rows.get(d)?.workoutMinutes ?? 0), 0);
+  const weeks = weeksOf(data.grid, today, WEEKS);
+  const tally = slotTally(data.grid);
+  const keptMeals = data.grid.filter((d) => mealLevel(d) >= 2).length;
+  const loggedDays = data.grid.filter((d) => mealLevel(d) > 0).length;
+  const workoutDays = data.grid.filter((d) => workoutLevel(d) === 3).length;
+  const totalMinutes = data.grid.reduce(
+    (n, d) => n + (data.rows.get(d.day)?.workoutMinutes ?? 0),
+    0
+  );
   const streak = (k: PracticeKey) => streakOf(k, data.rows, today);
   const thisWeek = (k: PracticeKey) => weekCount(k, data.rows, week);
 
@@ -91,7 +109,7 @@ export function Metrics({
     <>
       <header class="app-head">
         <div>
-          <div class="micro">최근 {GRID_DAYS}일</div>
+          <div class="micro">최근 {WEEKS}주</div>
           <div class="display" style="margin-top:3px">
             지표
           </div>
@@ -99,8 +117,8 @@ export function Metrics({
         <div class="mono-lg sub">{data.recent}</div>
       </header>
 
-      <SectionRow label="실천" right={`${GRID_DAYS}d`} first />
-      {/* 숫자 넷. 연속은 어제까지의 흐름을 오늘이 아직 안 끊은 것으로 세고, 이번 주는 월요일부터다. */}
+      <SectionRow label="실천" right={`${WEEKS}주`} first />
+      {/* 숫자 넷 — 지금 어떤가. 연속은 어제까지의 흐름을 오늘이 아직 안 끊은 것으로 센다. */}
       <div class="psum">
         <div class="k">
           <span class="micro">식사 연속</span>
@@ -132,40 +150,70 @@ export function Metrics({
         </div>
       </div>
 
-      <div class="pgrid">
-        <div class="pgrid-head">
-          <span />
-          {COLUMNS.slice(0, 3).map((c) => (
-            <span key={c.key} class="micro">
-              {c.label}
-            </span>
-          ))}
-          <span />
-          <span class="micro">운동</span>
-          <span />
-        </div>
-        {data.grid.map((row) => {
-          const isToday = row.day === today;
-          const minutes = data.rows.get(row.day)?.workoutMinutes ?? 0;
-          const tap = (key: (typeof COLUMNS)[number]['key']) => {
-            const cell = row.cells[key];
-            if (cell.entry) onOpen(cell.entry.id);
-            // 지난 날의 빈 칸은 그대로 둔다 — 지나간 끼니를 뒤늦게 채우는 것은 기록이 아니라 꾸밈이다
-            else if (isToday)
-              onCompose(key === 'workout' ? 'workout' : 'meal', `${SLOT_WORD[key]} `);
-          };
-          return (
-            <div key={row.day} class={isToday ? 'pgrid-row today' : 'pgrid-row'}>
-              <span class="dt">{isToday ? '오늘' : formatDayGridKo(row.day)}</span>
-              {COLUMNS.slice(0, 3).map((c) => (
-                <Cell key={c.key} cell={row.cells[c.key]} size="grid" onClick={() => tap(c.key)} />
-              ))}
-              <span />
-              <Cell cell={row.cells.workout} size="grid" onClick={() => tap('workout')} />
-              <span class="min">{minutes ? `${minutes}분` : ''}</span>
+      {/* 주가 열, 요일이 줄. 빈 구간이 세로 띠로 즉시 보인다 — 이게 '한눈에'의 전부다. */}
+      <div class="heat-wrap">
+        {(
+          [
+            ['식사', mealLevel],
+            ['운동', workoutLevel],
+          ] as [string, (d: DayCells) => number][]
+        ).map(([name, level]) => (
+          <div class="heat" key={name}>
+            <div class="heat-top">
+              <span class="micro">{name}</span>
+              <span class="mono dim">
+                {name === '식사'
+                  ? `${keptMeals}/${loggedDays}일`
+                  : `${workoutDays}일 · ${totalMinutes}분`}
+              </span>
             </div>
-          );
-        })}
+            <div class="heat-body">
+              <div class="heat-dow">
+                {DOW.map((d, i) => (
+                  <span key={i} class="micro">
+                    {d}
+                  </span>
+                ))}
+              </div>
+              <div class="heat-cols">
+                {weeks.map((col, wi) => (
+                  <div class="heat-col" key={wi}>
+                    {col.map((day, di) =>
+                      day === null ? (
+                        <span key={di} class="hc void" />
+                      ) : (
+                        <span
+                          key={di}
+                          class={`hc l${level(day)}${day.day === today ? ' now' : ''}`}
+                          title={`${formatDayShortKo(day.day)}`}
+                        />
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 어느 끼니를 흘리는가. 이 세 줄이 '무엇을 고쳐야 하나'에 답한다. */}
+      <div class="slots">
+        {tally.map((t) => (
+          <div class="slot-row" key={t.key}>
+            <span class="micro nm">{t.label}</span>
+            <span class="track">
+              <span
+                class="fill"
+                style={`width:${t.logged ? Math.round((t.kept / t.logged) * 100) : 0}%`}
+              />
+            </span>
+            <span class="mono dim">
+              {t.kept}
+              <span style="opacity:.5">/{t.logged}</span>
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* 묵상과 기록은 실천이 아니라 콘텐츠지만 꾸준함은 여기서 본다 — 먹점 열넷. */}

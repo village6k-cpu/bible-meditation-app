@@ -106,11 +106,7 @@ svg {
   transform: translateY(var(--vv-top, 0px));
   background: var(--bg);
   position: relative;
-  /* 폰 앱이다. 넓은 화면에서는 폰 폭으로 가운데 서고, 양옆은 비운다.
-     이 줄이 없으면 flex:1 칸들이 모니터 폭으로 늘어나 화면을 통째로 먹는다 — 실제로 그랬다. */
   width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
   overflow: hidden;
 }
 .screen {
@@ -802,17 +798,6 @@ ol.recipe code {
   }
 }
 
-@media (min-width: 480px) {
-  html,
-  body {
-    background: var(--sunken);
-  }
-  .app {
-    border-left: 1px solid var(--line);
-    border-right: 1px solid var(--line);
-  }
-}
-
 /* ── 실천 격자 ──
    식사·운동은 줄이 아니라 격자다. 칸은 사진이거나 점이고, 지킴은 먹, 어김은 빗금, 비움은 테두리만. */
 .pstrip {
@@ -847,11 +832,10 @@ ol.recipe code {
 .pcell.strip {
   width: 100%;
   aspect-ratio: 1;
-  max-width: 52px;
 }
 .pstrip .pcol {
   flex: 0 0 auto;
-  width: 52px;
+  width: var(--strip-cell, 52px);
 }
 .pstrip {
   justify-content: flex-start;
@@ -958,4 +942,252 @@ ol.recipe code {
   font-size: 11px;
   color: var(--ink3);
   margin-left: 3px;
+}
+
+/* ── 데스크톱 ──
+   폰 화면을 가운데 박아 두는 것은 데스크톱을 만든 것이 아니다. 넓으면 넓게 쓴다:
+   탭바는 왼쪽 기둥이 되고, 본문은 두 단으로 갈라지고, 실천 칸과 글줄은 커진다.
+   기준은 900px — 노트북 창을 반으로 쪼개도 넘는 폭이다. */
+@media (min-width: 900px) {
+  html,
+  body {
+    background: var(--sunken);
+  }
+  .app {
+    flex-direction: row;
+    max-width: 1180px;
+    margin: 0 auto;
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    --strip-cell: 84px;
+  }
+
+  /* 탭바 → 왼쪽 기둥 */
+  nav.tabbar {
+    order: -1;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 210px;
+    flex: none;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    padding: 22px 12px;
+    gap: 2px;
+  }
+  nav.tabbar button {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 6px;
+    font-size: 13.5px;
+  }
+  nav.tabbar button.on {
+    background: var(--sunken);
+  }
+  nav.tabbar svg {
+    width: 17px;
+    height: 17px;
+  }
+  /* 적기 버튼은 기둥 맨 위의 진짜 버튼이 된다 — 떠 있는 동그라미가 아니라 */
+  nav.tabbar .fab {
+    position: static;
+    order: -1;
+    width: 100%;
+    height: 40px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 12px;
+    box-shadow: none;
+  }
+  nav.tabbar .fab::after {
+    content: '적기';
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+  nav.tabbar .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+  }
+
+  .screen {
+    padding: 0;
+  }
+  /* 본문은 두 단. 왼쪽은 오늘 하는 일, 오른쪽은 쌓인 것. */
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .cols > .col + .col {
+    border-left: 1px solid var(--line);
+    min-height: calc(100vh - 120px);
+  }
+  header.app-head {
+    padding-top: 26px;
+  }
+  header.app-head .display {
+    font-size: 27px;
+  }
+  /* 목록 줄은 넓은 화면에서 숨 쉬게 */
+  .row,
+  .entry-row,
+  .sec-row {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  header.app-head,
+  .chips,
+  .pstrip,
+  .grid-rows,
+  .psum,
+  .note,
+  .notice {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  /* 시트는 화면을 다 덮지 않고 가운데 판으로 뜬다 */
+  .modal-root {
+    background: rgba(14, 17, 22, 0.28);
+    pointer-events: none;
+  }
+  .modal-root:empty {
+    background: none;
+  }
+  .sheet {
+    position: absolute;
+    inset: 5% 50% auto auto;
+    transform: translateX(50%);
+    width: min(680px, 92%);
+    max-height: 90%;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 24px 60px rgba(14, 17, 22, 0.18);
+    overflow: hidden;
+  }
+}
+
+/* ── 실천 히트맵 ──
+   주가 열, 요일이 줄. 빈 구간이 세로 띠로 보이는 것이 이 그림의 요점이다.
+   색으로 말하지 않으므로 농도로만 가른다: 0 비움 · 1 못 지킴(빗금) · 2 일부 · 3 전부. */
+.heat-wrap {
+  display: grid;
+  gap: 18px;
+  padding: 10px 16px 16px;
+}
+.heat-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.heat-body {
+  display: flex;
+  gap: 6px;
+}
+.heat-dow {
+  display: grid;
+  grid-template-rows: repeat(7, var(--hc, 15px));
+  gap: 3px;
+  width: 13px;
+  flex: none;
+}
+.heat-dow .micro {
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+}
+/* 칸 크기는 못 박는다. 폭에 맡기면 넓은 화면에서 한 칸이 80px로 부풀어 히트맵이 아니게 된다. */
+.heat-cols {
+  display: grid;
+  grid-template-columns: repeat(12, var(--hc, 15px));
+  gap: 3px;
+  flex: none;
+}
+.heat-col {
+  display: grid;
+  grid-template-rows: repeat(7, var(--hc, 15px));
+  gap: 3px;
+}
+.hc {
+  width: var(--hc, 15px);
+  height: var(--hc, 15px);
+  border-radius: 2px;
+  background: var(--soft);
+}
+.hc.void {
+  background: none;
+}
+.hc.l1 {
+  background: repeating-linear-gradient(135deg, var(--soft) 0 3px, var(--ink3) 3px 4px);
+}
+.hc.l2 {
+  background: var(--ink3);
+}
+.hc.l3 {
+  background: var(--accent);
+}
+.hc.now {
+  outline: 1.5px solid var(--ink);
+  outline-offset: 1.5px;
+}
+
+/* 끼니별 준수 — 어느 끼니를 흘리는가 */
+.slots {
+  padding: 2px 16px 14px;
+  display: grid;
+  gap: 7px;
+}
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 20px;
+}
+.slot-row .nm {
+  width: 28px;
+  flex: none;
+}
+.slot-row .mono {
+  width: 46px;
+  text-align: right;
+  font-size: 11px;
+}
+
+/* 좁은 화면에서는 두 단이 그냥 위아래로 이어진다 — .cols는 900px부터만 갈라진다 */
+.cols {
+  display: contents;
+}
+@media (min-width: 900px) {
+  .cols {
+    display: grid;
+  }
+  /* 식사·운동 히트맵을 나란히 — 한 화면에서 둘을 함께 훑는 것이 요점이다 */
+  .heat-wrap {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    --hc: 18px;
+  }
+  .slots {
+    max-width: 420px;
+  }
+
+  /* 기록 탭은 목록이 주인공이므로 넓은 화면에서 두 열로 흐른다 */
+  .records-flow {
+    column-count: 2;
+    column-gap: 0;
+  }
+  .records-flow .entry-row {
+    break-inside: avoid;
+  }
 }
