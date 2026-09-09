@@ -91,7 +91,13 @@ export function CaptureSheet({
   const sourceKinds = spec.sourceKinds ?? [];
   const sourced = sourceKinds.length > 0;
   const selectedSource = sourceId ? (sources.find((s) => s.id === sourceId) ?? null) : null;
-  const canSave = !saving && (live.rest.length > 0 || !!live.url || !!live.quote || !!photo);
+  // 실천(식사·운동)은 '아침'·'저녁 치팅'처럼 끼니와 실천 여부만 적어도 기록이다 — 파서가 그 낱말을
+  // 전부 신호로 먹어 남는 글이 없어도 저장할 수 있어야 한다. 실제로 '저녁 치팅'이 저장되지 않았다.
+  const practiceOnly =
+    isPractice(entryType) &&
+    (live.slot !== null || live.practiced !== null || live.minutes !== null);
+  const canSave =
+    !saving && (live.rest.length > 0 || !!live.url || !!live.quote || !!photo || practiceOnly);
 
   useEffect(() => {
     inputRef.current?.focus();
