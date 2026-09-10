@@ -398,6 +398,7 @@ export function SettingsSheet({
 
         <div class="note">
           계정을 연결하지 않으면 기록은 이 기기에만 남습니다. 연결하면 본문은 사용자별 비공개 서버와 맞춥니다.
+          {' '}<a href="./privacy.html" target="_blank" rel="noopener noreferrer">개인정보 안내</a>
         </div>
         <div class="gap-lg" />
       </div>
