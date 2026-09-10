@@ -34,8 +34,11 @@ export async function disconnectGooglePhotos(): Promise<void> {
 }
 
 export async function processPendingPhotos(handle: WebDb): Promise<PhotoSyncResult | null> {
-  if (!(await googlePhotosStatus())) return null;
   const sqlite = asSqlite(handle);
+  // 사진이 없으면 사진 서버 장애가 이미 끝난 본문 동기화를 오류로 바꾸지 않는다.
+  // 재시도 한도에 걸린 실패 작업도 남아 있는 한 이 검사를 건너뛰지 않는다.
+  if (!(await sqlite.getFirstAsync('SELECT 1 FROM photo_jobs LIMIT 1'))) return null;
+  if (!(await googlePhotosStatus())) return null;
   const result = await processPhotoJobs(sqlite, browserPhotoStore(handle), createGooglePhotosRemote(requireSyncClient()));
   const failed = await sqlite.getFirstAsync<{last_error:string}>(
     "SELECT last_error FROM photo_jobs WHERE state='failed' ORDER BY updated_at DESC LIMIT 1"
