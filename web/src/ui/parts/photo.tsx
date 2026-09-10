@@ -32,6 +32,14 @@ function useNearViewport<T extends HTMLElement>(): [{ current: T | null }, boole
 
 export function usePhoto(ref: string | null, enabled = true): string | null {
   const [url, setUrl] = useState<string | null>(null);
+  const [storedRevision, setStoredRevision] = useState(0);
+  useEffect(() => {
+    const onStored = (event: Event): void => {
+      if ((event as CustomEvent<string>).detail === ref) setStoredRevision(n => n + 1);
+    };
+    window.addEventListener('ledger:photo-stored', onStored);
+    return () => window.removeEventListener('ledger:photo-stored', onStored);
+  }, [ref]);
   useEffect(() => {
     if (!ref || !enabled) {
       setUrl(null);
@@ -52,7 +60,7 @@ export function usePhoto(ref: string | null, enabled = true): string | null {
       releasePhotoUrl(made);
       setUrl(null);
     };
-  }, [ref, enabled]);
+  }, [ref, enabled, storedRevision]);
   return url;
 }
 

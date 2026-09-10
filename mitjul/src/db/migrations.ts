@@ -247,6 +247,227 @@ export const MIGRATIONS: Migration[] = [
            OR id IN (SELECT entry_id FROM entry_tags);
     `,
   },
+  {
+    // 기기 간 동기화는 앱의 표를 그대로 복제하되, 기기 전용 설정은 보내지 않는다.
+    // 트리거가 변경 대상을 한 건으로 합쳐 두면 오프라인에서 오래 쓴 뒤에도 전송량이 불어나지 않는다.
+    version: 7,
+    sql: `
+      CREATE TABLE sync_control (
+        id              INTEGER PRIMARY KEY CHECK (id = 1),
+        applying_remote INTEGER NOT NULL DEFAULT 0 CHECK (applying_remote IN (0, 1))
+      );
+      INSERT INTO sync_control (id, applying_remote) VALUES (1, 0);
+
+      CREATE TABLE sync_meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      INSERT INTO sync_meta (key, value) VALUES ('remote_cursor', '0');
+
+      CREATE TABLE sync_changes (
+        entity_type TEXT NOT NULL,
+        entity_id   TEXT NOT NULL,
+        operation   TEXT NOT NULL CHECK (operation IN ('upsert', 'delete')),
+        changed_at  INTEGER NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+      );
+      CREATE INDEX idx_sync_changes_changed ON sync_changes (changed_at, entity_type, entity_id);
+
+      -- 사진 파일은 OPFS와 Google Photos에 두고, 동기화 DB에는 안정적인 media item ID만 둔다.
+      CREATE TABLE photo_links (
+        photo_uri     TEXT PRIMARY KEY,
+        media_item_id TEXT NOT NULL,
+        album_id      TEXT NOT NULL,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+
+      -- 업로드·다운로드 실패는 기록 저장과 분리해 다시 시도한다. 이 표 자체는 기기 밖으로 보내지 않는다.
+      CREATE TABLE photo_jobs (
+        photo_uri  TEXT PRIMARY KEY,
+        action     TEXT NOT NULL CHECK (action IN ('upload', 'download')),
+        state      TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'running', 'failed')),
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_photo_jobs_state ON photo_jobs (state, updated_at);
+
+      CREATE TRIGGER sync_entries_insert AFTER INSERT ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('entries', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_entries_update AFTER UPDATE ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('entries', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_entries_delete AFTER DELETE ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('entries', OLD.id, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      CREATE TRIGGER photo_job_entries_insert AFTER INSERT ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+        AND NEW.deleted_at IS NULL AND NEW.image_uri LIKE 'photos/%'
+      BEGIN
+        INSERT INTO photo_jobs (photo_uri, action, state, attempts, last_error, updated_at)
+        VALUES (NEW.image_uri, 'upload', 'pending', 0, NULL, unixepoch('subsec') * 1000)
+        ON CONFLICT(photo_uri) DO UPDATE SET action = 'upload', state = 'pending', attempts = 0,
+          last_error = NULL, updated_at = excluded.updated_at;
+      END;
+      CREATE TRIGGER photo_job_entries_update AFTER UPDATE ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+        AND NEW.deleted_at IS NULL AND NEW.image_uri LIKE 'photos/%'
+        AND (OLD.image_uri IS NOT NEW.image_uri OR OLD.deleted_at IS NOT NULL)
+      BEGIN
+        INSERT INTO photo_jobs (photo_uri, action, state, attempts, last_error, updated_at)
+        VALUES (NEW.image_uri, 'upload', 'pending', 0, NULL, unixepoch('subsec') * 1000)
+        ON CONFLICT(photo_uri) DO UPDATE SET action = 'upload', state = 'pending', attempts = 0,
+          last_error = NULL, updated_at = excluded.updated_at;
+      END;
+      CREATE TRIGGER photo_unlink_entries_update AFTER UPDATE ON entries
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+        AND OLD.image_uri LIKE 'photos/%'
+        AND (OLD.image_uri IS NOT NEW.image_uri OR (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL))
+      BEGIN
+        DELETE FROM photo_jobs WHERE photo_uri = OLD.image_uri
+          AND NOT EXISTS (SELECT 1 FROM entries WHERE deleted_at IS NULL AND image_uri = OLD.image_uri);
+        DELETE FROM photo_links WHERE photo_uri = OLD.image_uri
+          AND NOT EXISTS (SELECT 1 FROM entries WHERE deleted_at IS NULL AND image_uri = OLD.image_uri);
+      END;
+
+      CREATE TRIGGER sync_sources_insert AFTER INSERT ON sources
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('sources', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_sources_update AFTER UPDATE ON sources
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('sources', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_sources_delete AFTER DELETE ON sources
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('sources', OLD.id, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      CREATE TRIGGER sync_tags_insert AFTER INSERT ON tags
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('tags', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_tags_update AFTER UPDATE ON tags
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('tags', NEW.id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_tags_delete AFTER DELETE ON tags
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('tags', OLD.id, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      CREATE TRIGGER sync_entry_tags_insert AFTER INSERT ON entry_tags
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('entry_tags', NEW.entry_id || char(31) || NEW.tag_id, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_entry_tags_delete AFTER DELETE ON entry_tags
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('entry_tags', OLD.entry_id || char(31) || OLD.tag_id, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      CREATE TRIGGER sync_resurfacings_insert AFTER INSERT ON resurfacings
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('resurfacings', NEW.entry_id || char(31) || NEW.shown_day, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_resurfacings_update AFTER UPDATE ON resurfacings
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('resurfacings', NEW.entry_id || char(31) || NEW.shown_day, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_resurfacings_delete AFTER DELETE ON resurfacings
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('resurfacings', OLD.entry_id || char(31) || OLD.shown_day, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      CREATE TRIGGER sync_photo_links_insert AFTER INSERT ON photo_links
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('photo_links', NEW.photo_uri, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_photo_links_update AFTER UPDATE ON photo_links
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('photo_links', NEW.photo_uri, 'upsert', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'upsert', changed_at = sync_changes.changed_at + 1;
+      END;
+      CREATE TRIGGER sync_photo_links_delete AFTER DELETE ON photo_links
+      WHEN (SELECT applying_remote FROM sync_control WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO sync_changes VALUES ('photo_links', OLD.photo_uri, 'delete', unixepoch('subsec') * 1000)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation = 'delete', changed_at = sync_changes.changed_at + 1;
+      END;
+
+      -- 업그레이드 전부터 있던 기록도 첫 로그인 때 서버로 올라가야 한다.
+      INSERT INTO sync_changes SELECT 'entries', id, 'upsert', unixepoch('subsec') * 1000 FROM entries;
+      INSERT INTO sync_changes SELECT 'sources', id, 'upsert', unixepoch('subsec') * 1000 FROM sources;
+      INSERT INTO sync_changes SELECT 'tags', id, 'upsert', unixepoch('subsec') * 1000 FROM tags;
+      INSERT INTO sync_changes SELECT 'entry_tags', entry_id || char(31) || tag_id, 'upsert', unixepoch('subsec') * 1000 FROM entry_tags;
+      INSERT INTO sync_changes SELECT 'resurfacings', entry_id || char(31) || shown_day, 'upsert', unixepoch('subsec') * 1000 FROM resurfacings;
+      INSERT INTO photo_jobs (photo_uri, action, state, updated_at)
+        SELECT DISTINCT image_uri, 'upload', 'pending', unixepoch('subsec') * 1000
+        FROM entries
+        WHERE deleted_at IS NULL AND image_uri LIKE 'photos/%';
+    `,
+  },
+  {
+    version: 8,
+    rebuild: true,
+    // 기기마다 달랐던 갈피 ID를 이름의 UTF-8로 맞춘다. 참조도 같은 트랜잭션에서 옮긴다.
+    // 이미 서버에 갔을 수 있는 옛 ID는 삭제 기록으로 남겨 다른 기기에서 되살아나지 않게 한다.
+    sql: `
+      UPDATE sync_control SET applying_remote = 1 WHERE id = 1;
+      INSERT INTO sync_changes
+        SELECT 'entry_tags', entry_id || char(31) || tag_id, 'delete', unixepoch('subsec') * 1000
+        FROM entry_tags WHERE tag_id != (SELECT 'tag:' || lower(hex(name)) FROM tags WHERE id = tag_id)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='delete', changed_at=sync_changes.changed_at+1;
+      INSERT INTO sync_changes
+        SELECT 'tags', id, 'delete', unixepoch('subsec') * 1000 FROM tags WHERE id != 'tag:' || lower(hex(name))
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='delete', changed_at=sync_changes.changed_at+1;
+      UPDATE entry_tags SET tag_id = (SELECT 'tag:' || lower(hex(name)) FROM tags WHERE id = tag_id);
+      UPDATE tags SET id = 'tag:' || lower(hex(name));
+      INSERT INTO sync_changes
+        SELECT 'tags', id, 'upsert', unixepoch('subsec') * 1000 FROM tags WHERE true
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='upsert', changed_at=sync_changes.changed_at+1;
+      INSERT INTO sync_changes
+        SELECT 'entry_tags', entry_id || char(31) || tag_id, 'upsert', unixepoch('subsec') * 1000 FROM entry_tags WHERE true
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET operation='upsert', changed_at=sync_changes.changed_at+1;
+      UPDATE sync_control SET applying_remote = 0 WHERE id = 1;
+    `,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

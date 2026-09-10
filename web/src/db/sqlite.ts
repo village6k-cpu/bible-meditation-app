@@ -77,10 +77,16 @@ export async function openDb(name?: string): Promise<WebDb> {
     return next;
   };
 
-  const opened = (await send('open')) as {
+  const opened = (await send('open', undefined, undefined, undefined, name ? { name } : undefined)) as {
     engine: Engine;
     opfsError: string | null;
   };
+
+  // 잠긴 OPFS는 DB가 열린 상태가 아니다. 마이그레이션이 null DB에 접근하기 전에 멈춘다.
+  if (opened.engine === 'blocked') {
+    worker.terminate();
+    throw new Error('기존 기록함을 열 수 없습니다. 다른 Ledger 탭이나 창이 열려 있다면 닫고 다시 시도하세요. 저장소를 삭제하지 마세요.');
+  }
 
   return {
     engine: opened.engine,

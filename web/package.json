@@ -8,15 +8,19 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/make-icons.mjs",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" index.html public/sw.js scripts/*.mjs vite.config.ts"
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" index.html public/sw.js scripts/*.mjs vite.config.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
+    "@supabase/supabase-js": "2.108.0",
     "preact": "^10.27.2"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",
     "@types/node": "^22.20.1",
+    "preact-render-to-string": "6.7.0",
+    "tsx": "^4.23.13",
     "typescript": "~5.9.2",
     "vite": "^7.1.5"
   }

@@ -14,7 +14,22 @@ import { exportRange, RANGE_LABEL, type ExportRange } from '../../export/obsidia
 import { photoStat, sharePhotoBatch, sweepOrphans, type PhotoStat } from '../../export/photos';
 import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
+import { SyncLogin } from '../parts/SyncLogin';
+import { syncConfigError } from '../../sync/client';
 import { bump } from '../store';
+import {
+  getSyncState,
+  signInForSync,
+  signOutFromSync,
+  subscribeSyncState,
+  syncNow,
+  moveLegacySyncWithBackup,
+} from '../../sync';
+import {
+  connectGooglePhotos,
+  disconnectGooglePhotos,
+  googlePhotosStatus,
+} from '../../sync/photos';
 
 // 이 화면의 주제는 하나다 — 이 기록을 잃지 않는 방법.
 
@@ -45,6 +60,8 @@ export function SettingsSheet({
   const [photos, setPhotos] = useState<PhotoStat>({ count: 0, bytes: 0, orphans: 0 });
   // 사진은 묶음으로 나가므로, 어디까지 보냈는지 기억한다
   const [cursor, setCursor] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState(getSyncState);
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = (): void => {
@@ -54,6 +71,18 @@ export function SettingsSheet({
     void photoStat(handle).then(setPhotos);
   };
   useEffect(refresh, [handle]);
+  useEffect(() => subscribeSyncState(setSyncState), []);
+  useEffect(() => {
+    if (syncState.phase === 'signed-out') {
+      setGoogleConnected(null);
+      return;
+    }
+    let alive = true;
+    void googlePhotosStatus()
+      .then((connected) => { if (alive) setGoogleConnected(connected); })
+      .catch(() => { if (alive) setGoogleConnected(false); });
+    return () => { alive = false; };
+  }, [syncState.phase]);
 
   async function guard<T>(key: string, run: () => Promise<T>): Promise<T | null> {
     setBusy(key);
@@ -80,7 +109,72 @@ export function SettingsSheet({
       </div>
 
       <div class="sheet-body" style="padding:0 0 var(--safe-b)">
-        <SectionRow label="백업" first />
+        <SectionRow label="기기 간 동기화" first />
+        {syncState.phase === 'signed-out' ? (
+          <SyncLogin
+            busy={busy !== null}
+            unavailable={syncConfigError !== null}
+            error={syncConfigError ?? syncState.error}
+            onSignIn={() => void guard('login', signInForSync)}
+          />
+        ) : (
+          <>
+            <div class="row">
+              <span class="grow label">계정</span>
+              <span class="mono dim">{syncState.email}</span>
+            </div>
+            <button
+              class="row"
+              disabled={busy !== null || syncState.phase === 'syncing'}
+              onClick={() =>
+                void guard('sync', async () => {
+                  const result = await syncNow(handle, true).finally(bump);
+                  toast(`${result.pushed + result.pulled}건 맞췄습니다`);
+                })
+              }
+            >
+              <span class="grow label">지금 맞추기</span>
+              <span class="mono dim">
+                {syncState.phase === 'syncing'
+                  ? '맞추는 중…'
+                  : syncState.phase === 'error'
+                    ? '오류'
+                    : syncState.lastSyncedAt
+                      ? fmtDate(syncState.lastSyncedAt)
+                      : '대기'}
+              </span>
+            </button>
+            {syncState.phase === 'error' && (
+              <div class="cap" style="padding:10px 16px;color:var(--danger)">{syncState.error}</div>
+            )}
+            {syncState.phase === 'error' && syncState.legacyAccountId && syncState.accountId && (
+              <button class="row" disabled={busy !== null} onClick={() => {
+                const { legacyAccountId, accountId, email } = syncState;
+                if (!confirm(`이 기기의 기존 기록을 ${email} 계정으로 옮깁니다. 먼저 백업 파일을 받고, 렛저 전용 서버에 전송합니다. 이 기록이 본인 것인지 확인했나요?`)) return;
+                void guard('migrate-sync', async () => {
+                  const moved = await moveLegacySyncWithBackup(handle, legacyAccountId!, accountId!);
+                  if (!moved) { toast('백업을 취소해 서버 연결을 바꾸지 않았습니다'); return; }
+                  await syncNow(handle, true).finally(bump);
+                  toast('기록을 보존하고 렛저 전용 서버로 옮겼습니다');
+                });
+              }}>
+                <span class="grow label">백업 후 전용 서버로 전환</span>
+              </button>
+            )}
+            <button
+              class="row"
+              disabled={busy !== null}
+              onClick={() => void guard('logout', signOutFromSync)}
+            >
+              <span class="grow label">이 기기 연결 끊기</span>
+            </button>
+            <div class="cap dim" style="padding:10px 16px 14px">
+              연결을 끊어도 이 기기의 기록은 남습니다. 한 기록함을 다른 계정에 섞어 올리지는 않습니다.
+            </div>
+          </>
+        )}
+
+        <SectionRow label="백업" />
         <button
           class="row"
           disabled={busy !== null}
@@ -159,6 +253,45 @@ export function SettingsSheet({
         ))}
 
         <SectionRow label="사진" />
+        {syncState.phase === 'signed-out' ? (
+          <div class="row">
+            <span class="grow label">Google Photos</span>
+            <span class="mono dim">계정 연결 후 사용</span>
+          </div>
+        ) : googleConnected === null ? (
+          <div class="row">
+            <span class="grow label">Google Photos</span>
+            <span class="mono dim">확인 중…</span>
+          </div>
+        ) : googleConnected ? (
+          <button
+            class="row"
+            disabled={busy !== null}
+            onClick={() =>
+              void guard('google-out', async () => {
+                await disconnectGooglePhotos();
+                setGoogleConnected(false);
+                toast('Google Photos 연결을 끊었습니다');
+              })
+            }
+          >
+            <span class="grow label">Google Photos</span>
+            <span class="mono dim">연결됨 · 끊기</span>
+          </button>
+        ) : (
+          <button
+            class="row"
+            disabled={busy !== null}
+            onClick={() => void guard('google-in', connectGooglePhotos)}
+          >
+            <span class="grow label">Google Photos 연결</span>
+            <Icon name="chevronRight" />
+          </button>
+        )}
+        <div class="cap dim" style="padding:10px 16px 14px">
+          사진은 월별 Ledger 앨범에 저장하고, 이 앱에는 사진 ID만 맞춥니다. 기록에서 사진을 빼도
+          Google Photos 원본은 남습니다.
+        </div>
         <button
           class="row"
           disabled={busy !== null || photos.count === 0}
@@ -263,7 +396,10 @@ export function SettingsSheet({
           </>
         )}
 
-        <div class="note">기록은 이 기기를 떠나지 않습니다. 서버도 계정도 없습니다.</div>
+        <div class="note">
+          계정을 연결하지 않으면 기록은 이 기기에만 남습니다. 연결하면 본문은 사용자별 비공개 서버와 맞춥니다.
+          {' '}<a href="./privacy.html" target="_blank" rel="noopener noreferrer">개인정보 안내</a>
+        </div>
         <div class="gap-lg" />
       </div>
     </div>
