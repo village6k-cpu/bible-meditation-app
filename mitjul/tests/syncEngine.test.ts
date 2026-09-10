@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migrate } from '../src/db/migrations';
-import { bindSyncAccount, syncOnce, type RemoteSyncApi } from '../src/db/syncEngine';
+import { bindSyncAccount, migrateLegacySyncAccount, syncOnce, type RemoteSyncApi } from '../src/db/syncEngine';
 import { FakeDb } from './sqliteShim';
 import { createEntry } from '../src/db/entryRepo';
-import { preparePushBatch, type RemoteRecord } from '../src/db/syncRepo';
+import { acknowledgeChanges, preparePushBatch, type RemoteRecord } from '../src/db/syncRepo';
 
 type AnyDb = Parameters<typeof migrate>[0];
 
@@ -142,7 +142,56 @@ test('한 로컬 기록함을 다른 계정에 실수로 섞어 올리지 않는
   const db = new FakeDb();
   await migrate(db as unknown as AnyDb);
 
-  await bindSyncAccount(db as unknown as AnyDb, 'account-a');
-  await bindSyncAccount(db as unknown as AnyDb, 'account-a');
-  await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'account-b'), /다른 계정/);
+  await bindSyncAccount(db as unknown as AnyDb, 'account-a', 'ledger-project');
+  await bindSyncAccount(db as unknown as AnyDb, 'account-a', 'ledger-project');
+  await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'account-b', 'ledger-project'), /다른 계정/);
+  await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'account-a', 'other-project'), /다른 서버/);
+});
+
+test('프로젝트 식별자가 없던 옛 기록함은 확인 없이 새 계정에 연결되지 않는다', async () => {
+  const db = new FakeDb();
+  await migrate(db as unknown as AnyDb);
+  await db.runAsync("INSERT INTO sync_meta VALUES ('account_id', 'old-user')");
+  await db.runAsync("UPDATE sync_meta SET value='900' WHERE key='remote_cursor'");
+  await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'new-user', 'ledger-project'), /전용 서버/);
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='account_id'"))?.value, 'old-user');
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='remote_cursor'"))?.value, '900');
+});
+
+test('확인한 옛 기록함만 서버 연결을 바꾸고 기록·사진 연결·미전송 삭제를 보존해 다시 보낸다', async () => {
+  const db = new FakeDb();
+  const sqlite = db as unknown as AnyDb;
+  await migrate(sqlite);
+  await db.runAsync("INSERT INTO sources (id,kind,title,created_at,last_used_at) VALUES ('book','book','원래 책',1,1)");
+  const entry = await createEntry(sqlite, {type:'moment',day:'2026-09-10',body:'기존 기록 #보존',source_id:'book',image_uri:'photos/kept.jpg'});
+  await db.runAsync("INSERT INTO photo_links VALUES ('photos/kept.jpg','google-media','google-album',1,1)");
+  await acknowledgeChanges(sqlite, await preparePushBatch(sqlite, 100));
+  await db.runAsync("INSERT INTO sync_changes VALUES ('entries','deleted-on-old-server','delete',500)");
+  await db.runAsync("INSERT INTO sync_meta VALUES ('account_id','old-user')");
+  await db.runAsync("UPDATE sync_meta SET value='900' WHERE key='remote_cursor'");
+
+  await migrateLegacySyncAccount(sqlite, 'old-user', 'new-user', 'ledger-project');
+
+  const batch = await preparePushBatch(sqlite, 100);
+  assert.ok(batch.some(row => row.entity_type === 'sources' && row.entity_id === 'book'));
+  assert.ok(batch.some(row => row.entity_type === 'entries' && row.payload?.body === '기존 기록 #보존'));
+  assert.ok(batch.some(row => row.entity_type === 'tags' && row.payload?.name === '보존'));
+  assert.ok(batch.some(row => row.entity_type === 'entry_tags' && row.payload?.entry_id === entry));
+  assert.ok(batch.some(row => row.entity_type === 'photo_links' && row.payload?.media_item_id === 'google-media'));
+  assert.ok(batch.some(row => row.entity_id === 'deleted-on-old-server' && row.operation === 'delete'));
+  assert.equal((await db.getFirstAsync<{image_uri:string}>('SELECT image_uri FROM entries WHERE id=?',[entry]))?.image_uri, 'photos/kept.jpg');
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='remote_cursor'"))?.value, '0');
+  await bindSyncAccount(sqlite, 'new-user', 'ledger-project');
+  await assert.rejects(() => migrateLegacySyncAccount(sqlite, 'new-user', 'unrelated-user', 'other-project'), /전환/);
+});
+
+test('전환 확인 뒤 연결 상태가 달라졌다면 큐와 기록을 건드리지 않는다', async () => {
+  const db = new FakeDb();
+  await migrate(db as unknown as AnyDb);
+  await db.runAsync("INSERT INTO sync_meta VALUES ('account_id','different-user')");
+  await db.runAsync("UPDATE sync_meta SET value='900' WHERE key='remote_cursor'");
+  const before = await db.getAllAsync('SELECT * FROM sync_meta ORDER BY key');
+  await assert.rejects(() => migrateLegacySyncAccount(db as unknown as AnyDb, 'old-user', 'new-user', 'ledger-project'), /전환/);
+  assert.deepEqual(await db.getAllAsync('SELECT * FROM sync_meta ORDER BY key'), before);
+  assert.equal((await db.getFirstAsync<{n:number}>('SELECT count(*) AS n FROM sync_changes'))?.n, 0);
 });

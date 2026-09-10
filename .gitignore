@@ -6,3 +6,4 @@ expo-env.d.ts
 .DS_Store
 *.log
 supabase/.temp/
+web/.env.local

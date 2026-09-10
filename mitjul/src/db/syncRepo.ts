@@ -51,6 +51,19 @@ const PRIMARY_KEYS: Record<SyncEntityType, readonly string[]> = {
   photo_links: ['photo_uri'],
 };
 
+// 서버 이전 때 이미 전송했던 행도 새 서버로 보낸다. 미전송 삭제·수정은 그대로 우선한다.
+export async function queueAllRecordsForSync(db: SQLiteDatabase): Promise<void> {
+  for (const [table, keys] of Object.entries(PRIMARY_KEYS)) {
+    const id = keys.join(' || char(31) || ');
+    await db.runAsync(
+      `INSERT INTO sync_changes (entity_type, entity_id, operation, changed_at)
+       SELECT ?, ${id}, 'upsert', ? FROM ${table} WHERE 1
+       ON CONFLICT (entity_type, entity_id) DO NOTHING`,
+      [table, Date.now()]
+    );
+  }
+}
+
 function splitEntityId(entityType: SyncEntityType, entityId: string): string[] {
   const keys = PRIMARY_KEYS[entityType];
   const values = keys.length === 1 ? [entityId] : entityId.split(JOINER);

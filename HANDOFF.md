@@ -5,6 +5,8 @@
 - 저장소: `village6k-cpu/bible-meditation-app`
 - 작업 브랜치: `claude/personal-daily-log-app-raeet6` (**이 브랜치에만** 커밋·푸시할 것)
 - 현재 작업: 기기 간 동기화. PR #10은 초안이며 실제 로그인·사진 왕복 검증 뒤 `main`에 합칠 것.
+- 2026-09-10 사용자 확인: HeyBilly 정상 작동 복구. Ledger는 재개하되 HeyBilly 운영 자원은 변경 금지.
+  공유 인증을 다시 켜지 않는다. 사용자 승인 후 전용 Free 조직·프로젝트를 만들었다. 아래 최신 상태를 우선한다.
 - 이 저장소에는 원래 다른 앱(성경 묵상 앱)이 있다. 그 코드는 `main`과 동일하게 두고 건드리지 않는다.
   Ledger는 `mitjul/`과 `web/` 두 디렉터리에만 있다.
 - 앱 이름은 **Ledger**다. 다만 코드와 UI 문구의 「밑줄」은 대부분 *책에 긋는 하이라이트*라는
@@ -271,7 +273,63 @@ git archive HEAD | tar -x -C /tmp/ci && cd /tmp/ci/web && npm ci && npm run buil
 
 ## 5. 남은 일
 
+### 2026-09-10 최신 상태 — 전용 백엔드 생성, 사진 함수 배포 승인 대기
+
+- 사용자 승인에 따라 동일 관리 계정에 **Ledger Free 조직** `yemqwfrlkuzojvjniolk`와
+  서울 리전 **ledger 프로젝트** `mbypanaxjuliucxsujea`를 생성했다. 비용 조회·확인 결과 월 $0.
+  기존 HeyBilly 프로젝트·조직·Auth·GAS·Vercel·Slack 설정은 이 재개 작업에서 변경하지 않았다.
+- 기존 SQL 마이그레이션 5개를 새 프로젝트에 적용했다. 본문 표는 사용자별 RLS 4개 정책,
+  Google 토큰/앨범 표는 일반 사용자·anon 접근 없음, service role만 읽는다.
+  Security Advisor의 ERROR/WARN은 0건이며, 잠긴 표의 `RLS enabled, no policy` INFO 2건만 있다.
+- 브라우저 클라이언트는 위 전용 프로젝트만 허용한다. 설정 누락/다른 서버/비밀키 입력은
+  SDK 생성 전에 차단하고 로컬 기록·백업은 계속 쓸 수 있다. 인증 저장소 키도 `ledger-<ref>-auth`로 분리했다.
+  공개 URL·publishable key는 `web/.env.production`과 `.env.example`에 있고, 개발용 `.env.local`은 git 제외다.
+- Google Cloud **기존 Ledger 전용 프로젝트** `ledger-village6k-2026`는 재사용했다.
+  기존 `Ledger Web` 클라이언트와 비밀값 2개는 수정·삭제하지 않았다. 새 `Ledger Isolated Web`을 추가했다.
+  ID: `591863047114-rie73ak5k7ml1e527v7ntqbmdahsslih.apps.googleusercontent.com`.
+  새 프로젝트의 `/auth/v1/callback` 및 `/functions/v1/ledger-photos?callback=1`만 등록했다.
+  새 비밀값은 새 Supabase의 Auth/Edge Secrets에 보관하며 저장소·로그에 기록하지 않는다.
+  Edge Secrets의 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_STATE_SECRET`,
+  `GOOGLE_TOKEN_ENCRYPTION_KEY` 네 개 저장을 확인했다. 뒤 두 키는 새 프로젝트용으로 새로 생성했다.
+- **새 프로젝트에만 Google 로그인 활성화**했다. Site URL은 기존 Pages 주소이며 허용 반환 주소는
+  Pages `?sync=1`, `http://127.0.0.1:5174/?sync=1`, `http://localhost:5174/?sync=1` 세 개다.
+  새 `/auth/v1/settings`에서 Google 활성화를 확인했고, 실제 Chrome에서 승인된 Google 계정으로 로그인했다.
+- 기존 로컬 테스트 기록 두 건은 그대로 보이며 새 계정에 자동 전송되지 않는다. `project_id`가 없던
+  옛 기록함은 「백업 후 전용 서버로 전환」을 눌러 계정 확인·백업을 끝내야 이동한다.
+  백업 취소/실패나 확인 후 계정 변경 시 전환하지 않는다. 전환 시 원본 행·사진 연결·미전송 삭제를
+  보존하고 전체 행을 다시 전송 대기시킨 뒤 새 서버 수신 커서를 0으로 한다. 이미 새 서버에 연결된
+  기록함은 다른 서버·사용자에게 재할당할 수 없다. 실제 로컬 기록함 전환은 아직 실행하지 않았다.
+- **사진 함수는 아직 새 서버에 배포되지 않았다.** `verify_jwt:false` 배포가 자동 보안 심사에서
+  거부됐다. 실제 함수+SDK+암호 연산으로 무인증 5개 작업, 위조 bearer, 위조/만료 state, 타인 ID 무시를
+  확인한 보안 테스트 5개가 통과했지만 재심사도 명시적 승인 필요로 거절됐다.
+  우회 배포하지 말 것. Google 콜백에는 JWT가 없으므로 함수 게이트웨이 JWT 검사 대신 내부 HMAC state와
+  `auth.getUser(bearer)`를 사용하는 배포를 사용자에게 명시적으로 승인받아야 한다.
+  허용되면 **새 프로젝트에만** 배포한 후 무인증 거절·로그인 사용자 상태 조회·사진 왕복을 검증한다.
+- 현재 검증: 웹 테스트 23개, 코어 테스트 111개, 양쪽 타입 검사, 웹 빌드 통과.
+  웹 빌드에는 기존 루트 `expo/tsconfig.base` 경고가 있다. 실제 로그인·전환 안내 화면의 데스크톱
+  스크린샷은 확인했으나 정확한 390/1280px 두 폭 시각 검증과
+  새 서버 글·사진 왕복은 아직 미완료다. PR #10 초안 유지, main에 미배포.
+
+아래 공유 프로젝트 설정 내용은 **원복 전 과거 이력**이다. 다시 활성화하는 지침으로 읽지 말 것.
+
 ### (A) 배포 전에 한 번 해야 하는 Google 설정
+
+**2026-09-10 09:33 KST 장애 복구 우선으로 중단:** 사용자가 HeyBilly 품목 체크·반출완료 저장
+오류를 보고하고 원복을 지시했다. 이 작업에서 켰던 공유 Supabase Google 공급자를 다시 껐고,
+추가했던 Ledger 반환 주소 3개만 제거했다. `/auth/v1/settings`에서 `google=false`, `email=true`,
+익명 로그인 꺼짐을 확인했으며, 관리 화면에서 반환 주소 없음과 기존 Site URL 유지도 확인했다.
+Google 클라이언트·비밀값, Ledger 테이블·데이터·함수는 삭제하지 않았다. HeyBilly 코드·업무 데이터·
+권한·배포는 이 복구에서 변경하지 않았다. **이후 사용자가 HeyBilly 정상 작동을 직접 확인했다.**
+현재 Ledger Google 로그인은 중단된 상태이며, 아래 활성화·검증 내용은 원복 전 이력이다.
+HeyBilly 영향 범위와 분리 방식을 사용자와 확정하기 전 공유 인증을 다시 활성화하지 말 것.
+
+같은 조사에서 `signOutFromSync()`의 인자 없는 `signOut()` 호출을 발견했다. SDK 기본 scope는
+`global`이어서 같은 사용자 계정의 HeyBilly/다른 기기 세션까지 종료할 수 있다. `scope: 'local'`로
+고쳤고, 실제 로그아웃 함수와 설치된 SDK가 보내는 요청을 검사하는 테스트에서 수정 전 `global`
+실패 → 수정 후 `local` 통과를 확인했다. 웹 테스트 10개와 웹 타입 검사가 통과했다.
+이 수정은 로컬 작업 트리에만 있으며 운영 배포하지 않았다. Supabase Auth 로그에는 `Session not found`,
+`Refresh Token Not Found`, 토큰 만료 오류가 있지만, 이번 저장 실패를 위 호출과 직접 연결하는
+증거는 아직 없다. 사용자 복구 확인과 기술적 원인 확정을 구별할 것. 이미 취소된 세션을 되살렸다고 쓰지 않는다.
 
 Pages 설정과 홈 화면 추가는 완료됐다. 앱은
 https://village6k-cpu.github.io/bible-meditation-app/ 에서 돌고 있고, `main`에 푸시하면 자동 배포된다.
@@ -310,11 +368,16 @@ Google Photos Library API, Ledger 브랜딩, 웹 OAuth 클라이언트 `Ledger W
      나타났고, A 새로고침 후에도 남는다. B에서 쓴 「렛저 동기화 검증 B」도 서버(revision 9)에 저장됐다.
      B→A 최종 화면 확인은 아직 남았다. 실제 폰에서 검증한 것은 아니다.
    - 위 검증용 기록 두 건은 남아 있다. 기존 개인 기록은 수정하거나 삭제하지 않았다.
-   - Google Photos의 추가 동의는 자동 안전 검사에 막혀 사용자 확인을 요청했다. 요청 범위는
-     사진 추가 및 앱이 만든 사진 조회·정보 수정이며, 기존 라이브러리 전체 조회는 아니다.
-     브라우저 파일 첨부 API도 `Not allowed`를 반환해 테스트 이미지 첨부·업로드는 하지 못했다.
-   - 마지막 브라우저 중단: Chrome이 열린 확장 프로그램 UI 때문에 자동 조작을 차단했다.
-     사용자가 팝업을 닫은 뒤에만 이어갈 것. 도구 제한을 우회해서 인증이나 첨부를 수행하지 않는다.
+   - 사용자가 사진 연결을 명시적으로 승인했다. Google 동의 화면에서 `village.6k@gmail.com`의
+     사진 추가 및 앱이 만든 사진 조회·정보 수정 권한 세 개를 선택하고 「계속」을 제출했다.
+     기존 라이브러리 전체 조회 권한은 요청하지 않았다. 사진 권한에 대한 사용자 재승인은 필요 없다.
+   - 이전 확장 프로그램 팝업 차단은 재개 시 나타나지 않았지만, Google에서 돌아오는 Photos 콜백을
+     Chrome이 `ERR_BLOCKED_BY_CLIENT`로 차단했다. 직후 읽기 전용 조회에서
+     `ledger_google_accounts`는 0건이었다. 권한 동의와 서버 연결 완료를 구분할 것.
+     차단 원인은 확정하지 못했으며 사용자가 Chrome의 차단 화면을 직접 확인해야 한다.
+     콜백 state는 10분 만료이므로 차단 해결 후에는 Ledger에서 새 연결을 시작해야 할 수 있다.
+     도구 제한을 우회하거나 콜백 URL의 인증 코드를 다른 도구로 전송하지 않는다.
+   - 브라우저 파일 첨부 API도 이전에 `Not allowed`를 반환해 테스트 이미지 첨부·업로드는 하지 못했다.
 4. 현재 Google OAuth는 테스트 모드다. 이 모드의 refresh token은 7일 뒤 만료하므로 실사용 전
    운영 모드·브랜딩 검증 상태를 정리하고 다시 연결해야 한다. 테스트 연결만 하고 장기 사용 준비가
    끝났다고 하지 말 것. [Google 공식 만료 규칙](https://developers.google.com/identity/protocols/oauth2#expiration)
@@ -328,14 +391,18 @@ refresh token은 AES-GCM 암호문으로만 저장한다.
 
 ### (B) 코드로 남은 것
 
-#### B-1. 기기 간 동기화 — 구현 완료, 설정·실기기 검증 남음
+#### B-1. 기기 간 동기화 — 전용 서버 생성·로그인 확인, 사진 배포 승인·왕복 검증 남음
 
-사용자 결정은 끝났다. 이미 가진 HeyBilly Supabase를 본문/계정에 재사용하고, 사진 바이트는 비용이
-커지지 않도록 Google Photos에 둔다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
+기존 HeyBilly Supabase 재사용 결정은 장애 후 운영 경계 지시에 의해 중단됐다. 같은 프로젝트의 Google
+인증을 다시 켜서 이어가면 안 된다. 사용자 승인 후 같은 관리 계정의 렛저 전용 Free 조직·프로젝트를
+만들고 인증/DB를 분리했다. Edge Function은 명시적 배포 승인 대기이며 기존 구현과 Google Cloud의
+Ledger 전용 앱을 재사용한다. 기존 `bible-app`도 다른 앱 자원이므로 변경하지 않는다.
+사진 바이트는 Google Photos에 두는 사용자 선택을 유지한다. `mitjul/src/db/sync*.ts`, `photoSync.ts`, `web/src/sync/`,
 `supabase/`가 구현이다. 설정 화면은 Google 계정 선택으로만 연결한다. 이메일/비밀번호 폼은 제거했다.
 
 Google 로그인 공급자 설정과 코드 커밋 `a7b5165`의 CI는 통과했다(run `34416303702`).
-남은 것은 위 (A)의 운영 모드 정리와 **실제 계정으로 로그인해 두 기기에서
+남은 것은 사진 함수 배포 승인, 기존 로컬 기록의 백업 후 새 동기화 계정 연결/초기 재전송 실제 검증,
+위 (A)의 운영 모드 정리와 **실제 계정으로 로그인해 두 기기에서
 글 1건과 사진 1장을 왕복하는 것**이다. 390px와 1280px 설정 화면은 로컬 브라우저에서 직접 확인했다.
 본문 동기화는 Supabase에 이미 적용됐지만 `main`에 웹 코드가 아직 배포되지 않았다. 실계정 왕복까지
 끝내기 전에는 “라이브 동기화 완료”라고 말하지 말 것.

@@ -2,7 +2,7 @@ import { processPhotoJobs, type PhotoStore, type PhotoSyncResult } from '@db/pho
 import { asSqlite } from '../db';
 import type { WebDb } from '../db/sqlite';
 import { isPhotoRef, photoBlob } from '../platform/photos';
-import { supabase } from './client';
+import { requireSyncClient } from './client';
 import { createGooglePhotosRemote, invokeLedgerPhotos } from './googlePhotosApi';
 
 function browserPhotoStore(handle: WebDb): PhotoStore {
@@ -20,23 +20,23 @@ function browserPhotoStore(handle: WebDb): PhotoStore {
 }
 
 export async function googlePhotosStatus(): Promise<boolean> {
-  const result = await invokeLedgerPhotos<{ connected: boolean }>(supabase, { action: 'status' });
+  const result = await invokeLedgerPhotos<{ connected: boolean }>(requireSyncClient(), { action: 'status' });
   return result.connected;
 }
 
 export async function connectGooglePhotos(): Promise<void> {
-  const result = await invokeLedgerPhotos<{ url: string }>(supabase, { action: 'connect' });
+  const result = await invokeLedgerPhotos<{ url: string }>(requireSyncClient(), { action: 'connect' });
   location.assign(result.url);
 }
 
 export async function disconnectGooglePhotos(): Promise<void> {
-  await invokeLedgerPhotos(supabase, { action: 'disconnect' });
+  await invokeLedgerPhotos(requireSyncClient(), { action: 'disconnect' });
 }
 
 export async function processPendingPhotos(handle: WebDb): Promise<PhotoSyncResult | null> {
   if (!(await googlePhotosStatus())) return null;
   const sqlite = asSqlite(handle);
-  const result = await processPhotoJobs(sqlite, browserPhotoStore(handle), createGooglePhotosRemote(supabase));
+  const result = await processPhotoJobs(sqlite, browserPhotoStore(handle), createGooglePhotosRemote(requireSyncClient()));
   const failed = await sqlite.getFirstAsync<{last_error:string}>(
     "SELECT last_error FROM photo_jobs WHERE state='failed' ORDER BY updated_at DESC LIMIT 1"
   );

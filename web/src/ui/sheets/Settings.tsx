@@ -15,6 +15,7 @@ import { photoStat, sharePhotoBatch, sweepOrphans, type PhotoStat } from '../../
 import { Icon } from '../icons';
 import { SectionRow } from '../parts/entry';
 import { SyncLogin } from '../parts/SyncLogin';
+import { syncConfigError } from '../../sync/client';
 import { bump } from '../store';
 import {
   getSyncState,
@@ -22,6 +23,7 @@ import {
   signOutFromSync,
   subscribeSyncState,
   syncNow,
+  moveLegacySyncWithBackup,
 } from '../../sync';
 import {
   connectGooglePhotos,
@@ -111,7 +113,8 @@ export function SettingsSheet({
         {syncState.phase === 'signed-out' ? (
           <SyncLogin
             busy={busy !== null}
-            error={syncState.error}
+            unavailable={syncConfigError !== null}
+            error={syncConfigError ?? syncState.error}
             onSignIn={() => void guard('login', signInForSync)}
           />
         ) : (
@@ -143,6 +146,20 @@ export function SettingsSheet({
             </button>
             {syncState.phase === 'error' && (
               <div class="cap" style="padding:10px 16px;color:var(--danger)">{syncState.error}</div>
+            )}
+            {syncState.phase === 'error' && syncState.legacyAccountId && syncState.accountId && (
+              <button class="row" disabled={busy !== null} onClick={() => {
+                const { legacyAccountId, accountId, email } = syncState;
+                if (!confirm(`이 기기의 기존 기록을 ${email} 계정으로 옮깁니다. 먼저 백업 파일을 받고, 렛저 전용 서버에 전송합니다. 이 기록이 본인 것인지 확인했나요?`)) return;
+                void guard('migrate-sync', async () => {
+                  const moved = await moveLegacySyncWithBackup(handle, legacyAccountId!, accountId!);
+                  if (!moved) { toast('백업을 취소해 서버 연결을 바꾸지 않았습니다'); return; }
+                  await syncNow(handle, true).finally(bump);
+                  toast('기록을 보존하고 렛저 전용 서버로 옮겼습니다');
+                });
+              }}>
+                <span class="grow label">백업 후 전용 서버로 전환</span>
+              </button>
             )}
             <button
               class="row"

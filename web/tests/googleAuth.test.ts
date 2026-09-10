@@ -48,3 +48,10 @@ test('연결 중에는 중복 요청을 막고 취소·실패는 화면에 남�
   assert.match(html, /Google로 이동 중/);
   assert.match(html, /role="alert"[^>]*>Google 로그인이 취소됐습니다/);
 });
+
+test('전용 서버 설정이 준비되지 않으면 Google 연결 버튼을 잠그고 로컬 보존을 안내한다', () => {
+  const html = render(h(SyncLogin, { busy: false, unavailable: true, error: '동기화 서버 설정이 필요합니다.', onSignIn() {} }));
+  assert.match(html, /<button[^>]*disabled/);
+  assert.match(html, /이 기기의 기록은 그대로/);
+  assert.match(html, /role="alert"/);
+});

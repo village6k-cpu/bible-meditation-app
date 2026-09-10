@@ -3,6 +3,7 @@ import {
   acknowledgeChanges,
   applyRemoteRecords,
   preparePushBatch,
+  queueAllRecordsForSync,
   type PreparedChange,
   type RemoteRecord,
 } from './syncRepo';
@@ -19,16 +20,53 @@ export interface SyncResult {
 
 const PULL_PAGE_SIZE = 500;
 
-export async function bindSyncAccount(db: SQLiteDatabase, accountId: string): Promise<void> {
+export class LegacySyncAccountError extends Error {
+  constructor(public readonly legacyAccountId: string) {
+    super('이 기록함은 이전 동기화 서버에 연결되어 있습니다. 백업 후 렛저 전용 서버로 전환하세요.');
+  }
+}
+
+async function readBinding(db: SQLiteDatabase) {
   const bound = await db.getFirstAsync<{ value: string }>(
     "SELECT value FROM sync_meta WHERE key = 'account_id'"
   );
-  if (bound && bound.value !== accountId) {
-    throw new Error('이 기록함은 다른 계정에 연결되어 있습니다. 먼저 백업한 뒤 새 기록함에서 로그인하세요.');
-  }
-  if (!bound) {
-    await db.runAsync("INSERT INTO sync_meta (key, value) VALUES ('account_id', ?)", [accountId]);
-  }
+  const project = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM sync_meta WHERE key = 'project_id'"
+  );
+  return { accountId: bound?.value, projectId: project?.value };
+}
+
+export async function bindSyncAccount(db: SQLiteDatabase, accountId: string, projectId: string): Promise<void> {
+  if (!accountId || !projectId) throw new Error('동기화 계정과 서버를 확인하지 못했습니다.');
+  await db.withTransactionAsync(async () => {
+    const bound = await readBinding(db);
+    if (bound.projectId && bound.projectId !== projectId) throw new Error('이 기록함은 다른 서버에 연결되어 있습니다.');
+    if (bound.accountId && !bound.projectId) throw new LegacySyncAccountError(bound.accountId);
+    if (bound.accountId && bound.accountId !== accountId) {
+      throw new Error('이 기록함은 다른 계정에 연결되어 있습니다. 먼저 백업한 뒤 새 기록함에서 로그인하세요.');
+    }
+    if (!bound.accountId) {
+      await db.runAsync("INSERT INTO sync_meta (key, value) VALUES ('account_id', ?)", [accountId]);
+      await db.runAsync("INSERT INTO sync_meta (key, value) VALUES ('project_id', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [projectId]);
+    }
+  });
+}
+
+// 백업과 계정 확인을 마친 UI에서만 부른다. 새 서버에 이미 연결된 기록함은 재할당할 수 없다.
+export async function migrateLegacySyncAccount(
+  db: SQLiteDatabase, legacyAccountId: string, accountId: string, projectId: string
+): Promise<void> {
+  if (!legacyAccountId || !accountId || !projectId) throw new Error('서버 전환에 필요한 계정 정보가 없습니다.');
+  await db.withTransactionAsync(async () => {
+    const bound = await readBinding(db);
+    if (bound.projectId || bound.accountId !== legacyAccountId) {
+      throw new Error('연결 상태가 달라져 서버 전환을 중단했습니다.');
+    }
+    await queueAllRecordsForSync(db);
+    await db.runAsync("UPDATE sync_meta SET value=? WHERE key='account_id'", [accountId]);
+    await db.runAsync("INSERT INTO sync_meta (key,value) VALUES ('project_id',?)", [projectId]);
+    await db.runAsync("INSERT INTO sync_meta (key,value) VALUES ('remote_cursor','0') ON CONFLICT(key) DO UPDATE SET value='0'");
+  });
 }
 
 export async function syncOnce(db: SQLiteDatabase, api: RemoteSyncApi): Promise<SyncResult> {

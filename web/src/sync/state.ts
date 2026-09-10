@@ -1,7 +1,7 @@
 export type SyncState =
   | { phase: 'signed-out'; email: null; lastSyncedAt: null; error: string | null }
   | { phase: 'idle' | 'syncing'; email: string; lastSyncedAt: number | null; error: null }
-  | { phase: 'error'; email: string; lastSyncedAt: number | null; error: string };
+  | { phase: 'error'; email: string; lastSyncedAt: number | null; error: string; legacyAccountId?: string; accountId?: string };
 
 let state: SyncState = { phase: 'signed-out', email: null, lastSyncedAt: null, error: null };
 const listeners = new Set<(next: SyncState) => void>();
