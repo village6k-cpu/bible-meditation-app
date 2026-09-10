@@ -288,6 +288,16 @@ export function SettingsSheet({
             <Icon name="chevronRight" />
           </button>
         )}
+        {googleConnected && syncState.phase !== 'signed-out' && (
+          <button
+            class="row"
+            disabled={busy !== null}
+            onClick={() => void guard('google-reconnect', connectGooglePhotos)}
+          >
+            <span class="grow label">Google Photos 다시 연결</span>
+            <Icon name="chevronRight" />
+          </button>
+        )}
         <div class="cap dim" style="padding:10px 16px 14px">
           사진은 월별 Ledger 앨범에 저장하고, 이 앱에는 사진 ID만 맞춥니다. 기록에서 사진을 빼도
           Google Photos 원본은 남습니다.
