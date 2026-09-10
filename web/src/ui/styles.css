@@ -676,6 +676,8 @@ nav.tabbar svg {
 }
 /* 상세에서는 잘라내지 않고 사진 전체를 보여준다 */
 .photo.full {
+  /* 세로 시트에서 사진 높이를 줄이면 overflow가 원본을 자른다 — 본문을 스크롤한다. */
+  flex: none;
   aspect-ratio: auto;
   background: none;
 }
