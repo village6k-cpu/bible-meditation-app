@@ -129,9 +129,14 @@ export function App(): JSX.Element {
   }
   if (boot.phase === 'failed') {
     return (
-      <div class="boot">
+      <div class="boot" style={boot.resumeSnapshot ? 'font-size:14px;line-height:1.6;color:var(--ink2)' : undefined}>
         <div>기록함을 열지 못했습니다</div>
-        <div style="max-width:34ch">{boot.error}</div>
+        <div style="max-width:420px">{boot.error}</div>
+        {boot.resumeSnapshot && <div style="max-width:420px">
+          <p>대체 기록함을 선택하면 그 기록으로 계속 쓰고, 다음 실행에도 같은 기록함을 엽니다.
+            다른 파일 저장소는 그대로 두며 자동으로 합치거나 지우지 않습니다. 저장한 백업은 보관해 주세요.</p>
+          <button class="chip on" style="min-height:44px" onClick={boot.resumeSnapshot}>대체 기록함으로 계속하기</button>
+        </div>}
       </div>
     );
   }

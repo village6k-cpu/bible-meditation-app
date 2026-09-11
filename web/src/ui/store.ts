@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { todayKey } from '@core/dates';
 import { db as openDb } from '../db';
-import type { WebDb } from '../db/sqlite';
+import { StorageRecoveryError, type WebDb } from '../db/sqlite';
 
 // 화면은 상태를 들고 있지 않는다. SQLite가 유일한 진실이고, 화면은 그것을 다시 읽을 뿐이다.
 // 무언가 쓰고 나면 bump()로 '다시 읽어라'라고만 말한다.
@@ -77,13 +77,14 @@ export function useLoad<T>(
 export type Boot =
   | { phase: 'opening' }
   | { phase: 'ready'; handle: WebDb }
-  | { phase: 'failed'; error: string };
+  | { phase: 'failed'; error: string; resumeSnapshot?: () => void };
 
 export function useBoot(): Boot {
   const [boot, setBoot] = useState<Boot>({ phase: 'opening' });
+  const [recovery, setRecovery] = useState<'snapshot' | undefined>();
   useEffect(() => {
     let alive = true;
-    openDb()
+    openDb(recovery ? { recovery } : undefined)
       .then((handle) => alive && setBoot({ phase: 'ready', handle }))
       .catch(
         (e: unknown) =>
@@ -91,12 +92,16 @@ export function useBoot(): Boot {
           setBoot({
             phase: 'failed',
             error: e instanceof Error ? e.message : String(e),
+            resumeSnapshot: e instanceof StorageRecoveryError ? () => {
+              setBoot({ phase: 'opening' });
+              setRecovery('snapshot');
+            } : undefined,
           })
       );
     return () => {
       alive = false;
     };
-  }, []);
+  }, [recovery]);
   return boot;
 }
 

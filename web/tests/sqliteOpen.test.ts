@@ -72,3 +72,25 @@ test('저장소 읽기에 실패한 워커는 종료하고 오류를 숨기지 �
     assert.equal(terminated, true);
   } finally { globalThis.Worker = previous; }
 });
+
+test('복구 가능한 오류만 선택 동작을 제공하고 사용자의 선택을 새 워커로 전달한다', async () => {
+  const previous = globalThis.Worker;
+  let terminated = 0;
+  class RecoveryWorker {
+    onmessage?: (event: { data: unknown }) => void;
+    postMessage(message: { id: number; opts?: { recovery?: string } }) {
+      queueMicrotask(() => this.onmessage?.({ data: { id: message.id, ok: true,
+        result: message.opts?.recovery === 'snapshot'
+          ? { engine: 'memory', opfsError: null }
+          : { engine: 'blocked', recovery: 'snapshot', opfsError: '두 저장소 발견' },
+      } }));
+    }
+    terminate() { terminated++; }
+  }
+  globalThis.Worker = RecoveryWorker as unknown as typeof Worker;
+  try {
+    await assert.rejects(openDb(), (error: unknown) => error instanceof Error && error.name === 'StorageRecoveryError');
+    assert.equal(terminated, 1);
+    assert.equal((await openDb(undefined, { recovery: 'snapshot' })).engine, 'memory');
+  } finally { globalThis.Worker = previous; }
+});
