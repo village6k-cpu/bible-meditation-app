@@ -1,18 +1,21 @@
 import { migrate } from '@db/migrations';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { openDb, type WebDb } from './sqlite';
+import { openDb, type WebDb, type OpenOptions } from './sqlite';
 
 // 네이티브 앱의 db 레이어를 그대로 쓴다 — 여는 방법만 브라우저 것으로.
 let ready: Promise<WebDb> | null = null;
 
-export function db(): Promise<WebDb> {
+export function db(options?: Pick<OpenOptions, 'recovery'>): Promise<WebDb> {
   if (!ready) {
     ready = (async () => {
-      const d = await openDb();
+      const d = await openDb(undefined, options);
       await migrate(d as unknown as SQLiteDatabase);
       await d.flush();
       return d;
-    })();
+    })().catch((error: unknown) => {
+      ready = null;
+      throw error;
+    });
   }
   return ready;
 }

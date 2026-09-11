@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
-import type { StorageHealth } from './sqlite';
+import type { StorageHealth, OpenOptions } from './sqlite';
 
 // SQLite는 워커에서 산다. OPFS의 동기 접근 핸들이 워커에만 노출되기 때문이고,
 // 덕분에 큰 질의가 화면을 붙잡지도 않는다.
@@ -15,6 +15,7 @@ const dbPath = () => `/${dbName}`;
 let idbName = 'mitjul-store';
 const IDB_STORE = 'db';
 const IDB_KEY = 'snapshot';
+const SELECTED_ENGINE_KEY = 'selected-engine';
 
 let s3: Any = null;
 let raw: Any = null;
@@ -34,19 +35,22 @@ function idb(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
-async function idbGet(): Promise<Uint8Array | null> {
+async function idbRead(key: string): Promise<unknown> {
   const d = await idb();
   return new Promise((resolve, reject) => {
-    const r = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_KEY);
-    r.onsuccess = () => resolve((r.result as Uint8Array) ?? null);
+    const r = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+    r.onsuccess = () => resolve(r.result ?? null);
     r.onerror = () => reject(r.error);
   });
 }
-async function idbPut(bytes: Uint8Array): Promise<void> {
+async function idbGet(): Promise<Uint8Array | null> {
+  return (await idbRead(IDB_KEY)) as Uint8Array | null;
+}
+async function idbWrite(key: string, value: unknown): Promise<void> {
   const d = await idb();
   await new Promise<void>((resolve, reject) => {
     const tx = d.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(bytes, IDB_KEY);
+    tx.objectStore(IDB_STORE).put(value, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -62,7 +66,7 @@ async function flush(): Promise<void> {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  await idbPut(serialize());
+  await idbWrite(IDB_KEY, serialize());
 }
 
 function touch(): void {
@@ -127,9 +131,10 @@ async function storageHealth(): Promise<StorageHealth> {
   return { engine, openingError: opfsError, directory, snapshot };
 }
 
-async function open(opts: { name?: string } = {}): Promise<{
+async function open(opts: OpenOptions = {}): Promise<{
   engine: string;
   opfsError: string | null;
+  recovery?: 'snapshot';
 }> {
   if (opts.name) {
     dbName = opts.name;
@@ -141,17 +146,27 @@ async function open(opts: { name?: string } = {}): Promise<{
   });
   // 먼저 이전 대체 저장소를 읽는다. 읽기 실패를 '기록 없음'으로 삼지 않는다.
   const saved = await idbGet();
+  const selectedSnapshot = opts.recovery === 'snapshot' || (await idbRead(SELECTED_ENGINE_KEY)) === 'snapshot';
   const before = await poolDirectory();
+  if (selectedSnapshot && !saved?.byteLength) {
+    engine = 'blocked';
+    opfsError = '선택했던 대체 기록함을 찾을 수 없습니다. 빈 기록함으로 전환하지 않았습니다. 백업을 보관해 주세요.';
+    return { engine, opfsError };
+  }
   if (saved && saved.byteLength > 0) {
-    if (before === 'present') {
+    if (before === 'present' && !selectedSnapshot) {
       engine = 'blocked';
-      opfsError = '파일 저장소와 대체 저장소에 기록이 함께 있습니다. 백업을 확보한 뒤 확인해야 합니다.';
-      return { engine, opfsError };
+      opfsError = '이전에 쓰던 대체 기록함과 파일 저장소 폴더가 함께 있습니다. 폴더 안의 기록은 아직 비교하지 않았습니다.';
+      return { engine, opfsError, recovery: 'snapshot' };
     }
+    // 사용자 선택은 유효한 Ledger 스냅숏을 확인한 뒤에만 기억한다.
+    // 파일 저장소는 초기화·삭제·병합하지 않는다. 폴더 존재는 기록 충돌의 증거가 아니다.
+    assertOurDb(saved);
     // OPFS가 회복되어도 대체 저장소에서 적은 미전송 기록을 버리고 새 DB를 열지 않는다.
     engine = 'memory';
     raw = new s3.oo1.DB(':memory:', 'c');
     deserializeInto(raw, saved);
+    if (opts.recovery === 'snapshot') await idbWrite(SELECTED_ENGINE_KEY, 'snapshot');
     opfsError ??= '이전에 사용하던 대체 저장소의 기록을 이어서 열었습니다.';
     return { engine, opfsError };
   }
@@ -263,7 +278,7 @@ type Req = {
   params?: unknown[];
   bytes?: Uint8Array;
   name?: string;
-  opts?: { name?: string };
+  opts?: OpenOptions;
 };
 
 self.onmessage = async (ev: MessageEvent<Req>) => {
