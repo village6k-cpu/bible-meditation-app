@@ -47,6 +47,7 @@ export function Inbox({
   onCompose,
   onReview,
   toast,
+  onSettings,
 }: {
   handle: WebDb;
   today: string;
@@ -54,6 +55,7 @@ export function Inbox({
   onCompose: (type: EntryType | null, text?: string) => void;
   onReview: () => void;
   toast: (m: string) => void;
+  onSettings: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
 
@@ -120,7 +122,7 @@ export function Inbox({
         <div class="mono-lg sub">{data.entries.length}</div>
       </header>
 
-      <Notices handle={handle} toast={toast} />
+      <Notices handle={handle} toast={toast} onSettings={onSettings} />
 
       {/* 오늘의 실천 — 식사 세 끼와 운동. 매일 같은 칸이 있고, 채워졌는지가 전부다.
           빈 칸을 누르면 그 칸이 미리 골라진 캡처가 열리고, 채운 칸을 누르면 그 기록이 열린다. */}

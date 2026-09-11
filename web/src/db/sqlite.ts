@@ -3,13 +3,7 @@
 // 그래야 마이그레이션과 리포지토리 950줄이 한 줄도 안 고치고 돌아간다.
 
 export type Engine = 'opfs' | 'memory' | 'blocked';
-export interface OpenOptions { name?: string; recovery?: 'snapshot' }
-export class StorageRecoveryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'StorageRecoveryError';
-  }
-}
+export interface OpenOptions { name?: string }
 
 export interface StorageHealth {
   engine: Engine;
@@ -41,7 +35,7 @@ export interface WebDb {
 
 let seq = 0;
 
-export async function openDb(name?: string, options?: Pick<OpenOptions, 'recovery'>): Promise<WebDb> {
+export async function openDb(name?: string): Promise<WebDb> {
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {
     type: 'module',
   });
@@ -96,11 +90,10 @@ export async function openDb(name?: string, options?: Pick<OpenOptions, 'recover
   let opened: {
     engine: Engine;
     opfsError: string | null;
-    recovery?: 'snapshot';
   };
   try {
     opened = (await send('open', undefined, undefined, undefined,
-      name || options ? { ...(name ? { name } : {}), ...options } : undefined)) as typeof opened;
+      name ? { name } : undefined)) as typeof opened;
   } catch (error) {
     worker.terminate();
     throw error;
@@ -109,7 +102,6 @@ export async function openDb(name?: string, options?: Pick<OpenOptions, 'recover
   // 잠긴 OPFS는 DB가 열린 상태가 아니다. 마이그레이션이 null DB에 접근하기 전에 멈춘다.
   if (opened.engine === 'blocked') {
     worker.terminate();
-    if (opened.recovery === 'snapshot') throw new StorageRecoveryError(opened.opfsError ?? '대체 기록함을 선택해 열 수 있습니다.');
     throw new Error('기존 기록함을 안전하게 열 수 없습니다. 다른 Ledger 탭이나 창이 열려 있다면 닫고 다시 시도하세요. 저장소를 삭제하지 마세요.'
       + (opened.opfsError ? ` (${opened.opfsError})` : ''));
   }

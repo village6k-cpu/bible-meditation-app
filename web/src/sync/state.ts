@@ -1,6 +1,6 @@
 export type SyncState =
   | { phase: 'signed-out'; email: null; lastSyncedAt: null; error: string | null }
-  | { phase: 'idle' | 'syncing'; email: string; lastSyncedAt: number | null; error: null }
+  | { phase: 'idle' | 'pending' | 'syncing'; email: string; lastSyncedAt: number | null; error: null }
   | { phase: 'error'; email: string; lastSyncedAt: number | null; error: string; legacyAccountId?: string; accountId?: string };
 
 let state: SyncState = { phase: 'signed-out', email: null, lastSyncedAt: null, error: null };
@@ -13,6 +13,10 @@ export function publishSyncState(next: SyncState): void {
 
 export function getSyncState(): SyncState {
   return state;
+}
+
+export function markSyncPending(): void {
+  if (state.phase !== 'signed-out') publishSyncState({ phase: 'pending', email: state.email, lastSyncedAt: state.lastSyncedAt, error: null });
 }
 
 export function subscribeSyncState(listener: (next: SyncState) => void): () => void {

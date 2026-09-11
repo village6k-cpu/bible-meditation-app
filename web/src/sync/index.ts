@@ -9,6 +9,7 @@ import { googleSignInUrl } from './googleAuth';
 import { getSyncState, publishSyncState as publish } from './state';
 import { backupNow } from '../platform/backup';
 import { migrateWithBackup } from './migrateWithBackup';
+import { startSyncScheduler } from './scheduler';
 export { getSyncState, subscribeSyncState, type SyncState } from './state';
 
 let active: Promise<SyncResult> | null = null;
@@ -92,27 +93,26 @@ export function startAutoSync(handle: WebDb, onApplied: () => void): () => void 
     return () => {};
   }
   let stopped = false;
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let signedIn = false;
   let subscription: { unsubscribe: () => void } | null = null;
   let loginError: string | null = null;
 
-  const run = (): void => {
-    if (stopped || !navigator.onLine) return;
-    // 사진이 실패해도 이미 받은 본문은 화면에 나타나야 한다.
-    void syncNow(handle).catch(() => {}).finally(() => { if (!stopped) onApplied(); });
-  };
+  const stopScheduler = startSyncScheduler({
+    window, document,
+    canRun: () => !stopped && signedIn && navigator.onLine,
+    isVisible: () => document.visibilityState === 'visible',
+    sync: () => syncNow(handle), onApplied,
+  });
   const setSession = (session: Session | null): void => {
     if (stopped) return;
+    signedIn = !!session;
     if (!session) {
       publish({ phase: 'signed-out', email: null, lastSyncedAt: null, error: loginError });
       return;
     }
     loginError = null;
     publish({ phase: 'idle', email: emailOf(session), lastSyncedAt: getSyncState().lastSyncedAt, error: null });
-    queueMicrotask(run);
-  };
-  const onVisible = (): void => {
-    if (document.visibilityState === 'visible') run();
+    queueMicrotask(() => window.dispatchEvent(new Event('ledger:sync-request')));
   };
 
   // SDK가 PKCE 코드를 한 번 교환한 뒤 구독한다. getSession만 읽으면 콜백 오류가 사라진다.
@@ -125,15 +125,9 @@ export function startAutoSync(handle: WebDb, onApplied: () => void): () => void 
     loginError = '로그인 상태를 확인하지 못했습니다. 다시 연결하세요.';
     setSession(null);
   });
-  window.addEventListener('online', run);
-  document.addEventListener('visibilitychange', onVisible);
-  timer = setInterval(run, 30_000);
-
   return () => {
     stopped = true;
-    if (timer) clearInterval(timer);
+    stopScheduler();
     subscription?.unsubscribe();
-    window.removeEventListener('online', run);
-    document.removeEventListener('visibilitychange', onVisible);
   };
 }

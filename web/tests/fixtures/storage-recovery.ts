@@ -10,7 +10,7 @@ const result = document.querySelector('#result')!;
 button.onclick = async () => {
   button.disabled = true;
   try {
-    if (!['http://127.0.0.1:5193', 'http://localhost:5193'].includes(location.origin)) throw new Error('전용 로컬 origin에서만 실행합니다.');
+    if (!['http://127.0.0.1:5196', 'http://localhost:5196'].includes(location.origin)) throw new Error('전용 로컬 origin에서만 실행합니다.');
     const root = await navigator.storage.getDirectory();
     for await (const _ of (root as any).entries()) throw new Error('기존 파일이 있으므로 준비를 중단합니다.');
     if ((await indexedDB.databases()).length) throw new Error('기존 IndexedDB가 있으므로 준비를 중단합니다.');
@@ -33,7 +33,7 @@ button.onclick = async () => {
       tx.onerror = () => reject(tx.error);
     });
     idb.close();
-    result.textContent = '준비 완료. 렛저 열기를 누르면 두 저장소 감지 화면이 나옵니다.';
+    result.textContent = '준비 완료. 렛저 열기를 누르면 추가 선택 없이 저장된 글·사진을 이어 열어야 합니다.';
   } catch (error) {
     result.textContent = String(error);
   }
