@@ -4,6 +4,13 @@
 
 export type Engine = 'opfs' | 'memory' | 'blocked';
 
+export interface StorageHealth {
+  engine: Engine;
+  openingError: string | null;
+  directory: { state: 'present' | 'missing' | 'unknown' | 'unavailable'; error: string | null };
+  snapshot: { bytes: number | null; error: string | null };
+}
+
 export interface WebDb {
   execAsync(sql: string): Promise<void>;
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
@@ -21,6 +28,8 @@ export interface WebDb {
   listPhotos(): Promise<{ name: string; size: number }[]>;
   engine: Engine;
   opfsError: string | null;
+  /** 재초기화·수정 없이 현재 접근 상태만 점검한다. 기록 내용은 반환하지 않는다. */
+  storageHealth(): Promise<StorageHealth>;
 }
 
 let seq = 0;
@@ -77,20 +86,31 @@ export async function openDb(name?: string): Promise<WebDb> {
     return next;
   };
 
-  const opened = (await send('open', undefined, undefined, undefined, name ? { name } : undefined)) as {
+  let opened: {
     engine: Engine;
     opfsError: string | null;
   };
+  try {
+    opened = (await send('open', undefined, undefined, undefined, name ? { name } : undefined)) as typeof opened;
+  } catch (error) {
+    worker.terminate();
+    throw error;
+  }
 
   // 잠긴 OPFS는 DB가 열린 상태가 아니다. 마이그레이션이 null DB에 접근하기 전에 멈춘다.
   if (opened.engine === 'blocked') {
     worker.terminate();
-    throw new Error('기존 기록함을 열 수 없습니다. 다른 Ledger 탭이나 창이 열려 있다면 닫고 다시 시도하세요. 저장소를 삭제하지 마세요.');
+    throw new Error('기존 기록함을 안전하게 열 수 없습니다. 다른 Ledger 탭이나 창이 열려 있다면 닫고 다시 시도하세요. 저장소를 삭제하지 마세요.'
+      + (opened.opfsError ? ` (${opened.opfsError})` : ''));
   }
 
   return {
     engine: opened.engine,
     opfsError: opened.opfsError,
+
+    async storageHealth() {
+      return (await call('storageHealth')) as StorageHealth;
+    },
 
     async execAsync(sql) {
       await call('exec', sql);

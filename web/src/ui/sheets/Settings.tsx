@@ -1,6 +1,6 @@
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { WebDb } from '../../db/sqlite';
+import type { StorageHealth, WebDb } from '../../db/sqlite';
 import { backupNow, lastBackupAt, restoreFrom } from '../../platform/backup';
 import {
   formatBytes,
@@ -62,6 +62,7 @@ export function SettingsSheet({
   const [cursor, setCursor] = useState<string | null>(null);
   const [syncState, setSyncState] = useState(getSyncState);
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [health, setHealth] = useState<StorageHealth | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = (): void => {
@@ -379,6 +380,33 @@ export function SettingsSheet({
           <span class="grow label">설치</span>
           <span class="mono dim">{isStandalone() ? '홈 화면 앱' : '브라우저 탭'}</span>
         </div>
+        <button
+          class="row"
+          disabled={busy !== null}
+          onClick={() => void guard('storage-check', async () => {
+            setHealth(null);
+            setHealth(await handle.storageHealth());
+          })}
+        >
+          <span class="grow label">{busy === 'storage-check' ? '점검 중…' : '저장 상태 점검'}</span>
+          <Icon name="chevronRight" />
+        </button>
+        {health && (
+          <div role="status" aria-label="저장 상태 점검 결과" class="cap" style="padding:12px 16px;overflow-wrap:anywhere">
+            <div>현재 엔진: {health.engine === 'memory' ? '대체 저장소 (IndexedDB 스냅숏)' : ENGINE_LABEL[health.engine] ?? health.engine}</div>
+            <div>파일 저장소: {{
+              present: '폴더 확인됨 (파일 잠금·쓰기 가능 여부는 별도)',
+              missing: 'OPFS 접근 가능 · 기록함 폴더 없음',
+              unknown: '접근 실패 · 기존 기록 유무 확인 불가',
+              unavailable: '이 브라우저에 OPFS API 없음',
+            }[health.directory.state]}</div>
+            <div>대체 저장소 스냅숏: {health.snapshot.bytes === null ? '읽기 실패' : health.snapshot.bytes === 0 ? '없음' : `${formatBytes(health.snapshot.bytes)} 읽힘`}</div>
+            <div>처음 열기 오류: {health.openingError ?? '없음'}</div>
+            {health.directory.error && <div>현재 파일 접근 오류: {health.directory.error}</div>}
+            {health.snapshot.error && <div>스냅숏 읽기 오류: {health.snapshot.error}</div>}
+            <div class="dim" style="margin-top:8px">읽기 점검입니다. 기록을 옮기거나 지우지 않으며, 재실행 후 보존까지 확인한 결과는 아닙니다.</div>
+          </div>
+        )}
 
         {isIOS() && (
           <>

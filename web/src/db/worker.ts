@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import type { StorageHealth } from './sqlite';
 
 // SQLite는 워커에서 산다. OPFS의 동기 접근 핸들이 워커에만 노출되기 때문이고,
 // 덕분에 큰 질의가 화면을 붙잡지도 않는다.
@@ -90,14 +91,40 @@ let opfsError: string | null = null;
 
 // SAHPool은 '한 엔진에 하나' 규칙이 있어 두 번째 탭에서는 열리지 않는다.
 // 그 경우와 '이 브라우저에 OPFS가 아예 없다'는 경우를 구분해야 한다 — 앞은 멈춰야 하고 뒤는 물러서도 된다.
-async function poolDirExists(): Promise<boolean> {
+type PoolDirectory = 'present' | 'missing' | 'unknown' | 'unavailable';
+
+async function inspectPoolDirectory(): Promise<StorageHealth['directory']> {
+  if (typeof navigator.storage?.getDirectory !== 'function') return { state: 'unavailable', error: null };
   try {
     const root = await navigator.storage.getDirectory();
-    await root.getDirectoryHandle('.' + VFS_NAME, { create: false });
-    return true;
-  } catch {
-    return false;
+    try {
+      await root.getDirectoryHandle('.' + VFS_NAME, { create: false });
+      return { state: 'present', error: null };
+    } catch (e) {
+      // NotFoundError만 '없음'이다. 접근 오류를 없음으로 바꾸면 빈 기록함이 열린다.
+      if (e instanceof Error && e.name === 'NotFoundError') return { state: 'missing', error: null };
+      throw e;
+    }
+  } catch (e) {
+    return { state: 'unknown', error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
   }
+}
+
+async function poolDirectory(): Promise<PoolDirectory> {
+  const result = await inspectPoolDirectory();
+  if (result.error) opfsError = result.error;
+  return result.state;
+}
+
+async function storageHealth(): Promise<StorageHealth> {
+  const directory = await inspectPoolDirectory();
+  let snapshot: StorageHealth['snapshot'];
+  try {
+    snapshot = { bytes: (await idbGet())?.byteLength ?? 0, error: null };
+  } catch (e) {
+    snapshot = { bytes: null, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+  }
+  return { engine, openingError: opfsError, directory, snapshot };
 }
 
 async function open(opts: { name?: string } = {}): Promise<{
@@ -112,28 +139,55 @@ async function open(opts: { name?: string } = {}): Promise<{
     print: () => {},
     printErr: () => {},
   });
-  // 동기 접근 핸들의 첫 획득은 이따금 어긋난다 — 한 번은 다시 해 본다
+  // 먼저 이전 대체 저장소를 읽는다. 읽기 실패를 '기록 없음'으로 삼지 않는다.
+  const saved = await idbGet();
+  const before = await poolDirectory();
+  if (saved && saved.byteLength > 0) {
+    if (before === 'present') {
+      engine = 'blocked';
+      opfsError = '파일 저장소와 대체 저장소에 기록이 함께 있습니다. 백업을 확보한 뒤 확인해야 합니다.';
+      return { engine, opfsError };
+    }
+    // OPFS가 회복되어도 대체 저장소에서 적은 미전송 기록을 버리고 새 DB를 열지 않는다.
+    engine = 'memory';
+    raw = new s3.oo1.DB(':memory:', 'c');
+    deserializeInto(raw, saved);
+    opfsError ??= '이전에 사용하던 대체 저장소의 기록을 이어서 열었습니다.';
+    return { engine, opfsError };
+  }
+  if (before === 'unknown') {
+    engine = 'blocked';
+    return { engine, opfsError };
+  }
+  // 같은 VFS 이름의 실패는 캐시된다. 기존 저장소가 없음을 전후로 확인한 경우에만
+  // 실제 재초기화한다. 기존 파일이나 확인 불가 상태에는 강제 재시도를 하지 않는다.
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (before === 'unavailable') {
+      opfsError = '이 브라우저에 OPFS API가 없습니다.';
+      break;
+    }
     try {
-      pool = await s3.installOpfsSAHPoolVfs({ name: VFS_NAME, initialCapacity: 4 });
+      pool = await s3.installOpfsSAHPoolVfs({
+        name: VFS_NAME,
+        initialCapacity: 4,
+        forceReinitIfPreviouslyFailed: attempt > 0,
+      });
       raw = new pool.OpfsSAHPoolDb(dbPath());
       engine = 'opfs';
       opfsError = null;
       return { engine, opfsError };
     } catch (e) {
-      opfsError = e instanceof Error ? e.message : String(e);
+      opfsError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       pool = null;
     }
-  }
-  if (await poolDirExists()) {
-    // 기록함이 저기 있는데 열지 못했다. 빈 기록함을 새로 열어 주지 않는다.
-    engine = 'blocked';
-    return { engine, opfsError };
+    // SAHPool의 실패 정리 후 디렉터리가 없어져도, 시도 전에 있던 기록을 잊지 않는다.
+    if (before === 'present' || (await poolDirectory()) !== 'missing') {
+      engine = 'blocked';
+      return { engine, opfsError };
+    }
   }
   engine = 'memory';
   raw = new s3.oo1.DB(':memory:', 'c');
-  const saved = await idbGet().catch(() => null);
-  if (saved && saved.byteLength > 0) deserializeInto(raw, saved);
   return { engine, opfsError };
 }
 
@@ -219,6 +273,9 @@ self.onmessage = async (ev: MessageEvent<Req>) => {
     switch (op) {
       case 'open':
         result = await open(ev.data.opts ?? {});
+        break;
+      case 'storageHealth':
+        result = await storageHealth();
         break;
       case 'exec':
         raw.exec(sql!);
