@@ -16,6 +16,7 @@ let idbName = 'mitjul-store';
 const IDB_STORE = 'db';
 const IDB_KEY = 'snapshot';
 const SELECTED_ENGINE_KEY = 'selected-engine';
+const RECOVERY_COPY_KEY = 'recovery-snapshot-v1';
 
 let s3: Any = null;
 let raw: Any = null;
@@ -24,7 +25,6 @@ let pool: Any = null;
 // 그때 메모리로 물러서면 '두 번째 빈 기록함'이 열려 사용자가 거기에 적기 시작한다.
 // 그건 물러서기가 아니라 조용한 데이터 분실이므로, 열지 않고 멈춘다.
 let engine: 'opfs' | 'memory' | 'blocked' = 'memory';
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 /* ── 메모리로 물러났을 때 쓰는 스냅숏 상자 ── */
 function idb(): Promise<IDBDatabase> {
@@ -37,23 +37,29 @@ function idb(): Promise<IDBDatabase> {
 }
 async function idbRead(key: string): Promise<unknown> {
   const d = await idb();
-  return new Promise((resolve, reject) => {
-    const r = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
-    r.onsuccess = () => resolve(r.result ?? null);
-    r.onerror = () => reject(r.error);
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = d.transaction(IDB_STORE, 'readonly');
+      const r = tx.objectStore(IDB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result ?? null);
+      r.onerror = () => reject(r.error);
+      tx.onabort = () => reject(tx.error ?? new Error('기기 저장소 읽기가 중단됐습니다.'));
+    });
+  } finally { d.close(); }
 }
 async function idbGet(): Promise<Uint8Array | null> {
   return (await idbRead(IDB_KEY)) as Uint8Array | null;
 }
 async function idbWrite(key: string, value: unknown): Promise<void> {
   const d = await idb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = d.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = d.transaction(IDB_STORE, 'readwrite', { durability: 'strict' });
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error ?? new Error('기기에 저장하지 못했습니다.'));
+    });
+  } finally { d.close(); }
 }
 
 function serialize(): Uint8Array {
@@ -62,20 +68,20 @@ function serialize(): Uint8Array {
 
 async function flush(): Promise<void> {
   if (engine !== 'memory') return;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  // 트랜잭션 중간의 미확정 기록은 스냅숏에 담지 않는다.
+  if (!s3.capi.sqlite3_get_autocommit(raw.pointer)) return;
   await idbWrite(IDB_KEY, serialize());
 }
 
-function touch(): void {
-  if (engine !== 'memory') return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void flush();
-  }, 400);
+async function claimWriter(): Promise<boolean> {
+  if (!navigator.locks) return true;
+  // 워커가 끝나면 브라우저가 해제한다. 동시에 열린 탭이 같은 IDB 스냅숏을 덮지 않는다.
+  return new Promise((resolve, reject) => {
+    void navigator.locks.request(`ledger-db:${dbName}`, { ifAvailable: true }, (lock) => {
+      resolve(!!lock);
+      return lock ? new Promise<void>(() => {}) : undefined;
+    }).catch(reject);
+  });
 }
 
 function deserializeInto(target: Any, bytes: Uint8Array): void {
@@ -134,11 +140,14 @@ async function storageHealth(): Promise<StorageHealth> {
 async function open(opts: OpenOptions = {}): Promise<{
   engine: string;
   opfsError: string | null;
-  recovery?: 'snapshot';
 }> {
   if (opts.name) {
     dbName = opts.name;
     idbName = `mitjul-store-${opts.name}`;
+  }
+  if (!(await claimWriter())) {
+    engine = 'blocked';
+    return { engine, opfsError: '다른 렛저 창이 이 기록함을 사용 중입니다. 그 창을 닫고 다시 열어 주세요.' };
   }
   s3 = await (sqlite3InitModule as (o?: unknown) => Promise<Any>)({
     print: () => {},
@@ -146,7 +155,7 @@ async function open(opts: OpenOptions = {}): Promise<{
   });
   // 먼저 이전 대체 저장소를 읽는다. 읽기 실패를 '기록 없음'으로 삼지 않는다.
   const saved = await idbGet();
-  const selectedSnapshot = opts.recovery === 'snapshot' || (await idbRead(SELECTED_ENGINE_KEY)) === 'snapshot';
+  const selectedSnapshot = (await idbRead(SELECTED_ENGINE_KEY)) === 'snapshot';
   const before = await poolDirectory();
   if (selectedSnapshot && !saved?.byteLength) {
     engine = 'blocked';
@@ -154,19 +163,15 @@ async function open(opts: OpenOptions = {}): Promise<{
     return { engine, opfsError };
   }
   if (saved && saved.byteLength > 0) {
-    if (before === 'present' && !selectedSnapshot) {
-      engine = 'blocked';
-      opfsError = '이전에 쓰던 대체 기록함과 파일 저장소 폴더가 함께 있습니다. 폴더 안의 기록은 아직 비교하지 않았습니다.';
-      return { engine, opfsError, recovery: 'snapshot' };
-    }
-    // 사용자 선택은 유효한 Ledger 스냅숏을 확인한 뒤에만 기억한다.
-    // 파일 저장소는 초기화·삭제·병합하지 않는다. 폴더 존재는 기록 충돌의 증거가 아니다.
+    // 이 브라우저가 이미 사용하던 스냅숏을 계속 사용한다. 폴더 존재만으로 막지 않는다.
+    // 다른 OPFS 원본은 전혀 열지 않고 그대로 보존한다. 자동 병합으로 간주하지 않는다.
     assertOurDb(saved);
+    if (!(await idbRead(RECOVERY_COPY_KEY))) await idbWrite(RECOVERY_COPY_KEY, saved);
+    if (!selectedSnapshot) await idbWrite(SELECTED_ENGINE_KEY, 'snapshot');
     // OPFS가 회복되어도 대체 저장소에서 적은 미전송 기록을 버리고 새 DB를 열지 않는다.
     engine = 'memory';
     raw = new s3.oo1.DB(':memory:', 'c');
     deserializeInto(raw, saved);
-    if (opts.recovery === 'snapshot') await idbWrite(SELECTED_ENGINE_KEY, 'snapshot');
     opfsError ??= '이전에 사용하던 대체 저장소의 기록을 이어서 열었습니다.';
     return { engine, opfsError };
   }
@@ -294,14 +299,14 @@ self.onmessage = async (ev: MessageEvent<Req>) => {
         break;
       case 'exec':
         raw.exec(sql!);
-        touch();
+        await flush();
         break;
       case 'run':
         raw.exec({
           sql: sql!,
           bind: params && params.length ? (params as never[]) : undefined,
         });
-        touch();
+        await flush();
         break;
       case 'all':
         result = rows(sql!, params ?? []);
@@ -314,7 +319,7 @@ self.onmessage = async (ev: MessageEvent<Req>) => {
         break;
       case 'commit':
         raw.exec('COMMIT');
-        touch();
+        await flush();
         break;
       case 'rollback':
         try {

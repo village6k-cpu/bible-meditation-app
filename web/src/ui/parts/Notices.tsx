@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { unfiledCount } from '@db/entryRepo';
@@ -7,6 +7,8 @@ import { backupNow, daysSinceBackup, NAG_AFTER_DAYS } from '../../platform/backu
 import { isIOS, isStandalone } from '../../platform/install';
 import { Icon } from '../icons';
 import { bump, useLoad } from '../store';
+import { getSyncState, subscribeSyncState } from '../../sync/state';
+import { SyncStatus } from './SyncStatus';
 
 // 앱이 사용자에게 먼저 말을 거는 유일한 자리. 세 가지만 말한다.
 // 1) 설치 전이면 — 지금 적으면 그 기록은 설치한 앱에서 보이지 않는다
@@ -38,13 +40,24 @@ interface Health {
 export function Notices({
   handle,
   toast,
+  onSettings,
 }: {
   handle: WebDb;
   toast: (m: string) => void;
+  onSettings: () => void;
 }): JSX.Element | null {
   const [tick, setTick] = useState(0);
   const [guide, setGuide] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sync, setSync] = useState(getSyncState);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => subscribeSyncState(setSync), []);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, []);
 
   const { data } = useLoad<Health>(
     handle,
@@ -64,27 +77,12 @@ export function Notices({
   const ios = isIOS();
   const notes: JSX.Element[] = [];
 
-  // 1) 저장 엔진이 물러섰다 — 가장 급한 소식
-  if (handle.engine === 'memory') {
-    notes.push(
-      <div class="notice" key="engine">
-        <span style="color:var(--ink)">
-          <Icon name="alert" />
-        </span>
-        <div>
-          <div class="body-t">기록이 파일로 저장되지 않고 있습니다</div>
-          <div class="cap" style="margin-top:2px">
-            이 브라우저에서 OPFS를 열지 못해 임시 저장소로 돌아갔습니다
-            {handle.opfsError ? ` (${handle.opfsError})` : ''}. 지금 적은 것은 브라우저가 저장소를
-            비우면 사라집니다. 자주 백업하세요.
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // DB가 열린 뒤에는 OPFS/IndexedDB 모두 저장 성공을 확인한 상태다.
+  // 내부 엔진 대신 실제 연결·전송 상태를 보여준다. 실패는 저장 동작/동기화에서 숨기지 않는다.
+  notes.push(<SyncStatus key="sync" state={sync} online={online} onOpen={onSettings} />);
 
   // 2) 설치 전 — iOS에서는 이게 데이터 문제다
-  if (!standalone && !dismissed('install')) {
+  if (!standalone && sync.phase === 'signed-out' && !dismissed('install')) {
     notes.push(
       <div class="notice" key="install">
         <span style="color:var(--ink)">
@@ -96,8 +94,8 @@ export function Notices({
           </div>
           <div class="cap" style="margin-top:2px">
             {ios
-              ? '아이폰에서 홈 화면 웹앱은 Safari와 다른 저장소를 씁니다. 지금 이 창에 적은 기록은 설치한 앱에서 보이지 않고, Safari를 쓴 지 7일이 지나면 지워집니다.'
-              : '기록은 서버가 아니라 이 브라우저 안에 있습니다. 다른 기기·다른 브라우저에서는 보이지 않습니다.'}
+              ? '홈 화면 앱과 Safari의 기기 저장소는 다릅니다. 두 곳에서 같은 Google 계정으로 연결하면 기록을 자동으로 맞춥니다.'
+              : '현재는 이 브라우저에만 저장합니다. 같은 Google 계정으로 연결하면 다른 기기와 자동으로 맞춥니다.'}
           </div>
           <div class="notice-actions">
             {ios && (
@@ -135,7 +133,7 @@ export function Notices({
   const stale =
     data.entries > 0 &&
     (data.sinceBackup === null ? data.entries >= 20 : data.sinceBackup >= NAG_AFTER_DAYS);
-  if (stale && !dismissed('backup')) {
+  if (stale && sync.phase === 'signed-out' && !dismissed('backup')) {
     notes.push(
       <div class="notice" key="backup">
         <span style="color:var(--ink)">

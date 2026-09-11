@@ -22,12 +22,16 @@ async function fixture(options: {
   snapshot?: Uint8Array;
   snapshotReadError?: boolean;
   selectedSnapshot?: boolean;
+  archive?: Uint8Array;
+  writeFails?: boolean;
+  lockHeld?: boolean;
 } = {}) {
   const sqlite = await initSqlite();
   let directory = options.directory ?? 'missing';
   let actualInstalls = 0;
   let cachedFailure: Error | null = null;
   const stored = new Map<string, unknown>([['snapshot', options.snapshot], ['selected-engine', options.selectedSnapshot ? 'snapshot' : undefined]]);
+  stored.set('recovery-snapshot-v1', options.archive);
   const dbs: InstanceType<typeof sqlite.oo1.DB>[] = [];
   const invalidState = new DOMException('The object is in an invalid state.', 'InvalidStateError');
   const pool = {
@@ -68,8 +72,16 @@ async function fixture(options: {
               });
               return read;
             }, put(value: unknown, key: string) {
-              stored.set(key, value);
-              queueMicrotask(() => tx.oncomplete?.());
+              queueMicrotask(() => {
+                if (options.writeFails) {
+                  tx.error = new DOMException('Disk full', 'QuotaExceededError');
+                  tx.onabort?.();
+                  tx.onerror?.();
+                } else {
+                  stored.set(key, value);
+                  tx.oncomplete?.();
+                }
+              });
             } }; } };
             return tx;
           },
@@ -86,7 +98,10 @@ async function fixture(options: {
   };
   runInNewContext(compiled, {
     exports: {}, self, indexedDB, Error, DOMException, Uint8Array, setTimeout, clearTimeout,
-    navigator: { storage: directory === 'unavailable' ? {} : { getDirectory } },
+    navigator: {
+      storage: directory === 'unavailable' ? {} : { getDirectory },
+      locks: { request: async (_name: string, _opts: unknown, fn: (lock: unknown) => unknown) => fn(options.lockHeld ? null : {}) },
+    },
     require(name: string) {
       assert.equal(name, '@sqlite.org/sqlite-wasm');
       return { default: async () => ({
@@ -106,13 +121,15 @@ async function fixture(options: {
     },
   });
   return {
-    async call(op: string, sql?: string, opts?: { recovery?: 'snapshot' }): Promise<Reply> {
-      await self.onmessage({ data: { id: 1, op, sql, opts } });
+    async call(op: string, sql?: string): Promise<Reply> {
+      await self.onmessage({ data: { id: 1, op, sql } });
       return reply;
     },
     get actualInstalls() { return actualInstalls; },
     get snapshot() { return stored.get('snapshot') as Uint8Array; },
     get selectedSnapshot() { return stored.get('selected-engine') === 'snapshot'; },
+    get archive() { return stored.get('recovery-snapshot-v1') as Uint8Array; },
+    failWrites() { options.writeFails = true; },
     setDirectory(value: Directory) { directory = value; },
     close() { for (const db of dbs) db.close(); },
   };
@@ -157,43 +174,87 @@ test('IndexedDB 읽기 오류를 기록 없음으로 바꾸지 않는다', async
   assert.match(opened.error!, /Snapshot unavailable/);
 });
 
-test('기존 OPFS와 IndexedDB 기록이 함께 있으면 어느 쪽도 자동으로 덮지 않는다', async () => {
+test('손상된 스냅숏은 OPFS가 있어도 원본을 자동으로 덮지 않는다', async () => {
   const worker = await fixture({ directory: 'present', snapshot: new Uint8Array([1]) });
-  assert.equal((await worker.call('open')).result.engine, 'blocked');
+  assert.equal((await worker.call('open')).ok, false);
   assert.equal(worker.actualInstalls, 0);
 });
 
-test('두 저장소가 있을 때 사용자가 대체 기록함을 선택하면 OPFS를 열지 않고 기존 본문을 이어서 연다', async () => {
+test('두 저장소가 있어도 선택 없이 기존 스냅숏을 자동 보존·재개하고 새 기록을 다시 연다', async () => {
   const sqlite = await initSqlite();
   const original = new sqlite.oo1.DB(':memory:');
   original.exec("CREATE TABLE entries(body TEXT); INSERT INTO entries VALUES ('아이폰에서 보던 기록')");
   const snapshot = sqlite.capi.sqlite3_js_db_export(original.pointer!);
   original.close();
   const worker = await fixture({ directory: 'present', snapshot });
-  const blocked = await worker.call('open');
-  assert.equal(blocked.result.recovery, 'snapshot');
-  assert.equal(worker.selectedSnapshot, false);
-  const opened = await worker.call('open', undefined, { recovery: 'snapshot' });
+  const opened = await worker.call('open');
   assert.equal(opened.result.engine, 'memory');
   assert.equal((await worker.call('first', 'SELECT body FROM entries')).result.body, '아이폰에서 보던 기록');
   assert.deepEqual(worker.snapshot, snapshot, '열기만으로 원본 스냅숏을 덮지 않는다');
   assert.equal(worker.actualInstalls, 0, 'OPFS 원본은 초기화하지 않는다');
   assert.equal(worker.selectedSnapshot, true);
+  assert.deepEqual(worker.archive, snapshot);
   await worker.call('run', "INSERT INTO entries VALUES ('복구 후 새 기록')");
   await worker.call('flush');
-  const reopened = await fixture({ directory: 'present', snapshot: worker.snapshot, selectedSnapshot: worker.selectedSnapshot });
+  const reopened = await fixture({ directory: 'present', snapshot: worker.snapshot, selectedSnapshot: worker.selectedSnapshot, archive: worker.archive });
   assert.equal((await reopened.call('open')).result.engine, 'memory');
   assert.equal((await reopened.call('first', 'SELECT COUNT(*) AS n FROM entries')).result.n, 2);
   assert.equal(reopened.actualInstalls, 0);
+  assert.deepEqual(reopened.archive, snapshot, '처음 안전 사본을 새 스냅숏으로 덮지 않는다');
+});
+
+test('IndexedDB 저장 성공 응답 전 기록을 영속화하여 별도 flush 없이 재실행해도 남는다', async () => {
+  const worker = await fixture({ directory: 'unavailable' });
+  await worker.call('open');
+  await worker.call('exec', 'CREATE TABLE entries(body TEXT)');
+  const saved = await worker.call('run', "INSERT INTO entries VALUES ('자동 저장')");
+  assert.equal(saved.ok, true);
+  const reopened = await fixture({ directory: 'unavailable', snapshot: worker.snapshot });
+  await reopened.call('open');
+  assert.equal((await reopened.call('first', 'SELECT body FROM entries')).result.body, '자동 저장');
+});
+
+test('디스크 저장 실패를 저장 성공으로 응답하지 않는다', async () => {
+  const worker = await fixture({ directory: 'unavailable' });
+  await worker.call('open');
+  await worker.call('exec', 'CREATE TABLE entries(body TEXT)');
+  const before = worker.snapshot?.slice();
+  worker.failWrites();
+  const saved = await worker.call('run', "INSERT INTO entries VALUES ('저장 실패 기록')");
+  assert.equal(saved.ok, false);
+  assert.match(saved.error!, /Disk full/);
+  assert.deepEqual(worker.snapshot, before);
+});
+
+test('열려 있는 기록함과 다른 탭이 같은 스냅숏을 동시에 덮어쓰지 않는다', async () => {
+  const worker = await fixture({ lockHeld: true, directory: 'unavailable' });
+  assert.equal((await worker.call('open')).result.engine, 'blocked');
+  assert.equal(worker.actualInstalls, 0);
 });
 
 test('손상된 대체 기록은 선택 상태를 저장하거나 원본을 덮지 않는다', async () => {
   const snapshot = new Uint8Array([1, 2, 3]);
   const worker = await fixture({ directory: 'present', snapshot });
-  assert.equal((await worker.call('open', undefined, { recovery: 'snapshot' })).ok, false);
+  assert.equal((await worker.call('open')).ok, false);
   assert.equal(worker.selectedSnapshot, false);
   assert.deepEqual(worker.snapshot, snapshot);
   assert.equal(worker.actualInstalls, 0);
+});
+
+test('진행 중인 트랜잭션이나 롤백 기록은 재실행 스냅숏에 남지 않는다', async () => {
+  const worker = await fixture({ directory: 'unavailable' });
+  await worker.call('open');
+  await worker.call('exec', 'CREATE TABLE entries(body TEXT)');
+  const before = worker.snapshot.slice();
+  await worker.call('begin');
+  await worker.call('run', "INSERT INTO entries VALUES ('롤백할 글')");
+  await worker.call('flush');
+  assert.deepEqual(worker.snapshot, before);
+  await worker.call('rollback');
+  await worker.call('flush');
+  const reopened = await fixture({ directory: 'unavailable', snapshot: worker.snapshot });
+  await reopened.call('open');
+  assert.equal((await reopened.call('first', 'SELECT COUNT(*) AS n FROM entries')).result.n, 0);
 });
 
 test('선택했던 대체 기록이 없어졌으면 빈 기록함으로 전환하지 않는다', async () => {

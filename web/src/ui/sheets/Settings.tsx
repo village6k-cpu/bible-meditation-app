@@ -35,7 +35,7 @@ import {
 
 const ENGINE_LABEL: Record<string, string> = {
   opfs: 'OPFS (기기 안 파일)',
-  memory: '임시 메모리 (저장되지 않음)',
+  memory: '기기 저장소 (IndexedDB)',
 };
 
 function fmtDate(ms: number): string {
@@ -138,6 +138,7 @@ export function SettingsSheet({
               <span class="mono dim">
                 {syncState.phase === 'syncing'
                   ? '맞추는 중…'
+                  : syncState.phase === 'pending' ? '전송 대기'
                   : syncState.phase === 'error'
                     ? '오류'
                     : syncState.lastSyncedAt
