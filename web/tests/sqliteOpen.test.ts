@@ -53,3 +53,22 @@ test('기존 OPFS가 잠겨 있으면 질의 가능한 기록함을 반환하지
     globalThis.Worker = previous;
   }
 });
+
+test('저장소 읽기에 실패한 워커는 종료하고 오류를 숨기지 않는다', async () => {
+  const previous = globalThis.Worker;
+  let terminated = false;
+  class FailedWorker {
+    onmessage?: (event: { data: unknown }) => void;
+    postMessage(message: { id: number }) {
+      queueMicrotask(() => this.onmessage?.({
+        data: { id: message.id, ok: false, error: '기존 저장소를 읽지 못했습니다' },
+      }));
+    }
+    terminate() { terminated = true; }
+  }
+  globalThis.Worker = FailedWorker as unknown as typeof Worker;
+  try {
+    await assert.rejects(openDb(), /기존 저장소를 읽지 못했습니다/);
+    assert.equal(terminated, true);
+  } finally { globalThis.Worker = previous; }
+});
