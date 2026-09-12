@@ -1,10 +1,16 @@
 <!doctype html>
 <html lang="ko"><meta charset="utf-8"><title>Ledger 반응형 검증</title>
 <style>body{margin:0}iframe{display:block;border:0;width:390px;height:844px}nav{height:44px;display:flex;gap:12px}</style>
-<nav><button id="mobile">390px 화면</button><button id="desktop">1280px 화면</button></nav>
+<nav><button id="mobile">390px 화면</button><button id="desktop">1280px 화면</button><output id="measure"></output></nav>
 <iframe src="/" title="렛저 검증 화면"></iframe>
 <script>
 const frame = document.querySelector('iframe');
+if (new URLSearchParams(location.search).has('entry-editor')) frame.src = '/tests/fixtures/entry-editor.html';
+window.addEventListener('message', event => {
+  if (event.source === frame.contentWindow && event.origin === location.origin && event.data?.kind === 'editor-size') {
+    document.querySelector('#measure').textContent = JSON.stringify(event.data);
+  }
+});
 document.querySelector('#mobile').onclick = () => { frame.style.width = '390px'; frame.style.height = '844px'; };
 document.querySelector('#desktop').onclick = () => { frame.style.width = '1280px'; frame.style.height = '900px'; };
 </script></html>

@@ -97,7 +97,7 @@ export function CaptureSheet({
     isPractice(entryType) &&
     (live.slot !== null || live.practiced !== null || live.minutes !== null);
   const canSave =
-    !saving && (live.rest.length > 0 || !!live.url || !!live.quote || !!photo || practiceOnly);
+    !saving && !attaching && (live.rest.length > 0 || !!live.url || !!live.quote || !!photo || practiceOnly);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -340,6 +340,14 @@ export function CaptureSheet({
       </div>
 
       <div class={photo || linkMeta ? 'sheet-body has-attach' : 'sheet-body'}>
+        {!photo && (
+          <div class="chips tight" style="margin-bottom:12px">
+            <button class="chip" disabled={attaching || saving} onClick={() => void attachPhoto()}>
+              <Icon name="camera" />
+              {attaching ? '사진 넣는 중' : '사진 추가'}
+            </button>
+          </div>
+        )}
         <textarea
           ref={inputRef}
           class="cap-in"
@@ -396,12 +404,6 @@ export function CaptureSheet({
               {s.label}
             </button>
           ))}
-          {!photo && (
-            <button class="chip" disabled={attaching} onClick={() => void attachPhoto()}>
-              <Icon name="camera" />
-              {attaching ? '사진 넣는 중' : '사진'}
-            </button>
-          )}
           {text.trim().length === 0 && !photo && (
             <button class="chip" onClick={() => void paste()}>
               <Icon name="clipboard" />

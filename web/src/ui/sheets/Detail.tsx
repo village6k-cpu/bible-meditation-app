@@ -1,8 +1,8 @@
 import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatDayKo } from '@core/dates';
 import { parseVideoLink } from '@core/links';
-import { REGISTRY, specOf } from '@core/registry';
+import { REGISTRY } from '@core/registry';
 import type { Entry } from '@core/types';
 import {
   deleteEntry,
@@ -11,15 +11,14 @@ import {
   relatedEntries,
   tagsOf,
   togglePinned,
-  updateEntry,
 } from '@db/entryRepo';
-import { parseTagInput } from '@core/tags';
 import { domainOf } from '@ex/linkMeta';
 import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { Icon, PlayIcon } from '../icons';
-import { deletePhoto, isPhotoRef } from '../../platform/photos';
+import { deletePhoto, isPhotoRef, pickPhotos, savePhoto } from '../../platform/photos';
 import { Photo } from '../parts/photo';
+import { EntryEditor, draftOf, saveEdit as persistEdit, type EntryDraft } from '../parts/EntryEditor';
 import { EntryRow, SectionRow, srcLine, thumbOf } from '../parts/entry';
 import { bump, useLoad } from '../store';
 
@@ -40,44 +39,33 @@ const EMPTY: Detail = {
   relatedTags: new Map(),
 };
 
-// 고치기 — 오타 하나 때문에 기록을 지우고 다시 적게 하지 않는다
-interface Draft {
-  title: string;
-  subtitle: string;
-  quote: string;
-  body: string;
-  page: string;
-  tags: string;
-}
-
-function draftOf(e: Entry, tags: string[]): Draft {
-  return {
-    title: e.title ?? '',
-    subtitle: e.subtitle ?? '',
-    quote: e.quote ?? '',
-    body: e.body ?? '',
-    page: e.page === null ? '' : String(e.page),
-    tags: tags.join(' '),
-  };
-}
-
 export function DetailSheet({
   handle,
   id,
   onClose,
   onOpen,
+  setGuard,
 }: {
   handle: WebDb;
   id: string;
   onClose: () => void;
   onOpen: (id: string) => void;
+  setGuard: (fn: null | (() => boolean)) => void;
 }): JSX.Element {
   const [playing, setPlaying] = useState(false);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<EntryDraft | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const operation = useRef(false);
+  const emptyPicks = useRef(0);
 
   useEffect(() => {
     setPlaying(false);
     setDraft(null);
+    setPhotoFile(null);
+    setEditError(null);
     void recordRevisit(asSqlite(handle), id);
   }, [handle, id]);
 
@@ -104,6 +92,49 @@ export function DetailSheet({
   const thumb = e ? thumbOf(e) : null;
   const line = e ? srcLine(e) : '';
 
+  useEffect(() => {
+    if (!photoFile) { setPreview(null); return; }
+    const url = URL.createObjectURL(photoFile);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
+
+  const dirty = !!draft && (!!photoFile || JSON.stringify(draft) !== JSON.stringify(e && draftOf(e, data.tags)));
+  useEffect(() => {
+    setGuard(busy ? () => false : dirty ? () => confirm('수정한 내용이 있습니다. 저장하지 않고 닫을까요?') : null);
+    return () => setGuard(null);
+  }, [busy, dirty, setGuard]);
+
+  function cancelEdit(): void {
+    if (operation.current) return;
+    setDraft(null);
+    setPhotoFile(null);
+    setEditError(null);
+  }
+
+  async function attachPhoto(): Promise<void> {
+    if (operation.current) return;
+    operation.current = true;
+    setBusy(true);
+    setEditError(null);
+    try {
+      const picked = await pickPhotos(false);
+      if (picked.files[0]) {
+        emptyPicks.current = 0;
+        // 저장을 누르기 전까지 원래 사진·DB는 만지지 않는다. 취소는 미리보기만 버린다.
+        setPhotoFile(picked.files[0]);
+      } else if (++emptyPicks.current >= 2) {
+        emptyPicks.current = 0;
+        setEditError('사진 선택기가 응답하지 않습니다. 앱을 완전히 닫았다 열거나 기기 저장 공간을 확인해 주세요');
+      }
+    } catch (error) {
+      setEditError(error instanceof Error ? `사진을 붙이지 못했습니다 — ${error.message}` : '사진을 붙이지 못했습니다');
+    } finally {
+      operation.current = false;
+      setBusy(false);
+    }
+  }
+
   async function remove(): Promise<void> {
     if (!e) return;
     if (!confirm('이 기록을 삭제할까요?')) return;
@@ -123,37 +154,39 @@ export function DetailSheet({
   }
 
   async function saveEdit(): Promise<void> {
-    if (!e || !draft) return;
-    const page = draft.page.trim() ? Number(draft.page.trim()) : null;
-    await updateEntry(asSqlite(handle), e.id, {
-      type: e.type,
-      day: e.day,
-      source_id: e.source_id,
-      title: draft.title.trim() || null,
-      subtitle: draft.subtitle.trim() || null,
-      quote: draft.quote.trim() || null,
-      body: draft.body.trim() || null,
-      url: e.url,
-      image_uri: e.image_uri,
-      page: page !== null && Number.isFinite(page) ? page : null,
-      slot: e.slot,
-      minutes: e.minutes,
-      practiced: e.practiced,
-      done: e.done,
-      due_time: e.due_time,
-      tags: parseTagInput(draft.tags),
-    });
-    await handle.flush();
-    setDraft(null);
-    bump();
+    if (!e || !draft || operation.current) return;
+    operation.current = true;
+    setBusy(true);
+    setEditError(null);
+    try {
+      let next = draft;
+      if (photoFile) {
+        next = {...draft, image_uri:await savePhoto(handle, photoFile)};
+        setDraft(next);
+        setPhotoFile(null);
+      }
+      await persistEdit(handle, e, next);
+      setDraft(null);
+      bump();
+      // 저장 성공 뒤에만, 다른 기록도 쓰지 않는 옛 파일을 정리한다. Google 원본은 지우지 않는다.
+      const oldPhoto = e.image_uri;
+      if (isPhotoRef(oldPhoto) && oldPhoto !== next.image_uri) {
+        await handle.getFirstAsync('SELECT 1 FROM entries WHERE image_uri=? AND deleted_at IS NULL LIMIT 1', [oldPhoto])
+          .then(async used => { if (!used) await deletePhoto(handle, oldPhoto); })
+          .catch(() => {}); // 부수적인 파일 정리 실패로 이미 저장한 기록을 실패라고 표시하지 않는다.
+      }
+    } catch (error) {
+      setEditError(error instanceof Error ? `저장 실패 — ${error.message}` : '저장하지 못했습니다');
+    } finally {
+      operation.current = false;
+      setBusy(false);
+    }
   }
-
-  const spec = e ? specOf(e.type) : null;
 
   return (
     <div class="sheet">
       <div class="sheet-head">
-        <button class="quiet" onClick={() => (draft ? setDraft(null) : onClose())}>
+        <button class="quiet" disabled={busy} onClick={() => (draft ? cancelEdit() : onClose())}>
           {draft ? (
             '취소'
           ) : (
@@ -165,8 +198,8 @@ export function DetailSheet({
         </button>
         {e &&
           (draft ? (
-            <button class="act" onClick={() => void saveEdit()}>
-              저장
+            <button class="act" disabled={busy} onClick={() => void saveEdit()}>
+              {busy ? '처리 중…' : '저장'}
             </button>
           ) : (
             <span style="display:flex; gap:18px">
@@ -193,109 +226,15 @@ export function DetailSheet({
       </div>
 
       <div class="sheet-body">
+        {editError && <div class="cap" role="alert" style="margin-bottom:12px">{editError}</div>}
         {!e ? (
           loading ? null : (
             <div class="empty">기록을 찾을 수 없습니다</div>
           )
-        ) : draft && spec ? (
-          <div class="stack">
-            {spec.fields.title && !e.source_id && (
-              <Labelled text={spec.fields.title.label}>
-                <input
-                  class="field"
-                  value={draft.title}
-                  placeholder={spec.fields.title.placeholder}
-                  onInput={(ev) =>
-                    setDraft((d) =>
-                      d ? { ...d, title: (ev.target as HTMLInputElement).value } : d
-                    )
-                  }
-                />
-              </Labelled>
-            )}
-            {spec.fields.subtitle && !e.source_id && (
-              <Labelled text={spec.fields.subtitle.label}>
-                <input
-                  class="field"
-                  value={draft.subtitle}
-                  placeholder={spec.fields.subtitle.placeholder}
-                  onInput={(ev) =>
-                    setDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            subtitle: (ev.target as HTMLInputElement).value,
-                          }
-                        : d
-                    )
-                  }
-                />
-              </Labelled>
-            )}
-            {spec.fields.quote && (
-              <Labelled text={spec.fields.quote.label}>
-                <textarea
-                  class="field"
-                  rows={5}
-                  value={draft.quote}
-                  placeholder={spec.fields.quote.placeholder}
-                  onInput={(ev) =>
-                    setDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            quote: (ev.target as HTMLTextAreaElement).value,
-                          }
-                        : d
-                    )
-                  }
-                />
-              </Labelled>
-            )}
-            {spec.fields.body && (
-              <Labelled text={spec.fields.body.label}>
-                <textarea
-                  class="field"
-                  rows={5}
-                  value={draft.body}
-                  placeholder={spec.fields.body.placeholder}
-                  onInput={(ev) =>
-                    setDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            body: (ev.target as HTMLTextAreaElement).value,
-                          }
-                        : d
-                    )
-                  }
-                />
-              </Labelled>
-            )}
-            {spec.fields.page && (
-              <Labelled text="쪽">
-                <input
-                  class="field"
-                  inputMode="numeric"
-                  value={draft.page}
-                  placeholder="쪽"
-                  onInput={(ev) =>
-                    setDraft((d) => (d ? { ...d, page: (ev.target as HTMLInputElement).value } : d))
-                  }
-                />
-              </Labelled>
-            )}
-            <Labelled text="갈피">
-              <input
-                class="field"
-                value={draft.tags}
-                placeholder="띄어쓰기로 구분"
-                onInput={(ev) =>
-                  setDraft((d) => (d ? { ...d, tags: (ev.target as HTMLInputElement).value } : d))
-                }
-              />
-            </Labelled>
-          </div>
+        ) : draft ? (
+          <EntryEditor entry={e} draft={draft} busy={busy} preview={preview}
+            onChange={setDraft} onPick={() => void attachPhoto()}
+            onRemove={() => { setPhotoFile(null); setDraft({...draft, image_uri:null}); }} />
         ) : (
           <>
             <div class="micro">
@@ -351,7 +290,7 @@ export function DetailSheet({
                 {e.title}
               </div>
             )}
-            {e.type === 'verse' && e.subtitle && (
+            {e.type !== 'book' && e.type !== 'link' && e.subtitle && (
               <div class="title sec" style="margin-top:14px">
                 {e.subtitle}
               </div>
@@ -421,16 +360,5 @@ export function DetailSheet({
         )}
       </div>
     </div>
-  );
-}
-
-function Labelled({ text, children }: { text: string; children: JSX.Element }): JSX.Element {
-  return (
-    <label style="display:block">
-      <span class="micro" style="display:block; margin-bottom:5px">
-        {text}
-      </span>
-      {children}
-    </label>
   );
 }

@@ -247,7 +247,7 @@ export function App(): JSX.Element {
           />
         )}
         {view?.kind === 'detail' && (
-          <DetailSheet handle={handle} id={view.id} onClose={close} onOpen={openDetail} />
+          <DetailSheet handle={handle} id={view.id} onClose={close} onOpen={openDetail} setGuard={setGuard} />
         )}
         {view?.kind === 'settings' && (
           <SettingsSheet handle={handle} onClose={close} toast={showToast} />

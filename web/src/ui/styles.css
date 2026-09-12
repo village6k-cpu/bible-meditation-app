@@ -546,6 +546,14 @@ nav.tabbar svg {
   color: var(--ink3);
 }
 
+/* 사진은 편집 보조다. 넓은 화면에서도 정사각형을 남는 폭만큼 키우지 않는다. */
+.entry-editor { border: 0; margin: 0; padding: 0; min-width: 0; }
+.edit-label { display: block; margin-bottom: 6px; }
+.edit-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.edit-photo-preview { width: 96px; height: 96px; flex: none; }
+.edit-photo-preview .photo { width: 96px; height: 96px; }
+.edit-photo-preview > img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+
 /* ── 지표 ── */
 .grid-rows {
   padding: 4px 16px 16px;
