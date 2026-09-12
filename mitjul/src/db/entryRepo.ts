@@ -61,11 +61,12 @@ export async function createEntry(db: SQLiteDatabase, input: EntryInput): Promis
 
 export async function updateEntry(db: SQLiteDatabase, id: string, input: EntryInput): Promise<void> {
   await db.runAsync(
-    `UPDATE entries SET day = ?, source_id = ?, title = ?, subtitle = ?, quote = ?, body = ?, url = ?,
+    `UPDATE entries SET type = ?, day = ?, source_id = ?, title = ?, subtitle = ?, quote = ?, body = ?, url = ?,
                         image_uri = ?, page = ?, slot = ?, minutes = ?, practiced = ?,
                         done = ?, due_time = ?, updated_at = ?
      WHERE id = ?`,
     [
+      input.type,
       input.day,
       input.source_id ?? null,
       input.title ?? null,
