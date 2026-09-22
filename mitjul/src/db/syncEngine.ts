@@ -26,6 +26,12 @@ export class LegacySyncAccountError extends Error {
   }
 }
 
+export class SyncAccountMismatchError extends Error {
+  constructor(public readonly boundAccountId: string) {
+    super('이 기록함은 다른 계정에 연결되어 있습니다. 현재 기록함을 보관한 뒤 로그인한 계정의 기록을 불러오세요.');
+  }
+}
+
 async function readBinding(db: SQLiteDatabase) {
   const bound = await db.getFirstAsync<{ value: string }>(
     "SELECT value FROM sync_meta WHERE key = 'account_id'"
@@ -43,12 +49,40 @@ export async function bindSyncAccount(db: SQLiteDatabase, accountId: string, pro
     if (bound.projectId && bound.projectId !== projectId) throw new Error('이 기록함은 다른 서버에 연결되어 있습니다.');
     if (bound.accountId && !bound.projectId) throw new LegacySyncAccountError(bound.accountId);
     if (bound.accountId && bound.accountId !== accountId) {
-      throw new Error('이 기록함은 다른 계정에 연결되어 있습니다. 먼저 백업한 뒤 새 기록함에서 로그인하세요.');
+      throw new SyncAccountMismatchError(bound.accountId);
     }
     if (!bound.accountId) {
       await db.runAsync("INSERT INTO sync_meta (key, value) VALUES ('account_id', ?)", [accountId]);
       await db.runAsync("INSERT INTO sync_meta (key, value) VALUES ('project_id', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [projectId]);
     }
+  });
+}
+
+// 사용자가 파일 백업을 받은 뒤에만 부른다. 옛 계정의 서버 캐시를 새 계정으로 보내지 않고
+// 로컬 동기화 대상을 비운 다음 새 계정을 revision 0부터 받는다. 사진 파일 자체는 지우지 않는다.
+export async function replaceSyncAccount(
+  db: SQLiteDatabase, boundAccountId: string, accountId: string, projectId: string
+): Promise<void> {
+  if (!boundAccountId || !accountId || !projectId || boundAccountId === accountId) {
+    throw new Error('계정 교체에 필요한 정보가 맞지 않습니다.');
+  }
+  await db.withTransactionAsync(async () => {
+    const bound = await readBinding(db);
+    if (bound.accountId !== boundAccountId || bound.projectId !== projectId) {
+      throw new Error('연결 상태가 달라져 계정 교체를 중단했습니다.');
+    }
+    await db.runAsync('UPDATE sync_control SET applying_remote=1 WHERE id=1');
+    await db.runAsync('DELETE FROM photo_jobs');
+    await db.runAsync('DELETE FROM photo_links');
+    await db.runAsync('DELETE FROM resurfacings');
+    await db.runAsync('DELETE FROM entry_tags');
+    await db.runAsync('DELETE FROM entries');
+    await db.runAsync('DELETE FROM tags');
+    await db.runAsync('DELETE FROM sources');
+    await db.runAsync('DELETE FROM sync_changes');
+    await db.runAsync("UPDATE sync_meta SET value=? WHERE key='account_id'", [accountId]);
+    await db.runAsync("UPDATE sync_meta SET value='0' WHERE key='remote_cursor'");
+    await db.runAsync('UPDATE sync_control SET applying_remote=0 WHERE id=1');
   });
 }
 
