@@ -24,6 +24,7 @@ import {
   subscribeSyncState,
   syncNow,
   moveLegacySyncWithBackup,
+  replaceSyncAccountWithBackup,
 } from '../../sync';
 import {
   connectGooglePhotos,
@@ -161,6 +162,20 @@ export function SettingsSheet({
                 });
               }}>
                 <span class="grow label">백업 후 전용 서버로 전환</span>
+              </button>
+            )}
+            {syncState.phase === 'error' && syncState.boundAccountId && syncState.accountId && (
+              <button class="row" disabled={busy !== null} onClick={() => {
+                const { boundAccountId, accountId, email } = syncState;
+                if (!confirm(`이 기기의 현재 기록함을 백업 파일로 보관한 뒤 ${email} 계정의 기록을 불러옵니다. 계속할까요?`)) return;
+                void guard('replace-sync-account', async () => {
+                  const moved = await replaceSyncAccountWithBackup(handle, boundAccountId!, accountId!);
+                  if (!moved) { toast('백업을 취소해 계정을 바꾸지 않았습니다'); return; }
+                  const result = await syncNow(handle, true).finally(bump);
+                  toast(`${result.pushed + result.pulled}건 불러왔습니다`);
+                });
+              }}>
+                <span class="grow label">현재 계정 기록 불러오기</span>
               </button>
             )}
             <button

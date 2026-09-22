@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migrate } from '../src/db/migrations';
-import { bindSyncAccount, migrateLegacySyncAccount, syncOnce, type RemoteSyncApi } from '../src/db/syncEngine';
+import {
+  bindSyncAccount,
+  migrateLegacySyncAccount,
+  replaceSyncAccount,
+  syncOnce,
+  type RemoteSyncApi,
+} from '../src/db/syncEngine';
 import { FakeDb } from './sqliteShim';
 import { createEntry } from '../src/db/entryRepo';
 import { acknowledgeChanges, preparePushBatch, type RemoteRecord } from '../src/db/syncRepo';
@@ -146,6 +152,51 @@ test('한 로컬 기록함을 다른 계정에 실수로 섞어 올리지 않는
   await bindSyncAccount(db as unknown as AnyDb, 'account-a', 'ledger-project');
   await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'account-b', 'ledger-project'), /다른 계정/);
   await assert.rejects(() => bindSyncAccount(db as unknown as AnyDb, 'account-a', 'other-project'), /다른 서버/);
+});
+
+test('사용자가 백업 뒤 계정 교체를 확인하면 옛 계정 캐시를 새 계정에 섞지 않고 처음부터 받는다', async () => {
+  const db = new FakeDb();
+  const sqlite = db as unknown as AnyDb;
+  await migrate(sqlite);
+  await bindSyncAccount(sqlite, 'wrong-account', 'ledger-project');
+  await db.runAsync("INSERT INTO sources (id,kind,title,created_at,last_used_at) VALUES ('old-source','book','옛 계정 출처',1,1)");
+  await db.runAsync(
+    `INSERT INTO entries (id,type,day,created_at,updated_at,deleted_at,pinned,revisit_count,source_id,body)
+     VALUES ('old-entry','moment','2026-09-22',1,2,2,0,0,'old-source','지운 기록')`
+  );
+  await db.runAsync("INSERT INTO tags (id,name,created_at) VALUES ('tag:old','옛갈피',1)");
+  await db.runAsync("INSERT INTO entry_tags VALUES ('old-entry','tag:old')");
+  await db.runAsync("UPDATE sync_meta SET value='209' WHERE key='remote_cursor'");
+
+  await replaceSyncAccount(sqlite, 'wrong-account', 'right-account', 'ledger-project');
+
+  assert.deepEqual(await db.getAllAsync('SELECT id FROM entries'), []);
+  assert.deepEqual(await db.getAllAsync('SELECT id FROM sources'), []);
+  assert.deepEqual(await db.getAllAsync('SELECT id FROM tags'), []);
+  assert.deepEqual(await db.getAllAsync('SELECT * FROM sync_changes'), []);
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='account_id'"))?.value, 'right-account');
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='project_id'"))?.value, 'ledger-project');
+  assert.equal((await db.getFirstAsync<{value:string}>("SELECT value FROM sync_meta WHERE key='remote_cursor'"))?.value, '0');
+
+  const cursors: number[] = [];
+  await syncOnce(sqlite, {
+    async push() {},
+    async pull(cursor) {
+      cursors.push(cursor);
+      return [{
+        entity_type: 'entries', entity_id: 'right-entry', operation: 'upsert', revision: 210,
+        payload: {
+          id: 'right-entry', type: 'writing', day: '2026-09-22', created_at: 3, updated_at: 3,
+          deleted_at: null, pinned: 0, revisit_count: 0, last_revisited_at: null,
+          filed_at: null, source_id: null, title: null, subtitle: null, quote: null,
+          body: '올바른 계정 기록', url: null, image_uri: null, page: null, slot: null,
+          minutes: null, practiced: null, done: null, due_time: null,
+        },
+      }];
+    },
+  });
+  assert.deepEqual(cursors, [0]);
+  assert.equal((await db.getFirstAsync<{body:string}>("SELECT body FROM entries WHERE id='right-entry'"))?.body, '올바른 계정 기록');
 });
 
 test('프로젝트 식별자가 없던 옛 기록함은 확인 없이 새 계정에 연결되지 않는다', async () => {

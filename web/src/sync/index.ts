@@ -1,7 +1,15 @@
 import type { Session } from '@supabase/supabase-js';
 import { asSqlite } from '../db';
 import type { WebDb } from '../db/sqlite';
-import { bindSyncAccount, LegacySyncAccountError, migrateLegacySyncAccount, syncOnce, type SyncResult } from '@db/syncEngine';
+import {
+  bindSyncAccount,
+  LegacySyncAccountError,
+  migrateLegacySyncAccount,
+  replaceSyncAccount,
+  SyncAccountMismatchError,
+  syncOnce,
+  type SyncResult,
+} from '@db/syncEngine';
 import { supabase, requireSyncClient, syncConfigError, syncProjectId } from './client';
 import { createSupabaseSyncApi } from './supabaseApi';
 import { processPendingPhotos } from './photos';
@@ -59,7 +67,11 @@ export async function syncNow(handle: WebDb, retryPhotos = false): Promise<SyncR
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       publish({ phase: 'error', email, lastSyncedAt: getSyncState().lastSyncedAt, error: message,
-        ...(reason instanceof LegacySyncAccountError ? { legacyAccountId: reason.legacyAccountId, accountId: session.user.id } : {}) });
+        ...(reason instanceof LegacySyncAccountError
+          ? { legacyAccountId: reason.legacyAccountId, accountId: session.user.id }
+          : reason instanceof SyncAccountMismatchError
+            ? { boundAccountId: reason.boundAccountId, accountId: session.user.id }
+            : {}) });
       throw reason;
     }
   })().finally(() => { active = null; });
@@ -77,6 +89,30 @@ export async function moveLegacySyncWithBackup(handle: WebDb, legacyAccountId: s
         const { data, error } = await requireSyncClient().auth.getSession();
         if (error || data.session?.user.id !== expectedAccountId) throw new Error('로그인 계정이 달라져 전환을 중단했습니다. 다시 확인하세요.');
         await migrateLegacySyncAccount(asSqlite(handle), legacyAccountId, expectedAccountId, syncProjectId);
+        await handle.flush();
+      }
+    );
+    return { pushed: 0, pulled: 0 };
+  })().finally(() => { active = null; });
+  await active;
+  return moved;
+}
+
+export async function replaceSyncAccountWithBackup(
+  handle: WebDb, boundAccountId: string, expectedAccountId: string
+): Promise<boolean> {
+  if (active) await active.catch(() => {});
+  let moved = false;
+  // 옛 계정의 캐시를 비우기 전에 파일 백업이 사용자 손에 들어가야 한다.
+  active = (async () => {
+    moved = await migrateWithBackup(
+      async () => (await backupNow(handle)).how,
+      async () => {
+        const { data, error } = await requireSyncClient().auth.getSession();
+        if (error || data.session?.user.id !== expectedAccountId) {
+          throw new Error('로그인 계정이 달라져 계정 교체를 중단했습니다. 다시 확인하세요.');
+        }
+        await replaceSyncAccount(asSqlite(handle), boundAccountId, expectedAccountId, syncProjectId);
         await handle.flush();
       }
     );
