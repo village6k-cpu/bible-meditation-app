@@ -6,6 +6,8 @@ import { Inbox } from './screens/Inbox';
 import { Records } from './screens/Records';
 import { Review } from './screens/Review';
 import { Metrics } from './screens/Metrics';
+import { Library } from './screens/Library';
+import { LibraryDetail } from './sheets/LibraryDetail';
 import { CaptureSheet } from './sheets/Capture';
 import { DetailSheet } from './sheets/Detail';
 import { SettingsSheet } from './sheets/Settings';
@@ -15,17 +17,19 @@ import { canIntakeSafely, consumeFromUrl, peekFromUrl, writeClipboard } from '..
 import { requestPersistence } from '../platform/install';
 import { startAutoSync } from '../sync';
 
-type Tab = 'inbox' | 'records' | 'review' | 'metrics';
+type Tab = 'inbox' | 'records' | 'library' | 'review' | 'metrics';
 
 type View =
   | { kind: 'capture'; type: EntryType | null; text: string }
   | { kind: 'detail'; id: string }
   | { kind: 'settings' }
+  | { kind: 'library'; id: string | null }
   | { kind: 'sources' };
 
 const TABS: [Tab, string, IconName][] = [
   ['inbox', '수집함', 'inbox'],
   ['records', '기록', 'records'],
+  ['library', '서재', 'library'],
   ['review', '검토', 'review'],
   ['metrics', '지표', 'metrics'],
 ];
@@ -196,6 +200,8 @@ export function App(): JSX.Element {
           />
         )}
         {tab === 'records' && <Records handle={handle} today={today} onOpen={openDetail} />}
+        {tab === 'library' && <Library handle={handle} today={today} toast={showToast}
+          onOpen={id=>push({kind:'library',id})} onAdd={()=>push({kind:'library',id:null})}/>}
         {tab === 'review' && <Review handle={handle} today={today} onOpen={openDetail} />}
         {tab === 'metrics' && (
           <Metrics
@@ -236,6 +242,9 @@ export function App(): JSX.Element {
       </nav>
 
       <div class="modal-root">
+        {view?.kind === 'library' && <LibraryDetail key={view.id??'new'} handle={handle} id={view.id}
+          today={today} onClose={close} onOpen={openDetail} setGuard={setGuard} toast={showToast}
+          onSaved={id=>setStack(s=>s.map((item,index)=>index===s.length-1&&item.kind==='library'?{kind:'library',id}:item))}/>}
         {view?.kind === 'capture' && (
           <CaptureSheet
             handle={handle}

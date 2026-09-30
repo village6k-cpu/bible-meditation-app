@@ -27,6 +27,7 @@ export interface Source {
   last_used_at: number; // 최근 사용 순 — 컴포저는 이 순서로 칩을 늘어놓고 첫 것을 미리 고른다
   last_tags: string; // 이 출처에 마지막으로 붙인 태그 (공백 구분) — 다음 밑줄의 기본값
   deleted_at: number | null;
+  library_json?: string | null; // 작품의 감상 상태·별점·리뷰. 기존 출처와 같은 ID로 동기화한다.
 }
 
 // 단일 테이블 + 유형별 nullable 컬럼. 레포지토리가 이 형태 그대로 돌려준다.
