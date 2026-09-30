@@ -54,7 +54,7 @@ export function LibraryDetail({handle,id,today,onClose,onOpen,onSaved,setGuard,t
   async function remove() {
     if(!source||busy||!confirm(`『${source.title}』을 서재에서 삭제할까요? 별점·리뷰도 목록에서 사라집니다. 연결된 메모 ${data.notes.length}개는 기록 탭에 남습니다.`)) return;
     setBusy(true);setActionError(null);
-    try {await deleteSource(asSqlite(handle),source.id);await handle.flush();bump();onClose();}
+    try {await deleteSource(asSqlite(handle),source.id);await handle.flush();setGuard(null);bump();onClose();}
     catch(e) {setActionError(e instanceof Error?e.message:'삭제하지 못했습니다.');}
     finally {setBusy(false);}
   }
