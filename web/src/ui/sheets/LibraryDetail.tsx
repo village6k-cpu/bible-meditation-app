@@ -8,7 +8,8 @@ import { asSqlite } from '../../db';
 import type { WebDb } from '../../db/sqlite';
 import { bump, useLoad } from '../store';
 import { LibraryEditor } from '../parts/LibraryEditor';
-import { Rating, MEDIA_ICON } from '../parts/LibraryView';
+import { Rating } from '../parts/LibraryView';
+import { LibraryArtwork } from '../parts/LibraryArtwork';
 import { Icon } from '../icons';
 import { firstLine } from '../parts/entry';
 
@@ -68,7 +69,7 @@ export function LibraryDetail({handle,id,today,onClose,onOpen,onSaved,setGuard,t
     <div class="sheet-body library-detail">
       {(error||actionError) && <p class="library-error" role="alert">{error||actionError}</p>}
       {!source?<div class="empty">{loading?'작품을 여는 중…':'작품을 찾지 못했습니다.'}</div>:<>
-        <div class="library-detail-heading"><div class={`library-art ${kind}`}><Icon name={MEDIA_ICON[kind]}/></div><div>
+        <div class="library-detail-heading"><LibraryArtwork kind={kind} image={info?.catalog?.image}/><div>
           <span class={`library-status ${info?.status??'untracked'}`}>{STATUS_LABEL[info?.status??'untracked']}</span>
           <h2>{source.title}</h2>{source.creator&&<p class="sub">{source.creator}</p>}<Rating value={info?.rating??null}/>
         </div></div>

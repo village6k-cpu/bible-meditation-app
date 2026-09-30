@@ -4,6 +4,8 @@ import {
   filterLibrary, librarySummary, type LibraryItem, type LibraryFilters,
 } from '@core/library';
 import { Icon, type IconName } from '../icons';
+import { LibraryArtwork } from './LibraryArtwork';
+import { CatalogCredits } from './CatalogSearch';
 
 export const MEDIA_ICON: Record<LibraryItem['mediaKind'], IconName> = {
   book: 'book', film: 'film', series: 'film', music: 'music', podcast: 'music', article: 'writing', video: 'play',
@@ -71,7 +73,7 @@ export function LibraryView({items, filters, onFilters, today, onOpen, onAdd, on
       <p class="sub">{items.length?'검색어나 필터를 바꿔 보세요.':'읽은 책, 본 영화, 자주 들은 음악. 별점과 감상을 남겨 보세요.'}</p>
       {!items.length && <button class="chip on" onClick={onAdd}>첫 작품 추가</button>}
     </div> : <div class="library-grid">{shown.map(item=><button key={item.id} class="library-card" onClick={()=>onOpen(item.id)}>
-      <div class={`library-art ${item.mediaKind}`} aria-hidden="true"><Icon name={MEDIA_ICON[item.mediaKind]}/><span>{MEDIA_LABEL[item.mediaKind]}</span></div>
+      <LibraryArtwork kind={item.mediaKind} image={item.info?.catalog?.image}/>
       <div class="library-card-content">
         <div class="library-card-top"><span class="micro">{MEDIA_LABEL[item.mediaKind]}</span><span class={`library-status ${item.info?.status??'untracked'}`}>{STATUS_LABEL[item.info?.status??'untracked']}</span></div>
         <h2 class="library-title clamp2">{item.title}</h2>
@@ -81,6 +83,6 @@ export function LibraryView({items, filters, onFilters, today, onOpen, onAdd, on
         <div class="library-card-foot"><span>{item.info?.finished_on ? `${item.info.finished_on} 완료` : item.info?.started_on ? `${item.info.started_on} 시작` : '날짜 미지정'}</span><span>메모 {item.entry_count}</span></div>
       </div>
     </button>)}</div>}
-    <div class="gap-lg"/>
+    <CatalogCredits/><div class="gap-lg"/>
   </>;
 }

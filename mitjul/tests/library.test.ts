@@ -12,6 +12,20 @@ type Db = Parameters<typeof migrate>[0];
 const info: LibraryInfo = { version: 1, kind: 'book', status: 'completed', rating: 4.5, review: '다시 읽고 싶은 책', started_on: '2026-09-01', finished_on: '2026-09-30' };
 async function setup() { const db = new FakeDb(); await migrate(db as unknown as Db); return db as unknown as Db; }
 
+test('표지는 감상 JSON으로 두 기록함에 전달되고 기존 사진·리뷰·별점은 보존된다',async()=>{
+  const a=await setup(), b=await setup();
+  const source=await saveLibraryItem(a,{title:'모모',creator:'엔데',url:null,info});
+  const entry=await createEntry(a,{type:'book',day:'2026-09-30',source_id:source.id,image_uri:'photos/user.jpg',body:'내 메모'});
+  const catalog={provider:'kakao' as const,id:'9781234567890',image:'https://search1.kakaocdn.net/thumb/cover.jpg',url:'https://search.daum.net/search?w=bookpage&q=9781234567890',year:'2026'};
+  await saveLibraryItem(a,{id:source.id,title:'모모',creator:'엔데',url:null,info:{...info,catalog}});
+  const batch=await preparePushBatch(a);await applyRemoteRecords(b,batch.map((v,i)=>({...v,revision:i+1})));
+  const received=(await getSource(b,source.id))!;
+  assert.deepEqual(libraryInfo(received),{...info,catalog});assert.equal(received.thumbnail_uri,null);
+  assert.equal((await b.getFirstAsync<{image_uri:string}>('SELECT image_uri FROM entries WHERE id=?',[entry]))?.image_uri,'photos/user.jpg');
+  assert.deepEqual(libraryInfo({...received,library_json:JSON.stringify({...info,catalog:{...catalog,image:'https://evil.test'}})}),info);
+  await assert.rejects(saveLibraryItem(a,{title:'다른 표기',creator:'다른 저자 표기',url:null,info:{...info,catalog}}),/이미/);
+});
+
 test('서재: v8 기록·출처·사진 참조를 보존하고 감상 정보를 추가한다', async () => {
   const raw = new FakeDb();
   await schemaUpTo(raw, 8, MIGRATIONS);
