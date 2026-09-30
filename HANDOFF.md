@@ -58,7 +58,7 @@ IBM Plex Sans KR 한 벌 + 수치는 IBM Plex Mono, 무채색 하나(`#FFFFFF`/`
 
 ### 2026-09-30 서재 추가 — 자동 검증 완료, 직접 화면 검증 남음
 
-#### 후속 작업: 작품 검색·표지 (진행 중, 아직 배포하지 않음)
+#### 후속 작업: 작품 검색·표지 (서버 배포, 웹 미배포)
 
 - Kakao Ledger 앱 `1593072`, TMDB Free Developer 가입·발급 완료. 실제 API에서
   `모모 미하엘 엔데`, `인터스텔라` 검색 및 표지/포스터 응답 200 확인.
@@ -67,9 +67,14 @@ IBM Plex Sans KR 한 벌 + 수치는 IBM Plex Mono, 무채색 하나(`#FFFFFF`/`
   사용자 사진에 전파되는 `thumbnail_uri`는 사용하지 않는다.
 - 키 값·신청 개인정보는 저장소에 기록하지 않는다. 서버 설정은
   `supabase/functions/ledger-catalog/README.md` 참조. 전용 프로젝트 외 변경 금지.
-- **남은 것:** 기존 Supabase 관리 계정 로그인 → 전용 프로젝트에 두 검색 키 저장 →
-  `ledger-catalog`만 JWT 검사 켠 채 배포 → 로그인한 사용자 검색/저장/재실행 UI 검증 → PR/배포.
-  CLI 관리 로그인도 없고 브라우저 관리 로그인도 만료되어 사용자에게 기존 계정 로그인을 요청했다.
+- 2026-09-30: 기존 GitHub Google 로그인 후 Supabase 관리 로그인 완료. Supabase OAuth에서
+  바로 Google로 이동하면 GitHub 500이 났지만 GitHub 기본 로그인 → Google → Supabase 순서는 성공했다.
+- 전용 프로젝트 `mbypanaxjuliucxsujea`에 `LEDGER_KAKAO_KEY`, `LEDGER_TMDB_TOKEN`만 추가했다.
+  기존 인증·사진 시크릿은 변경하지 않았다. `ledger-catalog` v1 ACTIVE, `verify_jwt: true`로 배포했다.
+  비로그인 POST가 401로 차단됨을 확인했다. 로그인한 사용자 성공 응답은 아직 검증 전이다.
+- **남은 것:** 로그인한 사용자 검색/저장/재실행 UI 검증 → PR/웹 배포.
+  브라우저 도구가 `http://127.0.0.1:5197/` 접근을 저장된 권한 제한으로 거부했다.
+  다른 포트·브라우저·우회 실행으로 회피하지 않는다. 접근 허용 후 동일 주소에서 검증을 재개한다.
   새 프로젝트/계정 생성, 인증 설정 변경, 기존 사진 함수 재배포로 해결하지 않는다.
 - 웹 66개·코어 122개 테스트, 웹/네이티브 타입 검사와 웹 빌드 통과.
   표지·리뷰·사진 참조의 SQLite 테스트 기록함 왕복 검증이지 실제 두 기기 검증은 아니다.
