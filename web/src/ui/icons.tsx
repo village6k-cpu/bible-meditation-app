@@ -3,6 +3,9 @@ import type { EntryType } from '@core/types';
 
 // 한 벌의 선 아이콘. 굵기 1.6, 24 격자, 채우기 없음 — 활자와 같은 무게로 읽히도록.
 const PATHS = {
+  library: 'M3 4h4v16H3z M10 4h4v16h-4z M17 5l3-1 4 15-3 1z',
+  film: 'M3 4h18v16H3z M7 4v16 M17 4v16 M3 9h4 M3 15h4 M17 9h4 M17 15h4',
+  music: 'M9 18V5l11-2v13 M9 8l11-2 M9 18a3 3 0 11-3-3c2 0 3 1 3 3 M20 16a3 3 0 11-3-3c2 0 3 1 3 3',
   moment:
     'M12 4l1.8 4.2L18 10l-4.2 1.8L12 16l-1.8-4.2L6 10l4.2-1.8z M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z',
   book: 'M4 5a2 2 0 012-2h12v18H6a2 2 0 01-2-2z M8 3v18',

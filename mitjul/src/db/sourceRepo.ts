@@ -3,6 +3,16 @@ import { newId } from '../core/ids';
 import { canonicalLinkUrl } from '../core/links';
 import { Source, SourceKind } from '../core/types';
 
+function mergedLibrary(from: Source, to: Source): string | null {
+  if ((from.library_json || to.library_json) && from.kind !== to.kind) {
+    throw new Error('감상 정보가 있는 작품은 서로 다른 출처 종류로 합칠 수 없습니다. 작품 종류를 먼저 확인해 주세요.');
+  }
+  if (from.library_json && to.library_json && from.library_json !== to.library_json) {
+    throw new Error('두 작품에 서로 다른 감상 정보가 있습니다. 별점과 리뷰를 확인한 뒤 합쳐 주세요.');
+  }
+  return to.library_json ?? from.library_json ?? null;
+}
+
 // 최근 사용 순으로 전부 — 컴포저는 첫 번째를 미리 골라 둔다.
 // 스트립은 가로로 스크롤되므로 자르지 않는다. 잘라내면 밀려난 책을 다시 등록하게 되고, 그게 곧 중복이다.
 export async function recentSources(db: SQLiteDatabase, kinds: SourceKind[]): Promise<Source[]> {
@@ -135,7 +145,7 @@ export async function setSourceThumbnail(db: SQLiteDatabase, id: string, uri: st
 }
 
 // 이 출처의 살아 있는 기록 중, 링크가 없거나 옛 링크(정규형 기준 — 시점·공유 꼬리가 달린 것도)를 쓰던 것에 새 링크를 단다
-async function propagateUrl(
+export async function propagateUrl(
   db: SQLiteDatabase,
   sourceId: string,
   oldUrl: string | null,
@@ -204,6 +214,7 @@ export async function renameSource(
   if (target) {
     const merged: Source = {
       ...target,
+      library_json: mergedLibrary(before, target),
       creator: target.creator ?? creator,
       url: target.url ?? url,
       thumbnail_uri: target.thumbnail_uri ?? thumbnail ?? before.thumbnail_uri,
@@ -211,8 +222,8 @@ export async function renameSource(
     };
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ? WHERE id = ?',
-        [merged.creator, merged.url, merged.thumbnail_uri, now, target.id]
+        'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ?, library_json = ? WHERE id = ?',
+        [merged.creator, merged.url, merged.thumbnail_uri, now, merged.library_json ?? null, target.id]
       );
       await db.runAsync(
         'UPDATE entries SET source_id = ?, title = ?, subtitle = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
@@ -314,6 +325,7 @@ export async function mergeSources(
   // 남는 쪽이 이긴다. 비어 있던 칸만 사라지는 쪽에서 채워 온다.
   const merged: Source = {
     ...to,
+    library_json: mergedLibrary(from, to),
     creator: to.creator ?? from.creator,
     url: to.url ?? from.url,
     thumbnail_uri: to.thumbnail_uri ?? from.thumbnail_uri,
@@ -322,8 +334,8 @@ export async function mergeSources(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ? WHERE id = ?',
-      [merged.creator, merged.url, merged.thumbnail_uri, now, to.id]
+      'UPDATE sources SET creator = ?, url = ?, thumbnail_uri = ?, last_used_at = ?, library_json = ? WHERE id = ?',
+      [merged.creator, merged.url, merged.thumbnail_uri, now, merged.library_json ?? null, to.id]
     );
     // 지운 기록까지 함께 옮긴다 — 죽은 출처를 가리키는 참조를 남기지 않는다.
     await db.runAsync('UPDATE entries SET source_id = ? WHERE source_id = ?', [to.id, from.id]);

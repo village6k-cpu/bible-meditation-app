@@ -468,6 +468,11 @@ export const MIGRATIONS: Migration[] = [
       UPDATE sync_control SET applying_remote = 0 WHERE id = 1;
     `,
   },
+  {
+    version: 9,
+    // 출처 ID를 유지해 기존 밑줄·링크와 작품의 감상 기록이 따로 놀지 않게 한다.
+    sql: `ALTER TABLE sources ADD COLUMN library_json TEXT;`,
+  },
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

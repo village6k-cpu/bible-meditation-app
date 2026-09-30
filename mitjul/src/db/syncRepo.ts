@@ -34,7 +34,7 @@ const COLUMNS: Record<SyncEntityType, readonly string[]> = {
   ],
   sources: [
     'id', 'kind', 'title', 'creator', 'url', 'thumbnail_uri', 'created_at', 'last_used_at',
-    'last_tags', 'deleted_at',
+    'last_tags', 'deleted_at', 'library_json',
   ],
   tags: ['id', 'name', 'created_at'],
   entry_tags: ['entry_id', 'tag_id'],
@@ -159,7 +159,9 @@ function normalizedPayload(record: RemoteRecord): Record<string, unknown> {
 }
 
 async function upsertRemote(db: SQLiteDatabase, record: RemoteRecord): Promise<void> {
-  const columns = COLUMNS[record.entity_type];
+  // 구버전이 감상 필드를 모르는 채 출처를 보냈다면 이미 받은 리뷰를 null로 덮지 않는다.
+  const columns = COLUMNS[record.entity_type].filter(column =>
+    column !== 'library_json' || Object.prototype.hasOwnProperty.call(record.payload ?? {}, column));
   const keys = PRIMARY_KEYS[record.entity_type];
   const payload = normalizedPayload(record);
   const updateColumns = columns.filter((column) => !keys.includes(column));
