@@ -3,6 +3,9 @@ import type { Source } from '@core/types';
 import { MEDIA_KINDS, MEDIA_LABEL, MEDIA_STATUSES, STATUS_LABEL, libraryInfo, type LibraryInfo } from '@core/library';
 import type { LibraryInput } from '@db/libraryRepo';
 import { Rating } from './LibraryView';
+import { isCatalogKind } from '@core/catalog';
+import { CatalogSearch } from './CatalogSearch';
+import { LibraryArtwork } from './LibraryArtwork';
 
 export function LibraryEditor({source,noteCount=0,today,onSave,onClose,setGuard}: {
   source:Source|null; today:string; onSave:(input:LibraryInput)=>Promise<void>; onClose:()=>void;
@@ -43,7 +46,7 @@ export function LibraryEditor({source,noteCount=0,today,onSave,onClose,setGuard}
       {noteCount>0 && <p class="cap dim">연결된 밑줄·메모 {noteCount}개의 작품 제목·창작자도 함께 바뀝니다. 본문과 사진은 그대로 남습니다.</p>}
       <fieldset disabled={busy} class="library-fields">
         <div class="library-form-pair">
-          <label>종류<select class="field" value={info.kind} onChange={e=>setInfo({...info,kind:e.currentTarget.value as LibraryInfo['kind']})}>
+          <label>종류<select class="field" value={info.kind} onChange={e=>setInfo({...info,kind:e.currentTarget.value as LibraryInfo['kind'],catalog:undefined})}>
             {MEDIA_KINDS.map(kind=><option key={kind} value={kind}>{MEDIA_LABEL[kind]}</option>)}
           </select></label>
           <label>감상 상태<select class="field" value={info.status} onChange={e=>{
@@ -51,6 +54,12 @@ export function LibraryEditor({source,noteCount=0,today,onSave,onClose,setGuard}
             setInfo({...info,status,finished_on:status==='completed'?(info.finished_on??today):null});
           }}>{MEDIA_STATUSES.map(status=><option key={status} value={status}>{STATUS_LABEL[status]}</option>)}</select></label>
         </div>
+        {isCatalogKind(info.kind)&&<CatalogSearch key={info.kind} kind={info.kind} title={title} disabled={busy} onPick={result=>{
+          setTitle(result.title);setCreator(result.creator);setUrl(result.catalog.url);
+          setInfo(current=>({...current,catalog:result.catalog}));
+        }}/>}
+        {info.catalog&&<div class="catalog-selected"><LibraryArtwork kind={info.kind} image={info.catalog.image}/><div><span class="cap">선택한 작품 · {info.catalog.year||'연도 미상'}</span>
+          <button type="button" class="quiet" onClick={()=>setInfo({...info,catalog:undefined})}>표지 연결 해제</button></div></div>}
         <label>작품 제목<input class="field" value={title} placeholder="예: 모모, 인터스텔라" onInput={e=>setTitle(e.currentTarget.value)} required/></label>
         <label>창작자 <span class="dim">선택</span><input class="field" value={creator} placeholder="저자 · 감독 · 아티스트 · 진행자" onInput={e=>setCreator(e.currentTarget.value)}/></label>
         <div class="library-rating-edit">

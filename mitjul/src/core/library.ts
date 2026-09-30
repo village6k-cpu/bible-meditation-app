@@ -1,4 +1,5 @@
 import type { Source, SourceKind } from './types';
+import { validCatalog, type CatalogArtwork } from './catalog';
 
 export const MEDIA_KINDS = ['book', 'film', 'series', 'music', 'podcast', 'article', 'video'] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
@@ -19,6 +20,7 @@ export interface LibraryInfo {
   review: string;
   started_on: string | null;
   finished_on: string | null;
+  catalog?: CatalogArtwork;
 }
 
 export function sourceKindFor(kind: MediaKind): SourceKind {
@@ -33,6 +35,7 @@ function validDay(value: unknown): boolean {
 }
 
 export function validateLibraryInfo(info: LibraryInfo): void {
+  if (info.catalog !== undefined && !validCatalog(info.catalog)) throw new Error('표지 정보를 확인해 주세요. 다시 검색해 선택할 수 있습니다.');
   if (info.version !== 1 || !MEDIA_KINDS.includes(info.kind) || !MEDIA_STATUSES.includes(info.status)) {
     throw new Error('작품 종류와 감상 상태를 확인해 주세요.');
   }
@@ -52,6 +55,8 @@ export function libraryInfo(source: Source): LibraryInfo | null {
   if (!source.library_json) return null;
   try {
     const info = JSON.parse(source.library_json) as LibraryInfo;
+    // A bad external image must never hide a user's review, rating or dates.
+    if (info && info.catalog !== undefined && !validCatalog(info.catalog)) delete info.catalog;
     validateLibraryInfo(info);
     return info;
   } catch { return null; }

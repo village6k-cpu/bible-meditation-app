@@ -36,6 +36,10 @@ export async function saveLibraryItem(db: SQLiteDatabase, input: LibraryInput): 
     const kind = sourceKindFor(input.info.kind);
     const sources = await allSources(db);
     const duplicate = sources.find(s => s.id !== input.id && (
+      (input.info.catalog && libraryInfo(s)?.kind === input.info.kind
+        && libraryInfo(s)?.catalog?.provider === input.info.catalog.provider
+        && libraryInfo(s)?.catalog?.id === input.info.catalog.id)
+      ||
       (url && s.url === url)
       || (normalized(s.title) === normalized(title) && normalized(s.creator) === normalized(creator)
         && (libraryInfo(s)?.kind ?? s.kind) === input.info.kind)
