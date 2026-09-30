@@ -12,8 +12,10 @@ Server secrets (never VITE variables or committed files):
 
 Use the existing Ledger Supabase dashboard to save these two secrets. Do not
 change any existing secrets. A missing secret produces a recoverable 503 and
-manual registration remains available. The UI should not be released before
-both secrets and authenticated function calls have been verified.
+manual registration remains available. Both secrets are saved and v1 is deployed
+with JWT verification enabled. On 2026-09-30 the user explicitly waived browser
+verification and requested release after automated checks. Authenticated live
+search and browser save/reopen flows remain unverified; do not report them as passed.
 
 POST `{action: "search", kind: "book" | "film" | "series", q: "title"}`.
 POST `{action: "detail", kind: "film" | "series", id: "157336"}` resolves
