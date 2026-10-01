@@ -17,6 +17,7 @@ import { Photo } from '../parts/photo';
 import { isEnter } from '../keys';
 import { Icon, PlayIcon } from '../icons';
 import { bump } from '../store';
+import { WritingSheet } from './Writing';
 
 // 한 칸에 적으면 구조가 붙는다.
 // 유형을 고르고 칸을 채우는 일은 사용자가 아니라 파서가 한다 — 사람은 틀렸을 때만 손댄다.
@@ -44,13 +45,28 @@ function applyDropped(c: Capture, dropped: SignalKind[]): Capture {
   };
 }
 
-export function CaptureSheet({
+interface CaptureProps {
+  handle: WebDb; presetType: EntryType|null; presetText: string;
+  onClose:()=>void; setGuard:(fn:null|(()=>boolean))=>void; toast:(m:string)=>void;
+}
+
+export function CaptureSheet(props: CaptureProps): JSX.Element {
+  const [writing,setWriting]=useState<{type:'writing'|'verse';text:string;photo:string|null}|null>(
+    ()=>props.presetType==='writing'||props.presetType==='verse'
+      ?{type:props.presetType,text:props.presetText,photo:null}:null);
+  return writing ? <WritingSheet handle={props.handle} type={writing.type} text={writing.text}
+    photo={writing.photo} onClose={props.onClose} setGuard={props.setGuard}/>
+    :<QuickCaptureSheet {...props} onWrite={(text,photo,type='writing')=>setWriting({type,text,photo})}/>;
+}
+
+function QuickCaptureSheet({
   handle,
   presetType,
   presetText,
   onClose,
   setGuard,
   toast,
+  onWrite,
 }: {
   handle: WebDb;
   presetType: EntryType | null;
@@ -59,6 +75,7 @@ export function CaptureSheet({
   /** 닫아도 되는지 대답하는 함수를 앱에 맡긴다 — 뒤로가기 스와이프도 이 대답을 거친다 */
   setGuard: (fn: null | (() => boolean)) => void;
   toast: (m: string) => void;
+  onWrite: (text:string,photo:string|null,type?:'writing'|'verse')=>void;
 }): JSX.Element {
   const db = asSqlite(handle);
   const [text, setText] = useState(presetText);
@@ -108,9 +125,9 @@ export function CaptureSheet({
   // 쓰던 글이 있는데 닫히면 그대로 사라진다. 버튼이든 뒤로가기 스와이프든 한 번 묻는다.
   const dirty = text.trim().length > 0 || photo !== null;
   useEffect(() => {
-    setGuard(dirty ? () => confirm('쓰던 기록이 있습니다. 닫으면 사라집니다. 닫을까요?') : null);
+    setGuard(saving || attaching ? () => false : dirty ? () => confirm('쓰던 기록이 있습니다. 닫으면 사라집니다. 닫을까요?') : null);
     return () => setGuard(null);
-  }, [dirty, setGuard]);
+  }, [dirty, saving, attaching, setGuard]);
 
   // 출처가 붙는 유형이면 최근 순으로 불러 첫 것을 미리 고른다
   const kindKey = sourceKinds.join(',');
@@ -333,7 +350,7 @@ export function CaptureSheet({
         <button class="quiet" onClick={onClose}>
           {count > 0 ? '완료' : '닫기'}
         </button>
-        <span class="mono dim">{count > 0 ? `${count}건 저장됨` : '새 기록'}</span>
+        <button class="quiet" disabled={saving||attaching} onClick={()=>onWrite(text,photo)}>몰입해서 쓰기</button>
         <button class="act" disabled={!canSave} onClick={() => void save()}>
           저장
         </button>
@@ -418,7 +435,9 @@ export function CaptureSheet({
               <button
                 key={t}
                 class={t === entryType ? 'chip on' : 'chip'}
+                disabled={saving||attaching}
                 onClick={() => {
+                  if(t==='writing'||t==='verse'){onWrite(text,photo,t);return;}
                   setTypeOverride(t);
                   setShowTypes(false);
                   setSourceId(null);

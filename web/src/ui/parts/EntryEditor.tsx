@@ -8,6 +8,7 @@ import type { WebDb } from '../../db/sqlite';
 import { isPhotoRef } from '../../platform/photos';
 import { Icon } from '../icons';
 import { Photo } from './photo';
+import { WritingArea } from './WritingArea';
 
 export interface EntryDraft {
   type: EntryType;
@@ -29,7 +30,7 @@ export function inputOf(e: Entry, draft: EntryDraft): EntryInput {
   const page = draft.page.trim() ? Number(draft.page) : null;
   // 분류를 바로잡는 일이지 새 기록을 만드는 일이 아니다. 다른 유형의 칸도 버리지 않는다.
   return { ...e, type:draft.type, title:draft.title.trim() || null, subtitle:draft.subtitle.trim() || null,
-    quote:draft.quote.trim() || null, body:draft.body.trim() || null,
+    quote:draft.quote || null, body:draft.body || null,
     image_uri:draft.image_uri, page:page !== null && Number.isFinite(page) ? page : null,
     tags:parseTagInput(draft.tags) };
 }
@@ -40,7 +41,7 @@ export async function saveEdit(handle: WebDb, e: Entry, draft: EntryDraft): Prom
   await handle.flush();
 }
 
-export function EntryEditor({entry, draft, busy, preview, onChange, onPick, onRemove}: {
+export function EntryEditor({entry, draft, busy, preview, onChange, onPick, onRemove, immersive = false}: {
   entry: Entry;
   draft: EntryDraft;
   busy: boolean;
@@ -48,6 +49,7 @@ export function EntryEditor({entry, draft, busy, preview, onChange, onPick, onRe
   onChange: (draft: EntryDraft) => void;
   onPick: () => void;
   onRemove: () => void;
+  immersive?: boolean;
 }): JSX.Element {
   const spec = specOf(draft.type);
   const original = specOf(entry.type);
@@ -62,16 +64,18 @@ export function EntryEditor({entry, draft, busy, preview, onChange, onPick, onRe
     } : null);
     if (!field) return null;
     const multiline = key === 'quote' || key === 'body';
-    return <label>
+    return <label class={immersive ? `writing-field writing-${key}` : undefined}>
       <span class="micro edit-label">{field.label}</span>
-      {multiline ? <textarea class="field" rows={5} value={draft[key]} placeholder={field.placeholder}
+      {immersive && key === 'body' ? <WritingArea value={draft.body} label={field.label}
+        placeholder={field.placeholder} onInput={value=>change('body',value)}/>
+        : multiline ? <textarea class="field" rows={5} value={draft[key]} placeholder={field.placeholder}
         onInput={ev=>change(key, ev.currentTarget.value)} />
         : <input class="field" value={draft[key]} placeholder={field.placeholder}
           onInput={ev=>change(key, ev.currentTarget.value)} />}
     </label>;
   }
 
-  return <fieldset class="stack entry-editor" disabled={busy}>
+  const metadata = <>
     {CONTENT_TYPES.includes(entry.type) && <div>
       <span class="micro edit-label">기록 유형</span>
       <div class="chips tight" role="group" aria-label="기록 유형">
@@ -94,10 +98,16 @@ export function EntryEditor({entry, draft, busy, preview, onChange, onPick, onRe
       </div>
     </div>
     {entry.source_id && <div class="cap">출처: {[entry.title, entry.subtitle].filter(Boolean).join(' · ')}</div>}
+    {immersive && <label><span class="micro edit-label">갈피</span>
+      <input class="field" value={draft.tags} placeholder="띄어쓰기로 구분" onInput={ev=>change('tags', ev.currentTarget.value)} /></label>}
+  </>;
+
+  return <fieldset class="stack entry-editor" disabled={busy}>
+    {immersive ? <details class="writing-options"><summary>사진 추가 · 유형 · 갈피</summary><div class="stack">{metadata}</div></details> : metadata}
     {textField('title')}{textField('subtitle')}{textField('quote')}{textField('body')}
     {(spec.fields.page || draft.page) && <label><span class="micro edit-label">쪽</span>
       <input class="field" inputMode="numeric" value={draft.page} placeholder="쪽" onInput={ev=>change('page', ev.currentTarget.value)} /></label>}
-    <label><span class="micro edit-label">갈피</span>
-      <input class="field" value={draft.tags} placeholder="띄어쓰기로 구분" onInput={ev=>change('tags', ev.currentTarget.value)} /></label>
+    {!immersive && <label><span class="micro edit-label">갈피</span>
+      <input class="field" value={draft.tags} placeholder="띄어쓰기로 구분" onInput={ev=>change('tags', ev.currentTarget.value)} /></label>}
   </fieldset>;
 }

@@ -102,11 +102,14 @@ export function DetailSheet({
   const dirty = !!draft && (!!photoFile || JSON.stringify(draft) !== JSON.stringify(e && draftOf(e, data.tags)));
   useEffect(() => {
     setGuard(busy ? () => false : dirty ? () => confirm('수정한 내용이 있습니다. 저장하지 않고 닫을까요?') : null);
-    return () => setGuard(null);
+    const warn = (ev:BeforeUnloadEvent) => {if(dirty||busy){ev.preventDefault();ev.returnValue='';}};
+    window.addEventListener('beforeunload',warn);
+    return () => {setGuard(null);window.removeEventListener('beforeunload',warn);};
   }, [busy, dirty, setGuard]);
 
   function cancelEdit(): void {
     if (operation.current) return;
+    if (dirty && !confirm('수정한 내용을 저장하지 않고 취소할까요?')) return;
     setDraft(null);
     setPhotoFile(null);
     setEditError(null);
@@ -184,7 +187,8 @@ export function DetailSheet({
   }
 
   return (
-    <div class="sheet">
+    <div class={(draft?.type??e?.type)==='writing'||(draft?.type??e?.type)==='verse' ? 'sheet writing-sheet' : 'sheet'}
+      onKeyDown={ev=>{if(draft&&(ev.metaKey||ev.ctrlKey)&&ev.key.toLowerCase()==='s'&&!ev.isComposing){ev.preventDefault();void saveEdit();}}}>
       <div class="sheet-head">
         <button class="quiet" disabled={busy} onClick={() => (draft ? cancelEdit() : onClose())}>
           {draft ? (
@@ -225,14 +229,14 @@ export function DetailSheet({
           ))}
       </div>
 
-      <div class="sheet-body">
+      <div class={(draft?.type??e?.type)==='writing'||(draft?.type??e?.type)==='verse' ? 'sheet-body writing-page' : 'sheet-body'}>
         {editError && <div class="cap" role="alert" style="margin-bottom:12px">{editError}</div>}
         {!e ? (
           loading ? null : (
             <div class="empty">기록을 찾을 수 없습니다</div>
           )
         ) : draft ? (
-          <EntryEditor entry={e} draft={draft} busy={busy} preview={preview}
+          <EntryEditor entry={e} draft={draft} busy={busy} preview={preview} immersive={draft.type==='writing'||draft.type==='verse'}
             onChange={setDraft} onPick={() => void attachPhoto()}
             onRemove={() => { setPhotoFile(null); setDraft({...draft, image_uri:null}); }} />
         ) : (

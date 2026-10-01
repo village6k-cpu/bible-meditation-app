@@ -1,7 +1,8 @@
 import type { JSX } from 'preact';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { EntryType } from '@core/types';
-import { Icon, type IconName } from './icons';
+import { Icon } from './icons';
+import { Navigation, type Tab } from './parts/Navigation';
 import { Inbox } from './screens/Inbox';
 import { Records } from './screens/Records';
 import { Review } from './screens/Review';
@@ -17,7 +18,6 @@ import { canIntakeSafely, consumeFromUrl, peekFromUrl, writeClipboard } from '..
 import { requestPersistence } from '../platform/install';
 import { startAutoSync } from '../sync';
 
-type Tab = 'inbox' | 'records' | 'library' | 'review' | 'metrics';
 
 type View =
   | { kind: 'capture'; type: EntryType | null; text: string }
@@ -26,13 +26,6 @@ type View =
   | { kind: 'library'; id: string | null }
   | { kind: 'sources' };
 
-const TABS: [Tab, string, IconName][] = [
-  ['inbox', '수집함', 'inbox'],
-  ['records', '기록', 'records'],
-  ['library', '서재', 'library'],
-  ['review', '검토', 'review'],
-  ['metrics', '지표', 'metrics'],
-];
 
 export function App(): JSX.Element {
   const boot = useBoot();
@@ -215,31 +208,7 @@ export function App(): JSX.Element {
         )}
       </main>
 
-      <nav class="tabbar">
-        {TABS.slice(0, 2).map(([key, label, icon]) => (
-          <TabButton
-            key={key}
-            on={tab === key}
-            label={label}
-            icon={icon}
-            onClick={() => setTab(key)}
-          />
-        ))}
-        <button class="fab" aria-label="적기" onClick={() => compose(null)}>
-          <Icon name="plus" width={2} />
-        </button>
-        {TABS.slice(2).map(([key, label, icon]) => (
-          <TabButton
-            key={key}
-            on={tab === key}
-            label={label}
-            icon={icon}
-            onClick={() => setTab(key)}
-          />
-        ))}
-        {/* 토스트는 탭바 위에 뜬다 — 탭을 가리고 탭을 삼키지 않도록 */}
-        {toast && <div class="toast">{toast}</div>}
-      </nav>
+      <Navigation tab={tab} onTab={setTab} onCompose={()=>compose(null)} toast={toast}/>
 
       <div class="modal-root">
         {view?.kind === 'library' && <LibraryDetail key={view.id??'new'} handle={handle} id={view.id}
@@ -266,25 +235,5 @@ export function App(): JSX.Element {
         )}
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  on,
-  label,
-  icon,
-  onClick,
-}: {
-  on: boolean;
-  label: string;
-  icon: IconName;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button class={on ? 'on' : undefined} aria-current={on ? 'page' : undefined} onClick={onClick}>
-      <Icon name={icon} />
-      <span>{label}</span>
-      <span class="stroke" />
-    </button>
   );
 }
