@@ -58,6 +58,11 @@ IBM Plex Sans KR 한 벌 + 수치는 IBM Plex Mono, 무채색 하나(`#FFFFFF`/`
 
 ### 2026-10-01 몰입 글쓰기·모바일 메뉴 정리
 
+- 배포 완료: PR #19, main `61ce500739b4386ef9e663b3cf2a3bb85de8ad6a`.
+  PR CI `36842562259`, Pages `36842695313` 성공. 운영 JS `main-CwupnXZA.js`,
+  CSS `main-5tSjnV6A.css`, SW 빌드 `7c1e439e7579`에서 편집기와 5열 메뉴 자산을 확인했다.
+  직접 화면 검증은 컴퓨터 사용 도구의 macOS AX 접근 오류로 완료하지 못했다.
+  권한 조회는 granted이나 실제 접근은 permission_denied라서 사용자 탓으로 단정하지 않는다.
 - 글/묵상은 새 전체 화면 WritingSheet로 바로 진입한다. 빠른 캡처의 파서는 유지하며
   `몰입해서 쓰기` 또는 글/묵상 선택으로 현재 텍스트·첨부 사진을 넘긴다.
 - 제목 + 넓은 본문, 내용에 맞춰 늘어나는 textarea, 한 페이지 스크롤, 사진/유형/갈피 접기,
